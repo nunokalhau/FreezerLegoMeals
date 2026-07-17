@@ -1,0 +1,71 @@
+# Freezer Lego Meals Skill
+
+## Purpose
+
+This skill helps AI agents contribute to the Freezer Lego Meals repository.
+
+Before making any changes, inspect the repository structure, existing documentation and source code. Never assume how something works without checking first.
+
+## Working Principles
+
+- The repository is the source of truth.
+- Reuse existing code before creating new code.
+- Follow the existing architecture and coding conventions.
+- Prefer extending existing functionality over introducing new implementations.
+- Keep solutions simple, maintainable and well documented.
+- Explain your implementation plan before writing code.
+
+## Repository
+
+The project is organized into multiple components.
+
+Always inspect the repository before making changes.
+
+Important locations include:
+
+- `.docs/` → Architecture decisions, documentation and implementation notes.
+- `src/` → Application source code.
+- `tests/` → Automated tests.
+- `README.md` → Project overview.
+- `tool_registry.json` → Available tools and capabilities.
+
+## AI Agents
+
+The repository contains specialized AI agents.
+
+Each agent should:
+
+- Have a single responsibility.
+- Reuse existing services and APIs.
+- Avoid duplicating business logic.
+- Communicate through well-defined interfaces.
+- Remain independent from other agents whenever possible.
+
+## Coding Guidelines
+
+When contributing:
+
+- Follow the existing project structure.
+- Keep functions and classes focused.
+- Prefer composition over duplication.
+- Use descriptive names.
+- Write tests for new behaviour.
+- Keep documentation up to date.
+
+## Before Writing Code
+
+Always:
+
+1. Inspect the repository.
+2. Read the relevant documentation inside `.docs/`.
+3. Search for existing implementations.
+4. Explain the proposed implementation.
+5. Implement changes incrementally.
+
+## Avoid
+
+- Making architectural changes without justification.
+- Introducing new frameworks unless there is a clear benefit.
+- Duplicating existing functionality.
+- Leaving TODOs or placeholder implementations when a complete solution is possible.
+- Making assumptions without inspecting the codebase first.

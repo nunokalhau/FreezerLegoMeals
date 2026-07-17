@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "tools": [
+    {
+      "name": "weekly_meal_planner",
+      "description": "Generate a balanced weekly meal plan based on available recipes and ingredients with dietary preferences",
+      "script": "weekly_meal_planner.py",
+      "keywords": ["meal plan", "weekly plan", "recipe planning", "weekend prep", "meal schedule"],
+      "parameters": [
+        "--num-days",
+        "--dietary-preferences",
+        "--start-date"
+      ],
+      "examples": [
+        "Create a 5-day vegetarian meal plan",
+        "Generate weekly plan with high-protein options",
+        "Plan weekend meals for 7 days",
+        "Weekend meal prep plan"
+      ],
+      "output_description": "JSON and markdown files containing the weekly meal plan with recipe details, categories, ingredients and preparation times",
+      "aliases": ["meal_plan", "recipe_planning"]
+    },
+    {
+      "name": "ingredient_search",
+      "description": "Search for recipes containing specific ingredients or find a recipe by ID",
+      "script": "search_recipes.py",
+      "keywords": ["find recipes", "ingredient lookup", "recipe search"],
+      "parameters": [
+        "--ingredients",
+        "--recipe-id"
+      ],
+      "examples": [
+        "Find recipes with chicken",
+        "Search for tofu and vegetables",
+        "Look up recipe by ID 123",
+        "Find recipes with 'carne de vaca' or 'frango'"
+      ],
+      "output_description": "JSON list of matching recipes with names, IDs, source paths, and ingredients",
+      "aliases": ["recipe_search", "ingredient_lookup"]
+    },
+    {
+      "name": "get_recipe_ingredients",
+      "description": "Get detailed ingredient information for a specific recipe",
+      "script": "get_recipe_ingredients.py",
+      "keywords": ["recipe ingredients", "what's in", "ingredient details"],
+      "parameters": [
+        "--recipe"
+      ],
+      "examples": [
+        "Show ingredients in Black Beans",
+        "What are the ingredients for Salsa Verde Chicken?",
+        "List ingredients for Tofu Chorizo"
+      ],
+      "output_description": "Detailed list of ingredients with amounts and units for a specific recipe",
+      "aliases": ["ingredients", "recipe_detail"]
+    },
+    {
+      "name": "generate_shopping_list",
+      "description": "Create shopping lists by parsing recipe files and subtracting existing inventory items",
+      "script": "generate_shopping_list.py",
+      "keywords": ["shopping list", "grocery list", "shopping cart"],
+      "parameters": [
+        "--recipes-file",
+        "--inventory-file"
+      ],
+      "examples": [
+        "Generate shopping list for 3 recipes",
+        "Create grocery list with inventory subtraction",
+        "Shopping list for Turkey Chili and Salsa Verde Chicken"
+      ],
+      "output_description": "JSON and markdown shopping list with items organized by category, accounting for existing inventory",
+      "aliases": ["shopping_list", "grocery_plan"]
+    },
+    {
+      "name": "generate_recipe_index",
+      "description": "Generate a categorized index of all recipes for easy navigation",
+      "script": "generate_recipe_index.py",
+      "keywords": ["recipe index", "recipe listing", "catalog"],
+      "parameters": [
+        "--food-dir"
+      ],
+      "examples": [
+        "Generate recipe index",
+        "Create recipe catalog by category",
+        "List all recipes with their source paths"
+      ],
+      "output_description": "JSON and markdown files containing a categorized index of all recipes",
+      "aliases": ["recipe_catalog", "index"]
+    },
+    {
+      "name": "validate_recipe_structure",
+      "description": "Validate recipe markdown structure against defined schema",
+      "script": "validate_recipe_structure.py",
+      "keywords": ["validate recipes", "structure check", "recipe validation"],
+      "parameters": [
+        "--food-dir"
+      ],
+      "examples": [
+        "Verify all recipes follow standard structure",
+        "Validate recipe markdown files",
+        "Check recipe consistency"
+      ],
+      "output_description": "JSON validation report and human-readable summary of validation results",
+      "aliases": ["recipe_validation", "structure_check"]
+    },
+    {
+      "name": "nutrition_analytics",
+      "description": "Perform nutritional analysis on recipes or ingredient combinations",
+      "script": "nutrition_analytics.py",
+      "keywords": ["nutrition analysis", "dietary analysis", "nutritional insight"],
+      "parameters": [
+        "--recipes"
+      ],
+      "examples": [
+        "Analyze nutrition of meal plan",
+        "Calculate nutritional values for selected recipes",
+        "Nutrition dashboard for recipe category"
+      ],
+      "output_description": "JSON and markdown analytics showing nutritional information, dietary categories, and preparation statistics",
+      "aliases": ["nutrition_report", "dietary_insight"]
+    },
+    {
+      "name": "batch_preparation_scheduler",
+      "description": "Calculate optimal batch cooking schedule based on freezer capacity and recipe requirements",
+      "script": "batch_preparation_scheduler.py",
+      "keywords": ["batch cooking", "schedule", "preparation timing"],
+      "parameters": [
+        "--recipes"
+      ],
+      "examples": [
+        "Schedule batch cooking for 10 recipes",
+        "Plan preparation time with freezer capacity constraints",
+        "Optimize cooking schedule for large prep session"
+      ],
+      "output_description": "JSON and markdown schedule with optimal batch preparation times and freezer usage recommendations",
+      "aliases": ["batch_schedule", "prep_scheduler"]
+    },
+    {
+      "name": "ingredient_substitution_finder",
+      "description": "Find suitable ingredient substitutions based on similar ingredients and recipes",
+      "script": "ingredient_substitution_finder.py",
+      "keywords": ["substitute ingredients", "ingredient alternative", "recipe flexibility"],
+      "parameters": [
+        "--ingredients"
+      ],
+      "examples": [
+        "Find substitute for chicken",
+        "What can I use instead of tofu?",
+        "Ingredient substitution for ground beef"
+      ],
+      "output_description": "JSON list of recommended substitutions with rationale and recipes that contain substituted ingredients",
+      "aliases": ["ingredient_substitute", "substitute_finder"]
+    },
+    {
+      "name": "shopping_list_optimizer",
+      "description": "Optimize shopping lists by grouping ingredients by store aisles",
+      "script": "shopping_list_optimizer.py",
+      "keywords": ["optimize grocery list", "aisle organization", "shopping optimization"],
+      "parameters": [
+        "--recipes-file"
+      ],
+      "examples": [
+        "Optimize shopping list by store aisle",
+        "Organize ingredients by grocery store section",
+        "Create efficient shopping plan with aisle grouping"
+      ],
+      "output_description": "JSON and markdown files containing optimized shopping lists organized by store aisles",
+      "aliases": ["shopping_optimizer", "aisle_plan"]
+    }
+  ]
+}

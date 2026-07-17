@@ -1,0 +1,169 @@
+{
+  "generated_by": "validate_recipe_structure.py",
+  "food_dir": "C:/Code/FreezerLegoMeals/src/food",
+  "summary": {
+    "total_recipes": 20,
+    "valid_recipes": 14,
+    "invalid_recipes": 6
+  },
+  "recipes": [
+    {
+      "path": "combos/10_quick_combos.md",
+      "filename": "10_quick_combos.md",
+      "category": "combos",
+      "valid": false,
+      "issues": [
+        "missing metadata: Tags, Tempo, Por\u00e7\u00f5es",
+        "missing required section: ## \ud83e\uddfe Ingredientes, ## \ud83d\udc68\u200d\ud83c\udf73 Prepara\u00e7\u00e3o, ## \u2744\ufe0f Congela\u00e7\u00e3o, ## \ud83d\udd25 Reaquecimento, ## \ud83d\udd04 Combina\u00e7\u00f5es"
+      ]
+    },
+    {
+      "path": "combos/weekly_20_meals.md",
+      "filename": "weekly_20_meals.md",
+      "category": "combos",
+      "valid": false,
+      "issues": [
+        "missing metadata: Tags, Tempo, Por\u00e7\u00f5es",
+        "missing required section: ## \ud83e\uddfe Ingredientes, ## \ud83d\udc68\u200d\ud83c\udf73 Prepara\u00e7\u00e3o, ## \u2744\ufe0f Congela\u00e7\u00e3o, ## \ud83d\udd25 Reaquecimento, ## \ud83d\udd04 Combina\u00e7\u00f5es, ## \ud83d\udca1 Notas"
+      ]
+    },
+    {
+      "path": "pickles/carrot_sticks.md",
+      "filename": "carrot_sticks.md",
+      "category": "pickles",
+      "valid": false,
+      "issues": [
+        "missing metadata: Por\u00e7\u00f5es",
+        "missing required section: ## \u2744\ufe0f Congela\u00e7\u00e3o, ## \ud83d\udd25 Reaquecimento, ## \ud83d\udd04 Combina\u00e7\u00f5es"
+      ]
+    },
+    {
+      "path": "pickles/cucumber_pickles.md",
+      "filename": "cucumber_pickles.md",
+      "category": "pickles",
+      "valid": false,
+      "issues": [
+        "missing metadata: Por\u00e7\u00f5es",
+        "missing required section: ## \u2744\ufe0f Congela\u00e7\u00e3o, ## \ud83d\udd25 Reaquecimento, ## \ud83d\udd04 Combina\u00e7\u00f5es"
+      ]
+    },
+    {
+      "path": "pickles/red_onion_pickles.md",
+      "filename": "red_onion_pickles.md",
+      "category": "pickles",
+      "valid": false,
+      "issues": [
+        "missing metadata: Por\u00e7\u00f5es",
+        "missing required section: ## \u2744\ufe0f Congela\u00e7\u00e3o, ## \ud83d\udd25 Reaquecimento, ## \ud83d\udd04 Combina\u00e7\u00f5es"
+      ]
+    },
+    {
+      "path": "pickles/thuy_pham_vietnamese_pickles.md",
+      "filename": "thuy_pham_vietnamese_pickles.md",
+      "category": "pickles",
+      "valid": false,
+      "issues": [
+        "missing metadata: Por\u00e7\u00f5es",
+        "missing required section: ## \u2744\ufe0f Congela\u00e7\u00e3o, ## \ud83d\udd25 Reaquecimento, ## \ud83d\udd04 Combina\u00e7\u00f5es, ## \ud83d\udca1 Notas"
+      ]
+    },
+    {
+      "path": "proteins/ground_beef.md",
+      "filename": "ground_beef.md",
+      "category": "proteins",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "proteins/salsa_verde_chicken.md",
+      "filename": "salsa_verde_chicken.md",
+      "category": "proteins",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "proteins/tofu_chorizo.md",
+      "filename": "tofu_chorizo.md",
+      "category": "proteins",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "proteins/turkey_chili.md",
+      "filename": "turkey_chili.md",
+      "category": "proteins",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "sauces/cilantro_crema.md",
+      "filename": "cilantro_crema.md",
+      "category": "sauces",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "sauces/smoky_bbq_sauce.md",
+      "filename": "smoky_bbq_sauce.md",
+      "category": "sauces",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "starches/black_beans.md",
+      "filename": "black_beans.md",
+      "category": "starches",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "starches/cilantro_rice.md",
+      "filename": "cilantro_rice.md",
+      "category": "starches",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "starches/pasta.md",
+      "filename": "pasta.md",
+      "category": "starches",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "starches/white_rice.md",
+      "filename": "white_rice.md",
+      "category": "starches",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "veggies/braised_cabbage.md",
+      "filename": "braised_cabbage.md",
+      "category": "veggies",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "veggies/eggplant_chickpea.md",
+      "filename": "eggplant_chickpea.md",
+      "category": "veggies",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "veggies/roasted_veg_mix.md",
+      "filename": "roasted_veg_mix.md",
+      "category": "veggies",
+      "valid": true,
+      "issues": []
+    },
+    {
+      "path": "veggies/sweet_potato_mash.md",
+      "filename": "sweet_potato_mash.md",
+      "category": "veggies",
+      "valid": true,
+      "issues": []
+    }
+  ]
+}
