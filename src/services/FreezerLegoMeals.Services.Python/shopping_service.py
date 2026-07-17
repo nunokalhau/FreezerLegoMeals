@@ -11,7 +11,6 @@ from dataclasses import dataclass
 # Import Repository from the repository module
 from src.repository.FreezerLegoMeals.Repository.Python import Repository
 
-
 @dataclass
 class Ingredient:
     """Data class representing an ingredient."""
