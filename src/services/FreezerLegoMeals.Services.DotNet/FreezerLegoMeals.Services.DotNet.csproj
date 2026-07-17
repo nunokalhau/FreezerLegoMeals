@@ -13,4 +13,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\domain\FreezerLegoMeals.Domain.DotNet\FreezerLegoMeals.Domain.DotNet.csproj" />
+    <ProjectReference Include="..\..\repositories\FreezerLegoMeals.Repository.DotNet\FreezerLegoMeals.Repository.DotNet.csproj" />
+  </ItemGroup>
+
 </Project>

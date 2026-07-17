@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-
-// Service and Repository namespaces
-using FreezerLegoMeals.WebApi.DotNet.Repositories;
-using FreezerLegoMeals.WebApi.DotNet.Services;
+using FreezerLegoMeals.Services.DotNet;
+using FreezerLegoMeals.Repository.DotNet;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +13,7 @@ builder.Services.AddSwaggerGen();
 
 // Register repositories and services
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
+
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
 

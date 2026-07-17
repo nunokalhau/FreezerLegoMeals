@@ -48,3 +48,16 @@ htmlcov/
 
 # Windows
 Thumbs.db
+
+# .NET
+**/bin/
+**/obj/
+
+# Node
+**/node_modules/
+
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
