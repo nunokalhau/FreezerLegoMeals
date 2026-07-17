@@ -19,10 +19,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Moq" Version="4.18.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Services\FrezerLegoMeals.Services.DotNet\FrezerLegoMeals.Services.DotNet.csproj" />
+    <ProjectReference Include="..\..\src\Services\FreezerLegoMeals.Services.DotNet\FreezerLegoMeals.Services.DotNet.csproj" />
   </ItemGroup>
 
 </Project>
