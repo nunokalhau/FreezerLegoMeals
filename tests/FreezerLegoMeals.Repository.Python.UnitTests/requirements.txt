@@ -1,0 +1,12 @@
+# Requirements for Freezer Lego Meals Python Repository Unit Tests
+
+# Core testing dependencies
+unittest2 >= 1.1.0
+pytest >= 7.0.0
+pytest-cov >= 4.0.0
+
+# Python version compatibility
+python >= 3.6
+
+# Testing utilities that might be used
+mock >= 4.0.0
