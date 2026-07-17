@@ -40,3 +40,10 @@ app.MapControllers();
 app.MapHealthChecks("/healthz");
 
 app.Run();
+
+namespace FreezerLegoMeals.WebApi.DotNet
+{
+    public partial class Program
+    {
+    }
+}
