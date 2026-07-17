@@ -1,0 +1,17 @@
+{
+  "name": "freezer-lego-meals-nestjs-repository",
+  "version": "1.0.0",
+  "description": "Repository layer for Freezer Lego Meals NestJS application",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo \"Building repository...\"",
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": [
+    "nestjs",
+    "repository",
+    "freezer-lego-meals"
+  ],
+  "author": "Freezer Lego Meals Team",
+  "license": "MIT"
+}
