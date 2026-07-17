@@ -1,21 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { IMealService } from './meal.service.interface';
+import { RecipeRepositoryInterface } from '../../repositories/FreezerLegoMeals.Repository.NestJS/recipe.repository';
 
 @Injectable()
 export class MealService implements IMealService {
-  constructor() {
-    // This is a placeholder for actual repository injection
-    // In a real implementation, we would inject the repository here
-  }
+  constructor(
+    private readonly recipeRepository: RecipeRepositoryInterface
+  ) {}
 
   async searchRecipesByIngredients(ingredients: string[]): Promise<any[]> {
-    // Method to search recipes by ingredients - matching Python interface
-    return [];
+    return await this.recipeRepository.findRecipesWithIngredients(ingredients);
   }
 
   async getRecipeById(recipeId: number): Promise<any | null> {
-    // Method to get recipe by ID - matching Python interface  
-    return null;
+    return await this.recipeRepository.getRecipeById(recipeId);
   }
 
   async findMealsWithIngredients(query: string): Promise<any> {
@@ -46,22 +44,36 @@ export class MealService implements IMealService {
       }
     }
 
+    let recipes: any[] = [];
+    if (foundIngredients.length > 0) {
+      recipes = await this.recipeRepository.findRecipesWithIngredients(foundIngredients);
+    }
+
     // Return structure matching Python implementation
     return {
       query: query,
       search_terms: foundIngredients,
-      total_recipes_found: 0,
-      recipes: [],
+      total_recipes_found: recipes.length,
+      recipes: recipes,
       message: foundIngredients.length > 0 
-        ? `Found 0 recipes containing ${foundIngredients.join(', ')}`
+        ? `Found ${recipes.length} recipes containing ${foundIngredients.join(', ')}`
         : "No ingredients found in your query. Try mentioning specific ingredients like 'chicken', 'beef', etc."
     };
   }
 
   async getRecipeDetails(recipeId: number): Promise<any> {
-    // Method to get detailed recipe information
+    const recipe = await this.recipeRepository.getRecipeById(recipeId);
+    
+    if (!recipe) {
+      return {
+        error: `No recipe found with ID ${recipeId}`
+      };
+    }
+    
     return {
-      error: `No recipe found with ID ${recipeId}`
+      query: `Recipe details for ${recipe.name}`,
+      recipe: recipe,
+      message: `Details for recipe: ${recipe.name}`
     };
   }
 }
