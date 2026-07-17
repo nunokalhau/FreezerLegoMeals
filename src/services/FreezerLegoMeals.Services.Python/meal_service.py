@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 # Import Repository from the repository module
-from src.repository.FreezerLegoMeals.Repository.Python import Repository
+from src.repository.FreezerLegoMeals_Repository_Python import Repository
 
 @dataclass
 class Recipe:
