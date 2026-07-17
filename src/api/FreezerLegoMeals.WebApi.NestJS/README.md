@@ -22,9 +22,11 @@ The API will be available at `http://localhost:3000`
 ## Endpoints
 - `GET /` - Root endpoint  
 - `GET /health` - Health check endpoint
+- `GET /api/docs` - Swagger UI documentation (OpenAPI)
 
 ## Features
 - NestJS framework with TypeScript
 - Modular architecture
 - Global prefix (`/api`) for all routes
 - Health check endpoint
+- OpenAPI/Swagger documentation

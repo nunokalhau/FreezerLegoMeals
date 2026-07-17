@@ -5,9 +5,19 @@ from typing import Dict, Any
 import json
 
 # Import our architecture layers correctly
-from src.services.FreezerLegoMeals.Services.Python import MealService, ShoppingService
+import importlib.util
+spec = importlib.util.spec_from_file_location("MealService", "src/services/FreezerLegoMeals.Services.Python")
+spec2 = importlib.util.spec_from_file_location("ShoppingService", "src/services/FreezerLegoMeals.Services.Python")
+MealService = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(MealService)
+ShoppingService = importlib.util.module_from_spec(spec2)
+spec2.loader.exec_module(ShoppingService)
 
-app = FastAPI(title="Freezer Lego Meals Python API")
+app = FastAPI(
+    title="Freezer Lego Meals Python API",
+    description="API for Freezer Lego Meals project with modular meal prep capabilities.",
+    version="1.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
