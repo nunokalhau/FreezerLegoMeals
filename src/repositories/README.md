@@ -5,12 +5,12 @@ This directory contains repository implementations for data access in the Freeze
 ## Repository Structure
 
 ### .NET Repository
-- `FreezerLegoMeals.Repository.DotNet` - Data access layer for .NET services
+- `Repository.DotNet` - Data access layer for .NET services
   - Implements database operations and data retrieval patterns
   - Follows clean architecture with clear separation of concerns
 
 ### NestJS Repository  
-- `FreezerLegoMeals.Repository.NestJS` - Data access layer for NestJS APIs
+- `Repository.NestJS` - Data access layer for NestJS APIs
   - Provides data access patterns for Node.js environment
   - Integrates with NestJS dependency injection system
 
