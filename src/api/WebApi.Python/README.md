@@ -33,8 +33,14 @@ The API will be available at `http://localhost:5000`
 ## Endpoints
 - `GET /` - Root endpoint  
 - `GET /health` - Health check endpoint
-- `POST /recipes/search` - Search recipes by ingredients 
-- `POST /shopping-list/generate` - Generate shopping list from recipes
+- `POST /api/recipes/search` - Search recipes by ingredients 
+- `GET /api/recipes/{id}` - Get recipe by ID
+- `POST /api/recipes/find-by-ingredients` - Find meals with specified ingredients
+- `GET /api/recipes/{id}/details` - Get recipe details
+- `GET /api/shopping/ingredients/{identifier}` - Get ingredients for a recipe
+- `POST /api/shopping/ingredients` - Get ingredients for multiple recipes
+- `POST /api/shopping/generate` - Generate shopping list from recipes
+- `GET /api/shopping/{identifier}/info` - Get recipe info
 
 ## Features
 - FastAPI framework with automatic OpenAPI/Swagger documentation
@@ -65,7 +71,7 @@ Returns:
 
 #### Search Recipes by Ingredients
 ```
-POST /recipes/search
+POST /api/recipes/search
 Content-Type: application/json
 
 {
@@ -73,15 +79,46 @@ Content-Type: application/json
 }
 ```
 
-#### Generate Shopping List 
+#### Get Recipe by ID
 ```
-POST /shopping-list/generate
+GET /api/recipes/123
+```
+
+#### Find Meals with Ingredients
+```
+POST /api/recipes/find-by-ingredients
 Content-Type: application/json
 
 {
-  "recipe_names": ["Chicken Stir Fry", "Vegetable Curry"],
-  "scale_factor": 1.5
+  "query": "chicken and broccoli"
 }
+```
+
+#### Get Recipe Details
+```
+GET /api/recipes/123/details
+```
+
+#### Get Ingredients for a Recipe
+```
+GET /api/shopping/ingredients/chicken-stir-fry
+```
+
+#### Generate Shopping List 
+```
+POST /api/shopping/generate
+Content-Type: application/json
+
+{
+  "recipe_identifiers": ["chicken-stir-fry", "vegetable-curry"],
+  "scale_factor": 1.5,
+  "group_by_category": true
+}
+```
+
+#### Get Recipe Info
+```
+GET /api/shopping/chicken-stir-fry/info
 ```
 
 ## Architecture

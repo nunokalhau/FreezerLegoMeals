@@ -68,7 +68,6 @@ class GetRecipeIngredientsRequest(BaseModel):
 class GetRecipeIngredientsResponse(BaseModel):
     ingredients: List[Dict[str, Any]]
     recipe_name: str
-    found: bool
 
 class GetMultipleRecipeIngredientsRequest(BaseModel):
     recipe_identifiers: List[str]
@@ -109,41 +108,39 @@ def health_check():
         service="WebApi.Python"
     )
 
-@app.post("/recipes/search")
+@app.post("/api/recipes/search")
 def search_recipes(request: RecipeSearchRequest):
     """Search for recipes by ingredients."""
+    if not request.ingredients or len(request.ingredients) == 0:
+        raise HTTPException(status_code=400, detail="Ingredients list cannot be empty")
+    
     # Delegate to the service
     result = meal_service.search_recipes_by_ingredients(" ".join(request.ingredients))
     return result
 
-@app.get("/recipes/{recipe_id}", response_model=GetRecipeByIdResponse)
-def get_recipe_by_id(recipe_id: int):
+@app.get("/api/recipes/{id}", response_model=GetRecipeByIdResponse)
+def get_recipe_by_id(id: int):
     """Get recipe by ID."""
+    # Validate ID parameter exists and is positive integer
+    if id <= 0:
+        raise HTTPException(status_code=400, detail="ID must be a positive integer")
+    
     try:
-        recipe = meal_service.get_recipe_by_id(recipe_id)
+        recipe = meal_service.get_recipe_by_id(id)
         if not recipe:
             raise HTTPException(status_code=404, detail="Recipe not found")
         return GetRecipeByIdResponse(recipe=recipe)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving recipe: {str(e)}")
 
-@app.get("/recipes/{recipe_id}/details", response_model=GetRecipeDetailsResponse)
-def get_recipe_details(recipe_id: int):
-    """Get detailed recipe information."""
-    try:
-        result = meal_service.get_recipe_details(recipe_id)
-        if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
-        return GetRecipeDetailsResponse(
-            recipe=result.get("recipe"),
-            message=result.get("message", "")
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving recipe details: {str(e)}")
-
-@app.post("/recipes/find-by-ingredients")
+@app.post("/api/recipes/find-by-ingredients")
 def find_meals_with_ingredients(request: FindMealsWithIngredientsRequest):
     """Find meals containing specified ingredients (natural language query)."""
+    # Validate request body is not null (Pydantic handles this via BaseModel)
+    # Validate query string is not null/empty
+    if not request.query or len(request.query.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Query string cannot be null or empty")
+    
     try:
         result = meal_service.find_meals_with_ingredients(request.query)
         return FindMealsWithIngredientsResponse(
@@ -156,22 +153,47 @@ def find_meals_with_ingredients(request: FindMealsWithIngredientsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error finding meals: {str(e)}")
 
-@app.get("/shopping/ingredients/{identifier}", response_model=GetRecipeIngredientsResponse)
+@app.get("/api/recipes/{id}/details", response_model=GetRecipeDetailsResponse)
+def get_recipe_details(id: int):
+    """Get detailed recipe information."""
+    if id <= 0:
+        raise HTTPException(status_code=400, detail="ID must be a positive integer")
+    
+    try:
+        result = meal_service.get_recipe_details(id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return GetRecipeDetailsResponse(
+            recipe=result.get("recipe"),
+            message=result.get("message", "")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving recipe details: {str(e)}")
+
+@app.get("/api/shopping/ingredients/{identifier}", response_model=GetRecipeIngredientsResponse)
 def get_recipe_ingredients(identifier: str):
     """Get ingredients for a specific recipe."""
+    # Validate identifier parameter exists and is not empty
+    if not identifier or len(identifier.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Identifier cannot be null or empty")
+    
     try:
         ingredients = shopping_service.get_recipe_ingredients(identifier)
         return GetRecipeIngredientsResponse(
             ingredients=ingredients,
-            recipe_name=identifier,
-            found=len(ingredients) > 0
+            recipe_name=identifier
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving ingredients: {str(e)}")
 
-@app.post("/shopping/ingredients", response_model=GetMultipleRecipeIngredientsResponse)
+@app.post("/api/shopping/ingredients", response_model=GetMultipleRecipeIngredientsResponse)
 def get_multiple_recipe_ingredients(request: GetMultipleRecipeIngredientsRequest):
     """Get ingredients for multiple recipes."""
+    # Validate request body is not null (Pydantic handles this via BaseModel)
+    # Validate recipe identifiers list is not empty
+    if not request.recipe_identifiers or len(request.recipe_identifiers) == 0:
+        raise HTTPException(status_code=400, detail="Recipe identifiers list cannot be empty")
+    
     try:
         recipe_ingredients = shopping_service.get_multiple_recipe_ingredients(request.recipe_identifiers)
         return GetMultipleRecipeIngredientsResponse(
@@ -182,9 +204,15 @@ def get_multiple_recipe_ingredients(request: GetMultipleRecipeIngredientsRequest
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving multiple ingredients: {str(e)}")
 
-@app.post("/shopping/generate", response_model=GenerateShoppingListResponse)
+@app.post("/api/shopping/generate", response_model=GenerateShoppingListResponse)
 def generate_shopping_list(request: GenerateShoppingListRequest):
     """Generate a shopping list from recipes."""
+    if not request.recipe_identifiers or len(request.recipe_identifiers) == 0:
+        raise HTTPException(status_code=400, detail="Recipe identifiers list cannot be empty")
+    
+    if request.scale_factor is not None and request.scale_factor <= 0:
+        raise HTTPException(status_code=400, detail="Scale factor must be greater than 0")
+    
     try:
         result = shopping_service.generate_shopping_list(
             request.recipe_identifiers,
@@ -200,22 +228,13 @@ def generate_shopping_list(request: GenerateShoppingListRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating shopping list: {str(e)}")
 
-@app.get("/shopping/ingredients/{identifier}", response_model=GetRecipeIngredientsResponse)
-def get_recipe_ingredients(identifier: str):
-    """Get ingredients for a specific recipe."""
-    try:
-        ingredients = shopping_service.get_recipe_ingredients(identifier)
-        return GetRecipeIngredientsResponse(
-            ingredients=ingredients,
-            recipe_name=identifier,
-            found=len(ingredients) > 0
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving ingredients: {str(e)}")
-
-@app.get("/shopping/{identifier}/info", response_model=GetRecipeInfoResponse)
+@app.get("/api/shopping/{identifier}/info", response_model=GetRecipeInfoResponse)
 def get_recipe_info(identifier: str):
     """Get basic information about a recipe."""
+    # Validate identifier parameter exists and is not empty
+    if not identifier or len(identifier.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Identifier cannot be null or empty")
+    
     try:
         info = shopping_service.get_recipe_info(identifier)
         if not info:
