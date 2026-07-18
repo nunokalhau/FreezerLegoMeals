@@ -299,7 +299,8 @@ namespace Services.DotNet.UnitTests
 
             // Assert
             _mockRepository.Verify(r => r.FindRecipesWithIngredientsAsync(new[] { recipeName }), Times.Once);
-            Assert.Null(result);
+            Assert.NotNull(result);
+            Assert.Equal($"No recipes found with identifier: {recipeName}", result.Error);
         }
 
         /// <summary>

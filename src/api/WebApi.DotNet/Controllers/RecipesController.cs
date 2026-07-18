@@ -57,8 +57,8 @@ public class RecipesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<GetRecipeByIdResponse>> GetRecipeById([FromRoute] GetRecipeByIdRequest request)
     {
-        if (request == null)
-            return BadRequest("Request body is required");
+        if (request == null || request.Id <= 0)
+            return BadRequest("Recipe ID is required");
 
         var recipe = await _mealService.GetRecipeByIdAsync(request.Id);
         
@@ -85,18 +85,15 @@ public class RecipesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Query))
             return BadRequest("Query is required");
 
-        // Note: This returns object, so we can't strongly type it - let's keep as is for now
         var result = await _mealService.FindMealsWithIngredientsAsync(request.Query);
-        
-        // We'll need to manually map this since the service returns an object
+
         var response = new FindMealsWithIngredientsResponse
         {
-            Query = request.Query,
-            // Extracting data from the returned object (this would be better handled with a proper strongly typed approach)
-            TotalRecipesFound = (int)((dynamic)result).total_recipes_found,
-            SearchTerms = ((dynamic)result).search_terms ?? Enumerable.Empty<string>(),
-            Recipes = ((dynamic)result).recipes ?? Enumerable.Empty<Recipe>(),
-            Message = ((dynamic)result).message ?? string.Empty
+            Query = result.Query ?? request.Query,
+            TotalRecipesFound = result.TotalRecipesFound,
+            SearchTerms = result.SearchTerms ?? Enumerable.Empty<string>(),
+            Recipes = result.Recipes ?? Enumerable.Empty<Recipe>(),
+            Message = result.Message ?? string.Empty
         };
 
         return Ok(response);
@@ -110,19 +107,17 @@ public class RecipesController : ControllerBase
     [HttpGet("{id}/details")]
     public async Task<ActionResult<GetRecipeDetailsResponse>> GetRecipeDetails([FromRoute] GetRecipeByIdRequest request)
     {
-        if (request == null)
-            return BadRequest("Request body is required");
+        if (request == null || request.Id <= 0)
+            return BadRequest("Recipe ID is required");
 
-        // Note: This returns object, so we can't strongly type it - let's keep as is for now
         var result = await _mealService.GetRecipeDetailsAsync(request.Id);
-        
-        // We'll need to manually map this since the service returns an object
+
         var response = new GetRecipeDetailsResponse
         {
-            Recipe = ((dynamic)result).recipe,
-            Message = ((dynamic)result).message ?? string.Empty,
-            Found = ((dynamic)result).error == null,
-            Error = ((dynamic)result).error
+            Recipe = result.Recipe,
+            Message = result.Message ?? string.Empty,
+            Found = result.Error == null,
+            Error = result.Error
         };
 
         return Ok(response);

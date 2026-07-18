@@ -128,8 +128,8 @@ public class ShoppingController : ControllerBase
         var response = new GetRecipeInfoResponse
         {
             Info = result,
-            Found = ((dynamic)result).error == null,
-            Error = ((dynamic)result).error
+            Found = result.Error == null,
+            Error = result.Error
         };
 
         return Ok(response);

@@ -1,5 +1,7 @@
 using Domain.DotNet;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using Services.DotNet;
 using Services.DotNet.Contracts;
@@ -19,8 +21,15 @@ namespace WebApi.DotNet.UnitTests
 
         public ShoppingControllerTests()
         {
-            _factory = new WebApplicationFactory<Program>();
             _mockShoppingService = new Mock<IShoppingService>();
+            _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureServices(services =>
+                {
+                    services.RemoveAll<IShoppingService>();
+                    services.AddSingleton(_mockShoppingService.Object);
+                });
+            });
         }
 
         /// <summary>
@@ -181,7 +190,9 @@ namespace WebApi.DotNet.UnitTests
             var getRequest = new GetRecipeRequest();
 
             // Act
-            var response = await client.GetAsync("/api/shopping/ingredients/");
+            var response = await client.PostAsJsonAsync(
+                "/api/shopping/ingredients",
+                (IEnumerable<string>?)null);
 
             // Assert
             Assert.Equal(400, (int)response.StatusCode);

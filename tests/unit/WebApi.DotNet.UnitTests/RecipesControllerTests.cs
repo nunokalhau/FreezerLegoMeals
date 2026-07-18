@@ -1,5 +1,7 @@
 using Xunit;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using Services.DotNet;
 using Domain.DotNet;
@@ -19,8 +21,15 @@ namespace WebApi.DotNet.UnitTests
 
         public RecipeControllerTests()
         {
-            _factory = new WebApplicationFactory<Program>();
             _mockMealService = new Mock<IMealService>();
+            _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureServices(services =>
+                {
+                    services.RemoveAll<IMealService>();
+                    services.AddSingleton(_mockMealService.Object);
+                });
+            });
         }
 
         /// <summary>

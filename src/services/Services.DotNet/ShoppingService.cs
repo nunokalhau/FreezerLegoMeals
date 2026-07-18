@@ -138,7 +138,10 @@ public class ShoppingService : IShoppingService
             // Not a number, so search by name and get the ID
             var recipes = await _recipeRepository.FindRecipesWithIngredientsAsync(new[] { recipeIdentifier });
             if (!recipes.Any())
-                return null;
+                return new RecipeInfoResponse
+                {
+                    Error = $"No recipes found with identifier: {recipeIdentifier}"
+                };
             
             recipeId = recipes.First().Id;
         }
@@ -156,7 +159,10 @@ public class ShoppingService : IShoppingService
                 TimeToPrepare = recipeDetails.TimeToPrepare ?? 0
             };
         }
-        
-        return null;
+
+        return new RecipeInfoResponse
+        {
+            Error = $"No recipes found with identifier: {recipeIdentifier}"
+        }; ;
     }
 }

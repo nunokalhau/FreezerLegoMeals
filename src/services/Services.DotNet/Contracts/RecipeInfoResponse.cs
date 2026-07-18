@@ -2,12 +2,14 @@
 {
     public sealed class RecipeInfoResponse
     {
-        public required int Id { get; init; }
+        public int Id { get; init; }
 
-        public required string Name { get; init; }
+        public string Name { get; init; }
 
-        public required int Servings { get; init; }
+        public int Servings { get; init; }
 
-        public required int TimeToPrepare { get; init; }
+        public int TimeToPrepare { get; init; }
+
+        public string? Error { get; set; }
     }
 }
