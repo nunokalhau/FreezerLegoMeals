@@ -1,12 +1,13 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Xunit;
+using Domain.DotNet;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Moq;
 using Services.DotNet;
-using Domain.DotNet;
+using System.Collections.Generic;
+using System.Net.Http.Json;
+using System.Threading.Tasks;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
+using Xunit;
 
 namespace WebApi.DotNet.UnitTests
 {
@@ -140,8 +141,7 @@ namespace WebApi.DotNet.UnitTests
         {
             // Arrange
             var mockResult = new { 
-                info = new { name = "Test Recipe", servings = 4 },
-                error = null
+                info = new { name = "Test Recipe", servings = 4 }
             };
             
             _mockShoppingService.Setup(service => service.GetRecipeInfoAsync(It.IsAny<string>()))

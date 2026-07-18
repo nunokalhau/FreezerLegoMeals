@@ -73,7 +73,7 @@ namespace Services.DotNet.UnitTests
         public void SearchRecipesByIngredientsAsync_WithNullIngredients_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.SearchRecipesByIngredientsAsync(null));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.SearchRecipesByIngredientsAsync(null));
         }
 
         /// <summary>
@@ -161,7 +161,7 @@ namespace Services.DotNet.UnitTests
         public void FindMealsWithIngredientsAsync_WithNullQuery_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.FindMealsWithIngredientsAsync(null));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.FindMealsWithIngredientsAsync(null));
         }
 
         /// <summary>
@@ -171,7 +171,7 @@ namespace Services.DotNet.UnitTests
         public void FindMealsWithIngredientsAsync_WithEmptyQuery_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.FindMealsWithIngredientsAsync(""));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.FindMealsWithIngredientsAsync(""));
         }
 
         /// <summary>

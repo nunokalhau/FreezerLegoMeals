@@ -134,7 +134,7 @@ namespace Services.DotNet.UnitTests
         public void GetRecipeIngredientsAsync_WithNullIdentifier_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.GetRecipeIngredientsAsync(null));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetRecipeIngredientsAsync(null));
         }
 
         /// <summary>
@@ -144,7 +144,7 @@ namespace Services.DotNet.UnitTests
         public void GetRecipeIngredientsAsync_WithEmptyIdentifier_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.GetRecipeIngredientsAsync(""));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetRecipeIngredientsAsync(""));
         }
 
         /// <summary>
@@ -173,7 +173,7 @@ namespace Services.DotNet.UnitTests
         public void GetMultipleRecipeIngredientsAsync_WithNullIdentifiers_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.GetMultipleRecipeIngredientsAsync(null));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetMultipleRecipeIngredientsAsync(null));
         }
 
         /// <summary>
@@ -201,7 +201,7 @@ namespace Services.DotNet.UnitTests
         public void GenerateShoppingListAsync_WithNullIdentifiers_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.GenerateShoppingListAsync(null));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.GenerateShoppingListAsync(null));
         }
 
         /// <summary>
@@ -325,7 +325,7 @@ namespace Services.DotNet.UnitTests
         public void GetRecipeInfoAsync_WithNullIdentifier_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.GetRecipeInfoAsync(null));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetRecipeInfoAsync(null));
         }
 
         /// <summary>
@@ -335,7 +335,7 @@ namespace Services.DotNet.UnitTests
         public void GetRecipeInfoAsync_WithEmptyIdentifier_ShouldThrowArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _service.GetRecipeInfoAsync(""));
+            Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetRecipeInfoAsync(""));
         }
     }
 }

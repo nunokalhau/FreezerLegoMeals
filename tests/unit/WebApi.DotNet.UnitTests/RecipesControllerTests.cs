@@ -7,6 +7,7 @@ using Services.DotNet;
 using Domain.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
+using System.Net.Http.Json;
 
 namespace WebApi.DotNet.UnitTests
 {
@@ -139,8 +140,7 @@ namespace WebApi.DotNet.UnitTests
             // Arrange
             var mockResult = new { 
                 recipe = new Recipe { Id = 1, Name = "Recipe 1" },
-                message = "Recipe details retrieved",
-                error = null
+                message = "Recipe details retrieved"
             };
             
             _mockMealService.Setup(service => service.GetRecipeDetailsAsync(It.IsAny<int>()))

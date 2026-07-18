@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Repositories\Repository.DotNet\Repository.DotNet.csproj" />
+    <ProjectReference Include="..\..\..\src\repositories\Repository.DotNet\Repository.DotNet.csproj" />
   </ItemGroup>
 
 </Project>
