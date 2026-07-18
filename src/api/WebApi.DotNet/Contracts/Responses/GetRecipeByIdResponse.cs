@@ -10,10 +10,5 @@ public class GetRecipeByIdResponse
     /// <summary>
     /// The recipe details.
     /// </summary>
-    public Recipe? Recipe { get; set; }
-    
-    /// <summary>
-    /// Indicates whether the recipe was found.
-    /// </summary>
-    public bool Found { get; set; }
+    public required Recipe Recipe { get; set; }
 }

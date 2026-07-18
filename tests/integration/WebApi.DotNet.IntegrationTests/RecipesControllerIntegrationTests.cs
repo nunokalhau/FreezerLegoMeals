@@ -106,7 +106,6 @@ namespace WebApi.DotNet.IntegrationTests
 
             Assert.NotNull(responseObject);
             Assert.NotNull(responseObject.Recipe);
-            Assert.True(responseObject.Found);
             Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
         }
 
@@ -202,7 +201,6 @@ namespace WebApi.DotNet.IntegrationTests
 
             Assert.NotNull(responseObject);
             Assert.NotNull(responseObject.Recipe); 
-            Assert.True(responseObject.Found);
             Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
         }
 

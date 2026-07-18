@@ -62,12 +62,15 @@ public class RecipeRepository : IRecipeRepository
     {
         if (ingredients == null) throw new ArgumentNullException(nameof(ingredients));
         
-        var ingredientNames = ingredients.Where(i => !string.IsNullOrEmpty(i)).ToList();
+        var ingredientNames = ingredients
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Select(i => i.Trim().ToLower())
+            .ToList();
         if (!ingredientNames.Any()) return Enumerable.Empty<Recipe>();
 
         // Get recipe IDs for recipes containing any of the specified ingredients
         var recipeIds = await _context.RecipeIngredients
-            .Where(ri => ingredientNames.Contains(ri.Ingredient.Name))
+            .Where(ri => ingredientNames.Contains(ri.Ingredient.Name.ToLower()))
             .Select(ri => ri.RecipeId)
             .Distinct()
             .ToListAsync();

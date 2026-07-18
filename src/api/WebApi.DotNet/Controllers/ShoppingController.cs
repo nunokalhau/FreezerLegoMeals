@@ -59,7 +59,7 @@ public class ShoppingController : ControllerBase
     [HttpPost("ingredients")]
     public async Task<ActionResult<GetMultipleRecipeIngredientsResponse>> GetMultipleRecipeIngredients([FromBody] IEnumerable<string> request)
     {
-        if (request == null)
+        if (request == null || !request.Any())
             return BadRequest("Request body is required");
 
         // Note: This returns Dictionary<string, IEnumerable<RecipeIngredient>>
@@ -124,12 +124,13 @@ public class ShoppingController : ControllerBase
         // Note: This returns object, so we can't strongly type it - let's keep as is for now
         var result = await _shoppingService.GetRecipeInfoAsync(request.Identifier);
         
+        if (!string.IsNullOrEmpty(result?.Error))
+            return NotFound(result.Error);
+
         // We'll need to manually map this since the service returns an object
         var response = new GetRecipeInfoResponse
         {
-            Info = result,
-            Found = result.Error == null,
-            Error = result.Error
+            Info = result
         };
 
         return Ok(response);

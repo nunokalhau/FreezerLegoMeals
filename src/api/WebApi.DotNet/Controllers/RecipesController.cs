@@ -62,10 +62,12 @@ public class RecipesController : ControllerBase
 
         var recipe = await _mealService.GetRecipeByIdAsync(request.Id);
         
+        if (recipe == null)
+            return NotFound("Recipe not found");
+
         var response = new GetRecipeByIdResponse
         {
-            Recipe = recipe,
-            Found = recipe != null
+            Recipe = recipe
         };
 
         return Ok(response);
@@ -112,12 +114,13 @@ public class RecipesController : ControllerBase
 
         var result = await _mealService.GetRecipeDetailsAsync(request.Id);
 
+        if (result.Recipe == null)
+            return NotFound("Recipe details not found");
+
         var response = new GetRecipeDetailsResponse
         {
             Recipe = result.Recipe,
-            Message = result.Message ?? string.Empty,
-            Found = result.Error == null,
-            Error = result.Error
+            Message = result.Message ?? string.Empty
         };
 
         return Ok(response);

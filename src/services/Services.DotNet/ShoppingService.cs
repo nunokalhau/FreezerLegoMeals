@@ -163,6 +163,6 @@ public class ShoppingService : IShoppingService
         return new RecipeInfoResponse
         {
             Error = $"No recipes found with identifier: {recipeIdentifier}"
-        }; ;
+        };
     }
 }
