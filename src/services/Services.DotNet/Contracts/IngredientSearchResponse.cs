@@ -1,17 +1,16 @@
 ﻿using Domain.DotNet;
 
-namespace Services.DotNet.Contracts
+namespace Services.DotNet.Contracts;
+
+public sealed class IngredientSearchResponse
 {
-    public sealed class IngredientSearchResponse
-    {
-        public string Query { get; init; }
+    public string Query { get; init; }
 
-        public IEnumerable<string> SearchTerms { get; init; }
+    public IEnumerable<string> SearchTerms { get; init; }
 
-        public int TotalRecipesFound { get; init; }
+    public int TotalRecipesFound { get; init; }
 
-        public IEnumerable<Recipe> Recipes { get; init; }
+    public IEnumerable<Recipe> Recipes { get; init; }
 
-        public string Message { get; init; }
-    }
+    public string Message { get; init; }
 }

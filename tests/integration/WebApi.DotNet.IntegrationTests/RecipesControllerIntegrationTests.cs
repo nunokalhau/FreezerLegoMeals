@@ -1,223 +1,217 @@
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Domain.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
-namespace WebApi.DotNet.IntegrationTests
+namespace WebApi.DotNet.IntegrationTests;
+
+[Collection("IntegrationTests")]
+public class RecipesControllerIntegrationTests : BaseIntegrationTest
 {
-    [Collection("IntegrationTests")]
-    public class RecipesControllerIntegrationTests : BaseIntegrationTest
+    [Fact]
+    public async Task SearchRecipesByIngredients_With_Valid_Request_Returns_Success()
     {
-        [Fact]
-        public async Task SearchRecipesByIngredients_With_Valid_Request_Returns_Success()
+        // Arrange
+        var searchRequest = new SearchRecipesRequest
         {
-            // Arrange
-            var searchRequest = new SearchRecipesRequest
-            {
-                Ingredients = new List<string> { "chicken", "rice" }
-            };
+            Ingredients = new List<string> { "chicken", "rice" }
+        };
 
-            // Act
-            var response = await _client.PostAsJsonAsync("/api/recipes/search", searchRequest);
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/recipes/search", searchRequest);
 
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            // Verify content type
-            Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
+        // Verify content type
+        Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
 
-            // Parse and check response body
-            var jsonResponse = await response.Content.ReadAsStringAsync();
-            var responseObject = JsonSerializer.Deserialize<SearchRecipesResponse>(jsonResponse, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
+        // Parse and check response body
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var responseObject = JsonSerializer.Deserialize<SearchRecipesResponse>(jsonResponse, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
 
-            Assert.NotNull(responseObject);
-            Assert.NotNull(responseObject.Recipes);
-            Assert.NotEmpty(responseObject.Recipes);
-            Assert.Equal(1, responseObject.TotalRecipesFound); // Should find Chicken Fried Rice
+        Assert.NotNull(responseObject);
+        Assert.NotNull(responseObject.Recipes);
+        Assert.NotEmpty(responseObject.Recipes);
+        Assert.Equal(1, responseObject.TotalRecipesFound); // Should find Chicken Fried Rice
             
-            var recipe = responseObject.Recipes.First();
-            Assert.Equal("Chicken Fried Rice", recipe.Name);
-        }
+        var recipe = responseObject.Recipes.First();
+        Assert.Equal("Chicken Fried Rice", recipe.Name);
+    }
 
-        [Fact]
-        public async Task SearchRecipesByIngredients_With_Empty_Request_Returns_BadRequest()
+    [Fact]
+    public async Task SearchRecipesByIngredients_With_Empty_Request_Returns_BadRequest()
+    {
+        // Arrange
+        var searchRequest = new SearchRecipesRequest();
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/recipes/search", searchRequest);
+
+        // Assert
+        Assert.Equal(400, (int)response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SearchRecipesByIngredients_With_No_Ingredients_Returns_BadRequest()
+    {
+        // Arrange
+        var searchRequest = new SearchRecipesRequest
         {
-            // Arrange
-            var searchRequest = new SearchRecipesRequest();
+            Ingredients = null
+        };
 
-            // Act
-            var response = await _client.PostAsJsonAsync("/api/recipes/search", searchRequest);
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/recipes/search", searchRequest);
 
-            // Assert
-            Assert.Equal(400, (int)response.StatusCode);
-        }
+        // Assert
+        Assert.Equal(400, (int)response.StatusCode);
+    }
 
-        [Fact]
-        public async Task SearchRecipesByIngredients_With_No_Ingredients_Returns_BadRequest()
+    [Fact]
+    public async Task GetRecipeById_With_Valid_Id_Returns_Success()
+    {
+        // Arrange
+        var getRequest = new GetRecipeByIdRequest
         {
-            // Arrange
-            var searchRequest = new SearchRecipesRequest
-            {
-                Ingredients = null
-            };
+            Id = 1
+        };
 
-            // Act
-            var response = await _client.PostAsJsonAsync("/api/recipes/search", searchRequest);
+        // Act
+        var response = await _client.GetAsync($"/api/recipes/{getRequest.Id}");
 
-            // Assert
-            Assert.Equal(400, (int)response.StatusCode);
-        }
-
-        [Fact]
-        public async Task GetRecipeById_With_Valid_Id_Returns_Success()
-        {
-            // Arrange
-            var getRequest = new GetRecipeByIdRequest
-            {
-                Id = 1
-            };
-
-            // Act
-            var response = await _client.GetAsync($"/api/recipes/{getRequest.Id}");
-
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            // Verify content type
-            Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
+        // Verify content type
+        Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
 
-            // Parse and check response body
-            var jsonResponse = await response.Content.ReadAsStringAsync();
-            var responseObject = JsonSerializer.Deserialize<GetRecipeByIdResponse>(jsonResponse, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
-
-            Assert.NotNull(responseObject);
-            Assert.NotNull(responseObject.Recipe);
-            Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
-        }
-
-        [Fact]
-        public async Task GetRecipeById_With_Invalid_Id_Returns_NotFound()
+        // Parse and check response body
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var responseObject = JsonSerializer.Deserialize<GetRecipeByIdResponse>(jsonResponse, new JsonSerializerOptions
         {
-            // Arrange
-            var getRequest = new GetRecipeByIdRequest
-            {
-                Id = 999
-            };
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
 
-            // Act
-            var response = await _client.GetAsync($"/api/recipes/{getRequest.Id}");
+        Assert.NotNull(responseObject);
+        Assert.NotNull(responseObject.Recipe);
+        Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
+    }
 
-            // Assert
-            Assert.Equal(404, (int)response.StatusCode);
-        }
-
-        [Fact]
-        public async Task FindMealsWithIngredients_With_Valid_Query_Returns_Success()
+    [Fact]
+    public async Task GetRecipeById_With_Invalid_Id_Returns_NotFound()
+    {
+        // Arrange
+        var getRequest = new GetRecipeByIdRequest
         {
-            // Arrange
-            var findRequest = new FindMealsWithIngredientsRequest
-            {
-                Query = "chicken and rice"
-            };
+            Id = 999
+        };
 
-            // Act
-            var response = await _client.PostAsJsonAsync("/api/recipes/find-by-ingredients", findRequest);
+        // Act
+        var response = await _client.GetAsync($"/api/recipes/{getRequest.Id}");
 
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
+        // Assert
+        Assert.Equal(404, (int)response.StatusCode);
+    }
+
+    [Fact]
+    public async Task FindMealsWithIngredients_With_Valid_Query_Returns_Success()
+    {
+        // Arrange
+        var findRequest = new FindMealsWithIngredientsRequest
+        {
+            Query = "chicken and rice"
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/recipes/find-by-ingredients", findRequest);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            // Verify content type
-            Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
+        // Verify content type
+        Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
 
-            // Parse and check response body
-            var jsonResponse = await response.Content.ReadAsStringAsync();
-            var responseObject = JsonSerializer.Deserialize<FindMealsWithIngredientsResponse>(jsonResponse, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
-
-            Assert.NotNull(responseObject);
-            Assert.Equal("chicken and rice", responseObject.Query);
-            Assert.NotEmpty(responseObject.Recipes);
-            Assert.Equal(1, responseObject.TotalRecipesFound); // Should find Chicken Fried Rice
-        }
-
-        [Fact]
-        public async Task FindMealsWithIngredients_With_Empty_Query_Returns_BadRequest()
+        // Parse and check response body
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var responseObject = JsonSerializer.Deserialize<FindMealsWithIngredientsResponse>(jsonResponse, new JsonSerializerOptions
         {
-            // Arrange
-            var findRequest = new FindMealsWithIngredientsRequest
-            {
-                Query = ""
-            };
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
 
-            // Act
-            var response = await _client.PostAsJsonAsync("/api/recipes/find-by-ingredients", findRequest);
+        Assert.NotNull(responseObject);
+        Assert.Equal("chicken and rice", responseObject.Query);
+        Assert.NotEmpty(responseObject.Recipes);
+        Assert.Equal(1, responseObject.TotalRecipesFound); // Should find Chicken Fried Rice
+    }
 
-            // Assert
-            Assert.Equal(400, (int)response.StatusCode);
-        }
-
-        [Fact]
-        public async Task GetRecipeDetails_With_Valid_Id_Returns_Success()
+    [Fact]
+    public async Task FindMealsWithIngredients_With_Empty_Query_Returns_BadRequest()
+    {
+        // Arrange
+        var findRequest = new FindMealsWithIngredientsRequest
         {
-            // Arrange
-            var getDetailRequest = new GetRecipeByIdRequest
-            {
-                Id = 1
-            };
+            Query = ""
+        };
 
-            // Act
-            var response = await _client.GetAsync($"/api/recipes/{getDetailRequest.Id}/details");
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/recipes/find-by-ingredients", findRequest);
 
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
+        // Assert
+        Assert.Equal(400, (int)response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetRecipeDetails_With_Valid_Id_Returns_Success()
+    {
+        // Arrange
+        var getDetailRequest = new GetRecipeByIdRequest
+        {
+            Id = 1
+        };
+
+        // Act
+        var response = await _client.GetAsync($"/api/recipes/{getDetailRequest.Id}/details");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            // Verify content type
-            Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
+        // Verify content type
+        Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString());
 
-            // Parse and check response body
-            var jsonResponse = await response.Content.ReadAsStringAsync();
-            var responseObject = JsonSerializer.Deserialize<GetRecipeDetailsResponse>(jsonResponse, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
-
-            Assert.NotNull(responseObject);
-            Assert.NotNull(responseObject.Recipe); 
-            Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
-        }
-
-        [Fact]
-        public async Task GetRecipeDetails_With_Invalid_Id_Returns_NotFound()
+        // Parse and check response body
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var responseObject = JsonSerializer.Deserialize<GetRecipeDetailsResponse>(jsonResponse, new JsonSerializerOptions
         {
-            // Arrange
-            var getDetailRequest = new GetRecipeByIdRequest
-            {
-                Id = 999
-            };
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
 
-            // Act
-            var response = await _client.GetAsync($"/api/recipes/{getDetailRequest.Id}/details");
+        Assert.NotNull(responseObject);
+        Assert.NotNull(responseObject.Recipe); 
+        Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
+    }
 
-            // Assert
-            Assert.Equal(404, (int)response.StatusCode);
-        }
+    [Fact]
+    public async Task GetRecipeDetails_With_Invalid_Id_Returns_NotFound()
+    {
+        // Arrange
+        var getDetailRequest = new GetRecipeByIdRequest
+        {
+            Id = 999
+        };
+
+        // Act
+        var response = await _client.GetAsync($"/api/recipes/{getDetailRequest.Id}/details");
+
+        // Assert
+        Assert.Equal(404, (int)response.StatusCode);
     }
 }

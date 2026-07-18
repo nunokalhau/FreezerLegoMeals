@@ -9,210 +9,209 @@ using System.Net.Http.Json;
 using WebApi.DotNet.Contracts.Requests;
 using Xunit;
 
-namespace WebApi.DotNet.UnitTests
+namespace WebApi.DotNet.UnitTests;
+
+/// <summary>
+/// Unit tests for the Shopping Controller endpoint.
+/// </summary>
+public class ShoppingControllerTests
 {
-    /// <summary>
-    /// Unit tests for the Shopping Controller endpoint.
-    /// </summary>
-    public class ShoppingControllerTests
+    private readonly WebApplicationFactory<Program> _factory;
+    private readonly Mock<IShoppingService> _mockShoppingService;
+
+    public ShoppingControllerTests()
     {
-        private readonly WebApplicationFactory<Program> _factory;
-        private readonly Mock<IShoppingService> _mockShoppingService;
-
-        public ShoppingControllerTests()
+        _mockShoppingService = new Mock<IShoppingService>();
+        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
-            _mockShoppingService = new Mock<IShoppingService>();
-            _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
-                builder.ConfigureServices(services =>
-                {
-                    services.RemoveAll<IShoppingService>();
-                    services.AddSingleton(_mockShoppingService.Object);
-                });
+                services.RemoveAll<IShoppingService>();
+                services.AddSingleton(_mockShoppingService.Object);
             });
-        }
+        });
+    }
 
-        /// <summary>
-        /// Tests that GetRecipeIngredients properly maps Request DTO to Service and Response DTO back to HTTP.
-        /// </summary>
-        [Fact]
-        public async Task GetRecipeIngredients_With_Valid_Request_Returns_Success()
+    /// <summary>
+    /// Tests that GetRecipeIngredients properly maps Request DTO to Service and Response DTO back to HTTP.
+    /// </summary>
+    [Fact]
+    public async Task GetRecipeIngredients_With_Valid_Request_Returns_Success()
+    {
+        // Arrange
+        var mockIngredients = new List<RecipeIngredient> 
+        { 
+            new RecipeIngredient { RecipeId = 1, IngredientId = 1, Amount = 2.0, Unit = "cups" },
+            new RecipeIngredient { RecipeId = 1, IngredientId = 2, Amount = 1.0, Unit = "tbsp" }
+        };
+            
+        _mockShoppingService.Setup(service => service.GetRecipeIngredientsAsync(It.IsAny<string>()))
+                            .ReturnsAsync(mockIngredients);
+
+        var client = _factory.CreateClient();
+        var getRequest = new GetRecipeRequest
         {
-            // Arrange
-            var mockIngredients = new List<RecipeIngredient> 
-            { 
-                new RecipeIngredient { RecipeId = 1, IngredientId = 1, Amount = 2.0, Unit = "cups" },
-                new RecipeIngredient { RecipeId = 1, IngredientId = 2, Amount = 1.0, Unit = "tbsp" }
-            };
+            Identifier = "test-recipe"
+        };
+
+        // Act
+        var response = await client.GetAsync($"/api/shopping/ingredients/{getRequest.Identifier}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            _mockShoppingService.Setup(service => service.GetRecipeIngredientsAsync(It.IsAny<string>()))
-                               .ReturnsAsync(mockIngredients);
+        // Verify Service was called with Request DTO data
+        _mockShoppingService.Verify(service => service.GetRecipeIngredientsAsync(
+            It.Is<string>(identifier => identifier == "test-recipe")
+        ), Times.Once);
+    }
 
-            var client = _factory.CreateClient();
-            var getRequest = new GetRecipeRequest
-            {
-                Identifier = "test-recipe"
-            };
-
-            // Act
-            var response = await client.GetAsync($"/api/shopping/ingredients/{getRequest.Identifier}");
-
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
-            
-            // Verify Service was called with Request DTO data
-            _mockShoppingService.Verify(service => service.GetRecipeIngredientsAsync(
-                It.Is<string>(identifier => identifier == "test-recipe")
-            ), Times.Once);
-        }
-
-        /// <summary>
-        /// Tests that GetMultipleRecipeIngredients properly maps Request DTO to Service and Response DTO back to HTTP.
-        /// </summary>
-        [Fact]
-        public async Task GetMultipleRecipeIngredients_With_Valid_Request_Returns_Success()
+    /// <summary>
+    /// Tests that GetMultipleRecipeIngredients properly maps Request DTO to Service and Response DTO back to HTTP.
+    /// </summary>
+    [Fact]
+    public async Task GetMultipleRecipeIngredients_With_Valid_Request_Returns_Success()
+    {
+        // Arrange
+        var mockIngredients = new Dictionary<string, IEnumerable<RecipeIngredient>>
         {
-            // Arrange
-            var mockIngredients = new Dictionary<string, IEnumerable<RecipeIngredient>>
-            {
-                { "recipe1", new List<RecipeIngredient> { new RecipeIngredient { RecipeId = 1, IngredientId = 1 } } },
-                { "recipe2", new List<RecipeIngredient> { new RecipeIngredient { RecipeId = 2, IngredientId = 2 } } }
-            };
+            { "recipe1", new List<RecipeIngredient> { new RecipeIngredient { RecipeId = 1, IngredientId = 1 } } },
+            { "recipe2", new List<RecipeIngredient> { new RecipeIngredient { RecipeId = 2, IngredientId = 2 } } }
+        };
             
-            _mockShoppingService.Setup(service => service.GetMultipleRecipeIngredientsAsync(It.IsAny<IEnumerable<string>>()))
-                               .ReturnsAsync(mockIngredients);
+        _mockShoppingService.Setup(service => service.GetMultipleRecipeIngredientsAsync(It.IsAny<IEnumerable<string>>()))
+                            .ReturnsAsync(mockIngredients);
 
-            var client = _factory.CreateClient();
-            var multiRequest = new List<string> { "recipe1", "recipe2" };
+        var client = _factory.CreateClient();
+        var multiRequest = new List<string> { "recipe1", "recipe2" };
 
-            // Act
-            var response = await client.PostAsJsonAsync("/api/shopping/ingredients", multiRequest);
+        // Act
+        var response = await client.PostAsJsonAsync("/api/shopping/ingredients", multiRequest);
 
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            // Verify Service was called with Request DTO data
-            _mockShoppingService.Verify(service => service.GetMultipleRecipeIngredientsAsync(
-                It.Is<IEnumerable<string>>(identifiers => identifiers.Contains("recipe1") && identifiers.Contains("recipe2"))
-            ), Times.Once);
-        }
+        // Verify Service was called with Request DTO data
+        _mockShoppingService.Verify(service => service.GetMultipleRecipeIngredientsAsync(
+            It.Is<IEnumerable<string>>(identifiers => identifiers.Contains("recipe1") && identifiers.Contains("recipe2"))
+        ), Times.Once);
+    }
 
-        /// <summary>
-        /// Tests that GenerateShoppingList properly maps Request DTO to Service and Response DTO back to HTTP.
-        /// </summary>
-        [Fact]
-        public async Task GenerateShoppingList_With_Valid_Request_Returns_Success()
+    /// <summary>
+    /// Tests that GenerateShoppingList properly maps Request DTO to Service and Response DTO back to HTTP.
+    /// </summary>
+    [Fact]
+    public async Task GenerateShoppingList_With_Valid_Request_Returns_Success()
+    {
+        // Arrange
+        var mockResult = new ShoppingListResponse { 
+            Recipes = new List<string> { "recipe1", "recipe2" },
+            TotalRecipes = 2,
+            ScaleFactor = 2.0,
+            Ingredients = new List<ShoppingListItem>(),
+            Message = "Shopping list generated successfully"
+        };
+            
+        _mockShoppingService.Setup(service => service.GenerateShoppingListAsync(
+            It.IsAny<IEnumerable<string>>(), 
+            It.IsAny<double>(), 
+            It.IsAny<bool>()))
+                            .ReturnsAsync(mockResult);
+
+        var client = _factory.CreateClient();
+        var generateRequest = new GenerateShoppingListRequest
         {
-            // Arrange
-            var mockResult = new ShoppingListResponse { 
-                Recipes = new List<string> { "recipe1", "recipe2" },
-                TotalRecipes = 2,
-                ScaleFactor = 2.0,
-                Ingredients = new List<ShoppingListItem>(),
-                Message = "Shopping list generated successfully"
-            };
+            RecipeIdentifiers = new List<string> { "recipe1", "recipe2" },
+            ScaleFactor = 2.0,
+            GroupByCategory = true
+        };
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/shopping/generate", generateRequest);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            _mockShoppingService.Setup(service => service.GenerateShoppingListAsync(
-                It.IsAny<IEnumerable<string>>(), 
-                It.IsAny<double>(), 
-                It.IsAny<bool>()))
-                               .ReturnsAsync(mockResult);
+        // Verify Service was called with Request DTO data
+        _mockShoppingService.Verify(service => service.GenerateShoppingListAsync(
+            It.Is<IEnumerable<string>>(identifiers => identifiers.Contains("recipe1") && identifiers.Contains("recipe2")),
+            It.Is<double>(factor => factor == 2.0),
+            It.Is<bool>(groupBy => groupBy == true)
+        ), Times.Once);
+    }
 
-            var client = _factory.CreateClient();
-            var generateRequest = new GenerateShoppingListRequest
-            {
-                RecipeIdentifiers = new List<string> { "recipe1", "recipe2" },
-                ScaleFactor = 2.0,
-                GroupByCategory = true
-            };
-
-            // Act
-            var response = await client.PostAsJsonAsync("/api/shopping/generate", generateRequest);
-
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
+    /// <summary>
+    /// Tests that GetRecipeInfo properly maps Request DTO to Service and Response DTO back to HTTP.
+    /// </summary>
+    [Fact]
+    public async Task GetRecipeInfo_With_Valid_Request_Returns_Success()
+    {
+        // Arrange
+        var mockResult = new RecipeInfoResponse{ 
+            Id = 123,
+            Name = "Test Recipe",
+            Servings = 4,
+            TimeToPrepare = 30
+        };
             
-            // Verify Service was called with Request DTO data
-            _mockShoppingService.Verify(service => service.GenerateShoppingListAsync(
-                It.Is<IEnumerable<string>>(identifiers => identifiers.Contains("recipe1") && identifiers.Contains("recipe2")),
-                It.Is<double>(factor => factor == 2.0),
-                It.Is<bool>(groupBy => groupBy == true)
-            ), Times.Once);
-        }
+        _mockShoppingService.Setup(service => service.GetRecipeInfoAsync(It.IsAny<string>()))
+                            .ReturnsAsync(mockResult);
 
-        /// <summary>
-        /// Tests that GetRecipeInfo properly maps Request DTO to Service and Response DTO back to HTTP.
-        /// </summary>
-        [Fact]
-        public async Task GetRecipeInfo_With_Valid_Request_Returns_Success()
+        var client = _factory.CreateClient();
+        var getRequest = new GetRecipeRequest
         {
-            // Arrange
-            var mockResult = new RecipeInfoResponse{ 
-                Id = 123,
-                Name = "Test Recipe",
-                Servings = 4,
-                TimeToPrepare = 30
-            };
+            Identifier = "test-recipe"
+        };
+
+        // Act
+        var response = await client.GetAsync($"/api/shopping/{getRequest.Identifier}/info");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
             
-            _mockShoppingService.Setup(service => service.GetRecipeInfoAsync(It.IsAny<string>()))
-                               .ReturnsAsync(mockResult);
+        // Verify Service was called with Request DTO data
+        _mockShoppingService.Verify(service => service.GetRecipeInfoAsync(
+            It.Is<string>(identifier => identifier == "test-recipe")
+        ), Times.Once);
+    }
 
-            var client = _factory.CreateClient();
-            var getRequest = new GetRecipeRequest
-            {
-                Identifier = "test-recipe"
-            };
+    /// <summary>
+    /// Tests that GetRecipeIngredients handles bad request correctly.
+    /// </summary>
+    [Fact]
+    public async Task GetRecipeIngredients_With_Empty_Request_Returns_BadRequest()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var getRequest = new GetRecipeRequest();
 
-            // Act
-            var response = await client.GetAsync($"/api/shopping/{getRequest.Identifier}/info");
+        // Act
+        var response = await client.PostAsJsonAsync(
+            "/api/shopping/ingredients",
+            (IEnumerable<string>?)null);
 
-            // Assert
-            response.EnsureSuccessStatusCode();
-            Assert.Equal(200, (int)response.StatusCode);
-            
-            // Verify Service was called with Request DTO data
-            _mockShoppingService.Verify(service => service.GetRecipeInfoAsync(
-                It.Is<string>(identifier => identifier == "test-recipe")
-            ), Times.Once);
-        }
+        // Assert
+        Assert.Equal(400, (int)response.StatusCode);
+    }
 
-        /// <summary>
-        /// Tests that GetRecipeIngredients handles bad request correctly.
-        /// </summary>
-        [Fact]
-        public async Task GetRecipeIngredients_With_Empty_Request_Returns_BadRequest()
-        {
-            // Arrange
-            var client = _factory.CreateClient();
-            var getRequest = new GetRecipeRequest();
+    /// <summary>
+    /// Tests that GenerateShoppingList handles bad request correctly.
+    /// </summary>
+    [Fact]
+    public async Task GenerateShoppingList_With_Empty_Request_Returns_BadRequest()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var generateRequest = new GenerateShoppingListRequest();
 
-            // Act
-            var response = await client.PostAsJsonAsync(
-                "/api/shopping/ingredients",
-                (IEnumerable<string>?)null);
+        // Act
+        var response = await client.PostAsJsonAsync("/api/shopping/generate", generateRequest);
 
-            // Assert
-            Assert.Equal(400, (int)response.StatusCode);
-        }
-
-        /// <summary>
-        /// Tests that GenerateShoppingList handles bad request correctly.
-        /// </summary>
-        [Fact]
-        public async Task GenerateShoppingList_With_Empty_Request_Returns_BadRequest()
-        {
-            // Arrange
-            var client = _factory.CreateClient();
-            var generateRequest = new GenerateShoppingListRequest();
-
-            // Act
-            var response = await client.PostAsJsonAsync("/api/shopping/generate", generateRequest);
-
-            // Assert
-            Assert.Equal(400, (int)response.StatusCode);
-        }
+        // Assert
+        Assert.Equal(400, (int)response.StatusCode);
     }
 }

@@ -68,14 +68,12 @@ public class RecipeRepository : IRecipeRepository
             .ToList();
         if (!ingredientNames.Any()) return Enumerable.Empty<Recipe>();
 
-        // Get recipe IDs for recipes containing any of the specified ingredients
         var recipeIds = await _context.RecipeIngredients
             .Where(ri => ingredientNames.Contains(ri.Ingredient.Name.ToLower()))
             .Select(ri => ri.RecipeId)
             .Distinct()
             .ToListAsync();
 
-        // Load the actual recipes with their ingredients
         var entities = await _context.Recipes
             .Include(r => r.RecipeIngredients)
                 .ThenInclude(ri => ri.Ingredient)
@@ -144,7 +142,6 @@ public class RecipeRepository : IRecipeRepository
             RecipeCombinationItems = new List<RecipeCombinationItem>()
         };
 
-        // Map recipe ingredients
         if (entity.RecipeIngredients != null)
         {
             foreach (var recipeIngredient in entity.RecipeIngredients)
@@ -163,7 +160,6 @@ public class RecipeRepository : IRecipeRepository
             }
         }
 
-        // Map combination items
         if (entity.RecipeCombinationItems != null)
         {
             foreach (var combinationItem in entity.RecipeCombinationItems)
@@ -196,7 +192,6 @@ public class RecipeRepository : IRecipeRepository
             RecipeIngredients = new List<RecipeIngredient>()
         };
 
-        // Map recipe ingredients that reference this ingredient
         if (entity.RecipeIngredients != null)
         {
             foreach (var recipeIngredient in entity.RecipeIngredients)
@@ -207,8 +202,8 @@ public class RecipeRepository : IRecipeRepository
                     IngredientId = recipeIngredient.IngredientId,
                     Amount = recipeIngredient.Amount,
                     Unit = recipeIngredient.Unit,
-                    Recipe = null, // Will be set when mapping the recipe
-                    Ingredient = ingredient // Set navigation property
+                    Recipe = null,
+                    Ingredient = ingredient
                 };
                 
                 ingredient.RecipeIngredients.Add(domainRecipeIngredient);
@@ -230,7 +225,6 @@ public class RecipeRepository : IRecipeRepository
             RecipeCombinationItems = new List<RecipeCombinationItem>()
         };
 
-        // Map combination items
         if (entity.RecipeCombinationItems != null)
         {
             foreach (var combinationItem in entity.RecipeCombinationItems)
@@ -241,8 +235,8 @@ public class RecipeRepository : IRecipeRepository
                     CombinationId = combinationItem.CombinationId,
                     RecipeId = combinationItem.RecipeId,
                     Position = combinationItem.Position,
-                    RecipeCombination = combination, // Set navigation property
-                    Recipe = null // Will be set when mapping the recipe
+                    RecipeCombination = combination,
+                    Recipe = null
                 };
                 
                 combination.RecipeCombinationItems.Add(domainCombinationItem);

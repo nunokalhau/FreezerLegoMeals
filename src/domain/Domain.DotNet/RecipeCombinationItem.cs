@@ -7,7 +7,6 @@ public class RecipeCombinationItem
     public int RecipeId { get; set; }
     public int Position { get; set; }
     
-    // Navigation properties for domain objects
     public RecipeCombination RecipeCombination { get; set; }
     public Recipe Recipe { get; set; }
 }

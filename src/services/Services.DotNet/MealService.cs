@@ -27,9 +27,8 @@ public class MealService : IMealService
     /// <returns>List of matching recipes</returns>
     public async Task<IEnumerable<Recipe>> SearchRecipesByIngredientsAsync(IEnumerable<string> ingredients)
     {
-        if (ingredients == null)
-            throw new ArgumentNullException(nameof(ingredients));
-            
+        ArgumentNullException.ThrowIfNull(ingredients);
+
         return await _recipeRepository.FindRecipesWithIngredientsAsync(ingredients);
     }
 
@@ -85,7 +84,6 @@ public class MealService : IMealService
             };
         }
         
-        // Return extended recipe details 
         return new RecipeDetailsResponse
         {
             Query = $"Recipe details for {recipe.Name}",

@@ -7,7 +7,6 @@ public class RecipeIngredient
     public double? Amount { get; set; }
     public string Unit { get; set; }
     
-    // Navigation properties for domain objects
     public Recipe Recipe { get; set; }
     public Ingredient Ingredient { get; set; }
     

@@ -20,7 +20,6 @@ public class FreezerLegoMealsContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configure RecipeIngredientEntity relationships
         modelBuilder.Entity<RecipeIngredientEntity>()
             .HasOne(ri => ri.Recipe)
             .WithMany(r => r.RecipeIngredients)
@@ -33,7 +32,6 @@ public class FreezerLegoMealsContext : DbContext
             .HasForeignKey(ri => ri.IngredientId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure RecipeCombinationItemEntity relationships
         modelBuilder.Entity<RecipeCombinationItemEntity>()
             .HasOne(rci => rci.RecipeCombination)
             .WithMany(rc => rc.RecipeCombinationItems)

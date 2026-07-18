@@ -1,9 +1,5 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Services.DotNet;
 using Repository.DotNet;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
@@ -43,6 +39,7 @@ app.MapHealthChecks("/healthz");
 
 app.Run();
 
+// For testing purposes
 namespace WebApi.DotNet
 {
     public partial class Program

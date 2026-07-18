@@ -16,6 +16,5 @@ public class MealPlanningController : ControllerBase
     {
     }
 
-    // Currently empty - this controller can be extended with meal planning features as needed
-    // based on what's available in the Service layer
+    // Currently empty as expected, can be extended with meal planning features as needed
 }

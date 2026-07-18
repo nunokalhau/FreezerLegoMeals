@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Domain.DotNet;
 
 public class Recipe
@@ -16,7 +14,6 @@ public class Recipe
     public string Combinations { get; set; }
     public string Notes { get; set; }
     
-    // Navigation properties for domain objects
     public ICollection<RecipeIngredient> RecipeIngredients { get; set; } = new List<RecipeIngredient>();
     public ICollection<RecipeCombinationItem> RecipeCombinationItems { get; set; } = new List<RecipeCombinationItem>();
 }

@@ -1,5 +1,3 @@
-using Domain.DotNet;
-
 namespace WebApi.DotNet.Contracts.Responses;
 
 /// <summary>

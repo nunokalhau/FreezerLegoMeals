@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Services.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
-using Domain.DotNet;
 
 namespace WebApi.DotNet.Controllers;
 
@@ -38,13 +37,12 @@ public class ShoppingController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Identifier))
             return BadRequest("Recipe identifier is required");
 
-        // Note: This returns IEnumerable<RecipeIngredient>, so we should map it properly
         var ingredients = await _shoppingService.GetRecipeIngredientsAsync(request.Identifier);
-        
+
         var response = new GetRecipeIngredientsResponse
         {
             Ingredients = ingredients,
-            RecipeName = request.Identifier,  // Placeholder - actual recipe name would need to be determined
+            RecipeName = request.Identifier,
             Found = ingredients?.Any() ?? false
         };
 
@@ -62,7 +60,6 @@ public class ShoppingController : ControllerBase
         if (request == null || !request.Any())
             return BadRequest("Request body is required");
 
-        // Note: This returns Dictionary<string, IEnumerable<RecipeIngredient>>
         var ingredients = await _shoppingService.GetMultipleRecipeIngredientsAsync(request);
         
         var response = new GetMultipleRecipeIngredientsResponse
@@ -89,13 +86,11 @@ public class ShoppingController : ControllerBase
         if (!request.RecipeIdentifiers?.Any() ?? true)
             return BadRequest("At least one recipe identifier is required");
 
-        // Note: This returns object, so we can't strongly type it - let's keep as is for now
         var result = await _shoppingService.GenerateShoppingListAsync(
             request.RecipeIdentifiers, 
             request.ScaleFactor, 
             request.GroupByCategory);
         
-        // We'll need to manually map this since the service returns an object
         var response = new GenerateShoppingListResponse
         {
             ShoppingList = result,
@@ -121,13 +116,11 @@ public class ShoppingController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Identifier))
             return BadRequest("Recipe identifier is required");
 
-        // Note: This returns object, so we can't strongly type it - let's keep as is for now
         var result = await _shoppingService.GetRecipeInfoAsync(request.Identifier);
         
         if (!string.IsNullOrEmpty(result?.Error))
             return NotFound(result.Error);
 
-        // We'll need to manually map this since the service returns an object
         var response = new GetRecipeInfoResponse
         {
             Info = result

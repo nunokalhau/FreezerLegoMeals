@@ -60,8 +60,7 @@ public class ShoppingService : IShoppingService
     /// <returns>Dictionary mapping recipe names to their ingredients</returns>
     public async Task<Dictionary<string, IEnumerable<RecipeIngredient>>> GetMultipleRecipeIngredientsAsync(IEnumerable<string> recipeIdentifiers)
     {
-        if (recipeIdentifiers == null)
-            throw new ArgumentNullException(nameof(recipeIdentifiers));
+        ArgumentNullException.ThrowIfNull(recipeIdentifiers);
 
         var allIngredients = new Dictionary<string, IEnumerable<RecipeIngredient>>();
         
@@ -86,8 +85,7 @@ public class ShoppingService : IShoppingService
                                                         double scaleFactor = 1.0, 
                                                         bool groupByCategory = true)
     {
-        if (recipeIdentifiers == null)
-            throw new ArgumentNullException(nameof(recipeIdentifiers));
+        ArgumentNullException.ThrowIfNull(recipeIdentifiers);
 
         // Get all ingredients from specified recipes
         var recipeIngredients = await GetMultipleRecipeIngredientsAsync(recipeIdentifiers);
@@ -105,7 +103,6 @@ public class ShoppingService : IShoppingService
             };
         }
 
-        // For this implementation, returning basic structure since we don't have full ingredient data access yet
         var totalRecipes = recipeIngredients.Keys.Count();
         return new ShoppingListResponse
         {
@@ -146,7 +143,6 @@ public class ShoppingService : IShoppingService
             recipeId = recipes.First().Id;
         }
 
-        // Return basic recipe information
         var recipeDetails = await _recipeRepository.GetRecipeByIdAsync(recipeId);
         
         if (recipeDetails != null)
