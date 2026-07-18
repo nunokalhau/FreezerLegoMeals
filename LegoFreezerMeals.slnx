@@ -1,0 +1,24 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/api/">
+    <Project Path="src/api/WebApi.DotNet/WebApi.DotNet.csproj" />
+  </Folder>
+  <Folder Name="/src/domain/">
+    <Project Path="src/domain/Domain.DotNet/Domain.DotNet.csproj" />
+  </Folder>
+  <Folder Name="/src/repositories/">
+    <Project Path="src/repositories/Repository.DotNet/Repository.DotNet.csproj" />
+  </Folder>
+  <Folder Name="/src/services/">
+    <Project Path="src/services/Services.DotNet/Services.DotNet.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/integration/">
+    <Project Path="tests/integration/WebApi.DotNet.IntegrationTests/WebApi.DotNet.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/unit/">
+    <Project Path="tests/unit/Repository.DotNet.UnitTests/Repository.DotNet.UnitTests.csproj" />
+    <Project Path="tests/unit/Services.DotNet.UnitTests/Services.DotNet.UnitTests.csproj" />
+    <Project Path="tests/unit/WebApi.DotNet.UnitTests/WebApi.DotNet.UnitTests.csproj" />
+  </Folder>
+</Solution>
