@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { IMealService } from './meal.service.interface';
 import { RecipeRepositoryInterface } from '../../repositories/Repository.NestJS/recipe.repository';
+import { IngredientSearchResponse } from './models/ingredient-search-response.dto';
+import { RecipeDetailsResponse } from './models/recipe-details-response.dto';
+import { RecipeInfoResponse } from './models/recipe-info-response.dto';
+import { Recipe } from './models/recipe.dto';
 
 @Injectable()
 export class MealService implements IMealService {
   constructor(
     private readonly recipeRepository: RecipeRepositoryInterface
   ) {}
+
+  async getRecipes(): Promise<Recipe[]> {
+    return await this.recipeRepository.getRecipes();
+  }
 
   async searchRecipesByIngredients(ingredients: string[]): Promise<any[]> {
     return await this.recipeRepository.findRecipesWithIngredients(ingredients);
@@ -16,7 +24,7 @@ export class MealService implements IMealService {
     return await this.recipeRepository.getRecipeById(recipeId);
   }
 
-  async findMealsWithIngredients(query: string): Promise<any> {
+  async findMealsWithIngredients(query: string): Promise<IngredientSearchResponse> {
     // Simple pattern matching for common food terms (as seen in Python version)
     const foodTerms = [
       "chicken", "beef", "pork", "tofu", "rice", "potato", "carrot", 
@@ -49,31 +57,31 @@ export class MealService implements IMealService {
       recipes = await this.recipeRepository.findRecipesWithIngredients(foundIngredients);
     }
 
-    // Return structure matching Python implementation
-    return {
-      query: query,
-      search_terms: foundIngredients,
-      total_recipes_found: recipes.length,
-      recipes: recipes,
+    // Return structure matching .NET specification
+    return new IngredientSearchResponse({
+      query,
+      searchTerms: foundIngredients,
+      totalRecipesFound: recipes.length,
+      recipes,
       message: foundIngredients.length > 0 
         ? `Found ${recipes.length} recipes containing ${foundIngredients.join(', ')}`
         : "No ingredients found in your query. Try mentioning specific ingredients like 'chicken', 'beef', etc."
-    };
+    });
   }
 
-  async getRecipeDetails(recipeId: number): Promise<any> {
+  async getRecipeDetails(recipeId: number): Promise<RecipeDetailsResponse> {
     const recipe = await this.recipeRepository.getRecipeById(recipeId);
     
     if (!recipe) {
-      return {
+      return new RecipeDetailsResponse({
         error: `No recipe found with ID ${recipeId}`
-      };
+      });
     }
     
-    return {
+    return new RecipeDetailsResponse({
       query: `Recipe details for ${recipe.name}`,
-      recipe: recipe,
+      recipe,
       message: `Details for recipe: ${recipe.name}`
-    };
+    });
   }
 }

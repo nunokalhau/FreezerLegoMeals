@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Recipe } from '../services/FrezerLegoMeals.Services.NestJS/models/recipe.dto';
+import { Recipe } from '../services/Services.NestJS/models/recipe.dto';
 
 export interface RecipeRepositoryInterface {
   getRecipes(): Promise<Recipe[]>;
