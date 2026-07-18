@@ -1,7 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 namespace WebApi.DotNet.IntegrationTests
@@ -9,17 +8,6 @@ namespace WebApi.DotNet.IntegrationTests
     [Collection("IntegrationTests")]
     public class MealPlanningControllerIntegrationTests : BaseIntegrationTest
     {
-        public MealPlanningControllerIntegrationTests() : base()
-        {
-            // Seed the database with test data for each test run
-            var options = new DbContextOptionsBuilder<FreezerLegoMealsContext>()
-                .UseInMemoryDatabase(databaseName: "TestDatabase")
-                .Options;
-            
-            using var context = new FreezerLegoMealsContext(options);
-            IntegrationTestDbSeeder.SeedTestData(context);
-        }
-
         [Fact]
         public async Task MealPlanningController_Endpoint_Exists()
         {

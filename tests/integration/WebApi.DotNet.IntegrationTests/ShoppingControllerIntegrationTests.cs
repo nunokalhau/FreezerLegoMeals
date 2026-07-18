@@ -13,17 +13,6 @@ namespace WebApi.DotNet.IntegrationTests
     [Collection("IntegrationTests")]
     public class ShoppingControllerIntegrationTests : BaseIntegrationTest
     {
-        public ShoppingControllerIntegrationTests() : base()
-        {
-            // Seed the database with test data for each test run
-            var options = new DbContextOptionsBuilder<FreezerLegoMealsContext>()
-                .UseInMemoryDatabase(databaseName: "TestDatabase")
-                .Options;
-            
-            using var context = new FreezerLegoMealsContext(options);
-            IntegrationTestDbSeeder.SeedTestData(context);
-        }
-
         [Fact]
         public async Task GetRecipeIngredients_With_Valid_Identifier_Returns_Success()
         {

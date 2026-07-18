@@ -1,8 +1,12 @@
 using System;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 using WebApi.DotNet;
+using Repository.DotNet;
 
 namespace WebApi.DotNet.IntegrationTests
 {
@@ -16,12 +20,29 @@ namespace WebApi.DotNet.IntegrationTests
 
     public abstract class BaseIntegrationTest : IDisposable
     {
+        private static readonly InMemoryDatabaseRoot DatabaseRoot = new();
         protected readonly WebApplicationFactory<Program> _factory;
         protected readonly HttpClient _client;
 
         protected BaseIntegrationTest()
         {
-            _factory = new WebApplicationFactory<Program>();
+            _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureServices(services =>
+                {
+                    services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                    services.RemoveAll<FreezerLegoMealsContext>();
+                    services.AddDbContext<FreezerLegoMealsContext>(options =>
+                        options.UseInMemoryDatabase("TestDatabase", DatabaseRoot));
+                });
+            });
+
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<FreezerLegoMealsContext>();
+                IntegrationTestDbSeeder.SeedTestData(context);
+            }
+
             _client = _factory.CreateClient();
         }
 

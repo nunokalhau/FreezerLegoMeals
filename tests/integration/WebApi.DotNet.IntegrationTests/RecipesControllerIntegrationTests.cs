@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Domain.DotNet;
@@ -15,17 +14,6 @@ namespace WebApi.DotNet.IntegrationTests
     [Collection("IntegrationTests")]
     public class RecipesControllerIntegrationTests : BaseIntegrationTest
     {
-        public RecipesControllerIntegrationTests() : base()
-        {
-            // Seed the database with test data for each test run
-            var options = new DbContextOptionsBuilder<FreezerLegoMealsContext>()
-                .UseInMemoryDatabase(databaseName: "TestDatabase")
-                .Options;
-            
-            using var context = new FreezerLegoMealsContext(options);
-            IntegrationTestDbSeeder.SeedTestData(context);
-        }
-
         [Fact]
         public async Task SearchRecipesByIngredients_With_Valid_Request_Returns_Success()
         {
