@@ -1,7 +1,5 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Domain.DotNet;
-using Repository.DotNet;
+using Services.DotNet.Contracts;
 
 namespace Services.DotNet;
 
@@ -22,19 +20,19 @@ public interface IMealService
     /// </summary>
     /// <param name="id">The recipe ID</param>
     /// <returns>The recipe if found, null otherwise</returns>
-    Task<Recipe> GetRecipeByIdAsync(int id);
+    Task<Recipe?> GetRecipeByIdAsync(int id);
     
     /// <summary>
     /// Search for recipes containing specified ingredients and return detailed information.
     /// </summary>
     /// <param name="query">Natural language query about meals/recipes</param>
     /// <returns>Detailed search results</returns>
-    Task<object> FindMealsWithIngredientsAsync(string query);
+    Task<IngredientSearchResponse> FindMealsWithIngredientsAsync(string query);
     
     /// <summary>
     /// Get detailed information about a specific recipe.
     /// </summary>
     /// <param name="id">The recipe ID</param>
     /// <returns>Detailed recipe information</returns>
-    Task<object> GetRecipeDetailsAsync(int id);
+    Task<RecipeDetailsResponse> GetRecipeDetailsAsync(int id);
 }

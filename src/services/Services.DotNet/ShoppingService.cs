@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Domain.DotNet;
 using Repository.DotNet;
+using Services.DotNet.Contracts;
 
 namespace Services.DotNet;
 
@@ -49,10 +46,11 @@ public class ShoppingService : IShoppingService
             recipeId = recipes.First().Id;
         }
 
-        // In a real implementation, we would need to get ingredients using the recipe ID
-        // For now, we'll mock this by returning empty results since we don't have proper data access for ingredients in repo
-        var ingredients = new List<RecipeIngredient>();
-        return ingredients;
+        var recipe = await _recipeRepository.GetRecipeByIdAsync(recipeId);
+        if (recipe == null)
+            return new List<RecipeIngredient>();
+
+        return recipe.RecipeIngredients;
     }
 
     /// <summary>
@@ -84,7 +82,7 @@ public class ShoppingService : IShoppingService
     /// <param name="scaleFactor">Factor to scale ingredient amounts (e.g., 2.0 for double servings)</param>
     /// <param name="groupByCategory">Whether to group ingredients by category</param>
     /// <returns>Dictionary with shopping list data and metadata</returns>
-    public async Task<object> GenerateShoppingListAsync(IEnumerable<string> recipeIdentifiers, 
+    public async Task<ShoppingListResponse> GenerateShoppingListAsync(IEnumerable<string> recipeIdentifiers, 
                                                         double scaleFactor = 1.0, 
                                                         bool groupByCategory = true)
     {
@@ -97,26 +95,25 @@ public class ShoppingService : IShoppingService
         // If no ingredients found, return empty result
         if (!recipeIngredients.Any())
         {
-            return new
+            var recipeCount = recipeIngredients.Keys.Count();
+            return new ShoppingListResponse
             {
-                recipes = recipeIdentifiers,
-                total_recipes = recipeIdentifiers.Count(),
-                ingredients = new List<object>(),
-                message = $"No recipes found with identifiers: {string.Join(", ", recipeIdentifiers)}"
+                Recipes = recipeIdentifiers,
+                TotalRecipes = recipeCount,
+                Ingredients = new List<ShoppingListItem>(),
+                Message = $"No recipes found with identifiers: {string.Join(", ", recipeIdentifiers)}"
             };
         }
 
-        // Aggregate ingredients and merge duplicates (simplified version)
-        var aggregatedIngredients = new Dictionary<string, object>();
-        
         // For this implementation, returning basic structure since we don't have full ingredient data access yet
-        return new
+        var totalRecipes = recipeIngredients.Keys.Count();
+        return new ShoppingListResponse
         {
-            recipes = recipeIdentifiers,
-            total_recipes = recipeIdentifiers.Count(),
-            scale_factor = scaleFactor,
-            ingredients = new List<object>(),
-            message = $"Generated shopping list for {recipeIdentifiers.Count()} recipes"
+            Recipes = recipeIdentifiers,
+            TotalRecipes = totalRecipes,
+            ScaleFactor = scaleFactor,
+            Ingredients = new List<ShoppingListItem>(),
+            Message = $"Generated shopping list for {totalRecipes} recipes"
         };
     }
 
@@ -125,7 +122,7 @@ public class ShoppingService : IShoppingService
     /// </summary>
     /// <param name="recipeIdentifier">Recipe name or ID</param>
     /// <returns>Recipe information dictionary or null if not found</returns>
-    public async Task<object> GetRecipeInfoAsync(string recipeIdentifier)
+    public async Task<RecipeInfoResponse?> GetRecipeInfoAsync(string recipeIdentifier)
     {
         if (string.IsNullOrWhiteSpace(recipeIdentifier))
             throw new ArgumentNullException(nameof(recipeIdentifier));
@@ -151,12 +148,12 @@ public class ShoppingService : IShoppingService
         
         if (recipeDetails != null)
         {
-            return new
+            return new RecipeInfoResponse
             {
-                id = recipeDetails.Id,
-                name = recipeDetails.Name,
-                servings = recipeDetails.Servings,
-                time_to_prepare = recipeDetails.TimeToPrepare
+                Id = recipeDetails.Id,
+                Name = recipeDetails.Name,
+                Servings = recipeDetails.Servings ?? 0,
+                TimeToPrepare = recipeDetails.TimeToPrepare ?? 0
             };
         }
         

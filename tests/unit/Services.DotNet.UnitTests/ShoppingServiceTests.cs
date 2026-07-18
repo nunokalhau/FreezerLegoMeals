@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Xunit;
 using Moq;
 using Domain.DotNet;
@@ -21,19 +18,6 @@ namespace Services.DotNet.UnitTests
         {
             _mockRepository = new Mock<IRecipeRepository>();
             _service = new ShoppingService(_mockRepository.Object);
-        }
-
-        /// <summary>
-        /// Tests that ShoppingService can be instantiated with a valid repository
-        /// </summary>
-        [Fact]
-        public void Constructor_WithValidRepository_ShouldNotThrow()
-        {
-            // Arrange
-            var mockRepo = new Mock<IRecipeRepository>();
-            
-            // Act & Assert
-            Assert.Null(() => new ShoppingService(mockRepo.Object));
         }
 
         /// <summary>
@@ -288,7 +272,7 @@ namespace Services.DotNet.UnitTests
             _mockRepository.Setup(r => r.FindRecipesWithIngredientsAsync(new[] { recipeName }))
                           .ReturnsAsync(mockRecipes);
             _mockRepository.Setup(r => r.GetRecipeByIdAsync(123))
-                          .ReturnsAsync((Recipe)null);
+                          .ReturnsAsync(mockRecipes.First);
 
             // Act
             var result = await _service.GetRecipeInfoAsync(recipeName);

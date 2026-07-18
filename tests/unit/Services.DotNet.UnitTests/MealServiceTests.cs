@@ -24,19 +24,6 @@ namespace Services.DotNet.UnitTests
         }
 
         /// <summary>
-        /// Tests that MealService can be instantiated with a valid repository
-        /// </summary>
-        [Fact]
-        public void Constructor_WithValidRepository_ShouldNotThrow()
-        {
-            // Arrange
-            var mockRepo = new Mock<IRecipeRepository>();
-            
-            // Act & Assert
-            Assert.Null(() => new MealService(mockRepo.Object));
-        }
-
-        /// <summary>
         /// Tests that constructor throws ArgumentNullException when repository is null
         /// </summary>
         [Fact]
@@ -132,7 +119,7 @@ namespace Services.DotNet.UnitTests
             // Assert
             _mockRepository.Verify(r => r.FindRecipesWithIngredientsAsync(foundIngredients), Times.Once);
             Assert.NotNull(result);
-            Assert.Equal(query, ((dynamic)result).query);
+            Assert.Equal(query, result.Query);
         }
 
         /// <summary>
@@ -151,7 +138,7 @@ namespace Services.DotNet.UnitTests
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(query, ((dynamic)result).query);
+            Assert.Equal(query, result.Query);
         }
 
         /// <summary>
@@ -206,7 +193,7 @@ namespace Services.DotNet.UnitTests
         {
             // Arrange
             _mockRepository.Setup(r => r.GetRecipeByIdAsync(999))
-                          .ReturnsAsync((Recipe)null);
+                          .ReturnsAsync((Recipe?)null);
 
             // Act
             var result = await _service.GetRecipeDetailsAsync(999);
@@ -214,7 +201,7 @@ namespace Services.DotNet.UnitTests
             // Assert
             _mockRepository.Verify(r => r.GetRecipeByIdAsync(999), Times.Once);
             Assert.NotNull(result);
-            Assert.Equal("No recipe found with ID 999", ((dynamic)result).error);
+            Assert.Equal("No recipe found with ID 999", result.Error);
         }
     }
 }

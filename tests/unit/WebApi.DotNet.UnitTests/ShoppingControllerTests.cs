@@ -2,11 +2,9 @@ using Domain.DotNet;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Moq;
 using Services.DotNet;
-using System.Collections.Generic;
+using Services.DotNet.Contracts;
 using System.Net.Http.Json;
-using System.Threading.Tasks;
 using WebApi.DotNet.Contracts.Requests;
-using WebApi.DotNet.Contracts.Responses;
 using Xunit;
 
 namespace WebApi.DotNet.UnitTests
@@ -99,9 +97,12 @@ namespace WebApi.DotNet.UnitTests
         public async Task GenerateShoppingList_With_Valid_Request_Returns_Success()
         {
             // Arrange
-            var mockResult = new { 
-                shopping_list = new Dictionary<string, object> { { "category1", new List<object>() } },
-                message = "Shopping list generated successfully"
+            var mockResult = new ShoppingListResponse { 
+                Recipes = new List<string> { "recipe1", "recipe2" },
+                TotalRecipes = 2,
+                ScaleFactor = 2.0,
+                Ingredients = new List<ShoppingListItem>(),
+                Message = "Shopping list generated successfully"
             };
             
             _mockShoppingService.Setup(service => service.GenerateShoppingListAsync(
@@ -140,8 +141,11 @@ namespace WebApi.DotNet.UnitTests
         public async Task GetRecipeInfo_With_Valid_Request_Returns_Success()
         {
             // Arrange
-            var mockResult = new { 
-                info = new { name = "Test Recipe", servings = 4 }
+            var mockResult = new RecipeInfoResponse{ 
+                Id = 123,
+                Name = "Test Recipe",
+                Servings = 4,
+                TimeToPrepare = 30
             };
             
             _mockShoppingService.Setup(service => service.GetRecipeInfoAsync(It.IsAny<string>()))

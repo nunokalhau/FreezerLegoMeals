@@ -1,13 +1,11 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Xunit;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Moq;
 using Services.DotNet;
 using Domain.DotNet;
 using WebApi.DotNet.Contracts.Requests;
-using WebApi.DotNet.Contracts.Responses;
 using System.Net.Http.Json;
+using Services.DotNet.Contracts;
 
 namespace WebApi.DotNet.UnitTests
 {
@@ -102,11 +100,11 @@ namespace WebApi.DotNet.UnitTests
         public async Task FindMealsWithIngredients_With_Valid_Request_Returns_Success()
         {
             // Arrange
-            var mockResult = new { 
-                total_recipes_found = 5,
-                search_terms = new[] { "chicken", "vegetables" },
-                recipes = new[] { new Recipe { Id = 1, Name = "Recipe 1" } },
-                message = "Found matching recipes"
+            var mockResult = new IngredientSearchResponse {
+                TotalRecipesFound = 5,
+                SearchTerms = new[] { "chicken", "vegetables" },
+                Recipes = new[] { new Recipe { Id = 1, Name = "Recipe 1" } },
+                Message = "Found matching recipes"
             };
             
             _mockMealService.Setup(service => service.FindMealsWithIngredientsAsync(It.IsAny<string>()))
@@ -138,9 +136,10 @@ namespace WebApi.DotNet.UnitTests
         public async Task GetRecipeDetails_With_Valid_Request_Returns_Success()
         {
             // Arrange
-            var mockResult = new { 
-                recipe = new Recipe { Id = 1, Name = "Recipe 1" },
-                message = "Recipe details retrieved"
+            var mockResult = new RecipeDetailsResponse
+            {
+                Recipe = new Recipe { Id = 1, Name = "Recipe 1" },
+                Message = "Recipe details retrieved"
             };
             
             _mockMealService.Setup(service => service.GetRecipeDetailsAsync(It.IsAny<int>()))

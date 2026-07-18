@@ -1,7 +1,5 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Domain.DotNet;
-using Repository.DotNet;
+using Services.DotNet.Contracts;
 
 namespace Services.DotNet;
 
@@ -31,7 +29,7 @@ public interface IShoppingService
     /// <param name="scaleFactor">Factor to scale ingredient amounts (e.g., 2.0 for double servings)</param>
     /// <param name="groupByCategory">Whether to group ingredients by category</param>
     /// <returns>Dictionary with shopping list data and metadata</returns>
-    Task<object> GenerateShoppingListAsync(IEnumerable<string> recipeIdentifiers, 
+    Task<ShoppingListResponse> GenerateShoppingListAsync(IEnumerable<string> recipeIdentifiers, 
                                             double scaleFactor = 1.0, 
                                             bool groupByCategory = true);
     
@@ -40,5 +38,5 @@ public interface IShoppingService
     /// </summary>
     /// <param name="recipeIdentifier">Recipe name or ID</param>
     /// <returns>Recipe information dictionary or null if not found</returns>
-    Task<object> GetRecipeInfoAsync(string recipeIdentifier);
+    Task<RecipeInfoResponse?> GetRecipeInfoAsync(string recipeIdentifier);
 }

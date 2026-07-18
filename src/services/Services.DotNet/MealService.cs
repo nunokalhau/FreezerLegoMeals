@@ -1,8 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Domain.DotNet;
 using Repository.DotNet;
+using Services.DotNet.Contracts;
 
 namespace Services.DotNet;
 
@@ -40,7 +38,7 @@ public class MealService : IMealService
     /// </summary>
     /// <param name="id">The recipe ID</param>
     /// <returns>The recipe if found, null otherwise</returns>
-    public async Task<Recipe> GetRecipeByIdAsync(int id)
+    public async Task<Recipe?> GetRecipeByIdAsync(int id)
     {
         return await _recipeRepository.GetRecipeByIdAsync(id);
     }
@@ -50,7 +48,7 @@ public class MealService : IMealService
     /// </summary>
     /// <param name="query">Natural language query about meals/recipes</param>
     /// <returns>Detailed search results</returns>
-    public async Task<object> FindMealsWithIngredientsAsync(string query)
+    public async Task<IngredientSearchResponse> FindMealsWithIngredientsAsync(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentNullException(nameof(query));
@@ -60,13 +58,13 @@ public class MealService : IMealService
         var ingredients = ExtractFoodTermsFromQuery(query);
         var recipes = await _recipeRepository.FindRecipesWithIngredientsAsync(ingredients);
         
-        return new
+        return new IngredientSearchResponse
         {
-            query = query,
-            search_terms = ingredients,
-            total_recipes_found = recipes?.Count() ?? 0,
-            recipes = recipes,
-            message = $"Found {recipes?.Count() ?? 0} recipes containing the specified ingredients"
+            Query = query,
+            SearchTerms = ingredients,
+            TotalRecipesFound = recipes?.Count() ?? 0,
+            Recipes = recipes,
+            Message = $"Found {recipes?.Count() ?? 0} recipes containing the specified ingredients"
         };
     }
 
@@ -75,24 +73,24 @@ public class MealService : IMealService
     /// </summary>
     /// <param name="id">The recipe ID</param>
     /// <returns>Detailed recipe information</returns>
-    public async Task<object> GetRecipeDetailsAsync(int id)
+    public async Task<RecipeDetailsResponse> GetRecipeDetailsAsync(int id)
     {
         var recipe = await _recipeRepository.GetRecipeByIdAsync(id);
         
         if (recipe == null)
         {
-            return new
+            return new RecipeDetailsResponse
             {
-                error = $"No recipe found with ID {id}"
+                Error = $"No recipe found with ID {id}"
             };
         }
         
         // Return extended recipe details 
-        return new
+        return new RecipeDetailsResponse
         {
-            query = $"Recipe details for {recipe.Name}",
-            recipe = recipe,
-            message = $"Details for recipe: {recipe.Name}"
+            Query = $"Recipe details for {recipe.Name}",
+            Recipe = recipe,
+            Message = $"Details for recipe: {recipe.Name}"
         };
     }
 

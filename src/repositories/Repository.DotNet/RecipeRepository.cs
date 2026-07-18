@@ -14,7 +14,7 @@ namespace Repository.DotNet;
 public interface IRecipeRepository
 {
     Task<IEnumerable<Recipe>> GetRecipesAsync();
-    Task<Recipe> GetRecipeByIdAsync(int id);
+    Task<Recipe?> GetRecipeByIdAsync(int id);
     Task<IEnumerable<Recipe>> FindRecipesWithIngredientsAsync(IEnumerable<string> ingredients);
     Task<IEnumerable<RecipeCombination>> GetCombinationsAsync();
     Task<RecipeCombination> GetCombinationByIdAsync(int id);
@@ -46,7 +46,7 @@ public class RecipeRepository : IRecipeRepository
         return entities.Select(e => MapRecipe(e));
     }
 
-    public async Task<Recipe> GetRecipeByIdAsync(int id)
+    public async Task<Recipe?> GetRecipeByIdAsync(int id)
     {
         var entity = await _context.Recipes
             .Include(r => r.RecipeIngredients)
