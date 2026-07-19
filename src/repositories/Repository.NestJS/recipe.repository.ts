@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Recipe } from '../services/Services.NestJS/models/recipe.dto';
+import { BaseRepository } from './base.repository';
+import { Recipe } from '../../services/Services.NestJS/models/recipe.dto';
 
 export interface RecipeRepositoryInterface {
   getRecipes(): Promise<Recipe[]>;
@@ -12,7 +13,7 @@ export interface RecipeRepositoryInterface {
 }
 
 @Injectable()
-export class RecipeRepository implements RecipeRepositoryInterface {
+export class RecipeRepository extends BaseRepository implements RecipeRepositoryInterface {
   
   async getRecipes(): Promise<Recipe[]> {
     // Implementation would connect to data source and retrieve all recipes

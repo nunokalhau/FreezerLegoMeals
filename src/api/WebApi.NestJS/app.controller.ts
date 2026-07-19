@@ -86,7 +86,7 @@ export class AppController {
   @ApiOperation({ summary: 'Get ingredients for multiple recipes' })
   @ApiResponse({ status: 200, description: 'Returns ingredients for multiple recipes' })
   async getMultipleRecipeIngredients(
-    @Body(new ValidateDtoPipe(ShoppingIngredientsRequest)) 
+    @Body() 
     request: ShoppingIngredientsRequest
   ) {
     return await this.shoppingService.getMultipleRecipeIngredients(request.recipeIdentifiers);

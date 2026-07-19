@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { RecipeRepository } from './recipe.repository';
+import { RecipeRepository } from '../../../src/repositories/Repository.NestJS/recipe.repository';
 
 describe('NestJS Repository Layer', () => {
   let repository: RecipeRepository;
@@ -115,6 +115,7 @@ describe('Repository Contract Compliance', () => {
   describe('Interface Implementation', () => {
     it('should implement all interface methods', () => {
       // The concrete class should implement all methods defined in the interface
+      const repository = new RecipeRepository();
       const repoMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(repository))
         .filter(prop => typeof repository[prop] === 'function' && prop !== 'constructor');
 
@@ -132,6 +133,7 @@ describe('Repository Contract Compliance', () => {
 
   describe('Async Pattern Validation', () => {
     it('should use async/await patterns consistently', () => {
+      const repository = new RecipeRepository();
       const methods = [
         'getRecipes',
         'getRecipeById',

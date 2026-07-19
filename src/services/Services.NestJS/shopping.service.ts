@@ -1,14 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { IShoppingService } from './shopping.service.interface';
 import { RecipeRepositoryInterface } from '../../repositories/Repository.NestJS/recipe.repository';
 import { ShoppingListResponse } from './models/shopping-list-response.dto';
 import { RecipeInfoResponse } from './models/recipe-info-response.dto';
 import { ShoppingListItem } from './models/shopping-list-item.dto';
 import { Recipe } from './models/recipe.dto';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class ShoppingService implements IShoppingService {
   constructor(
+    @Inject('RecipeRepositoryInterface')
     private readonly recipeRepository: RecipeRepositoryInterface
   ) {}
 
@@ -45,7 +47,7 @@ export class ShoppingService implements IShoppingService {
     groupByCategory: boolean = true
   ): Promise<ShoppingListResponse> {
     if (!recipeIdentifiers || recipeIdentifiers.length === 0) {
-      return new ShoppingListResponse({
+      return plainToInstance(ShoppingListResponse, {
         recipes: recipeIdentifiers,
         totalRecipes: 0,
         scaleFactor,
@@ -67,50 +69,38 @@ export class ShoppingService implements IShoppingService {
         }
       }
 
-      // Aggregate ingredients from all recipes
-      const ingredientMap: Record<string, { name: string; quantity: number; unit: string }> = {};
+      const ingredientMap: Record<string, ShoppingListItem> = {};
       
       for (const recipe of allRecipes) {
-        if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
-          for (const ingredient of recipe.ingredients) {
-            // Handle both string ingredients and structured ingredients
-            let ingredientName: string;
-            let ingredientQuantity: number = 1;
-            let ingredientUnit: string = '';
+        if (recipe && recipe.recipeIngredients && Array.isArray(recipe.recipeIngredients)) {
+          for (const recipeIngredient of recipe.recipeIngredients) {
+            const ingredientKey = `${recipeIngredient.ingredient.name}-${recipeIngredient.ingredient.category}`;
             
-            if (typeof ingredient === 'string') {
-              ingredientName = ingredient;
-            } else {
-              ingredientName = ingredient.name || '';
-              ingredientQuantity = ingredient.quantity || 1;
-              ingredientUnit = ingredient.unit || '';
-            }
-            
-            // Scale the quantities
-            const scaledQuantity = ingredientQuantity * scaleFactor;
-            
-            if (ingredientMap[ingredientName]) {
-              // If we've seen this ingredient, add to existing quantity  
-              ingredientMap[ingredientName].quantity += scaledQuantity;
-            } else {
-              ingredientMap[ingredientName] = {
-                name: ingredientName,
-                quantity: scaledQuantity,
-                unit: ingredientUnit
+            if (!ingredientMap[ingredientKey]) {
+              ingredientMap[ingredientKey] = {
+                name: recipeIngredient.ingredient.name,
+                quantity: 0,
+                unit: 'units', // Defaulting to 'units' instead of trying to access .unit
+                category: recipeIngredient.ingredient.category
               };
             }
+            
+            // Add quantity from this recipeIngredient
+            const quantityToAdd = recipeIngredient.amount || 1;
+            ingredientMap[ingredientKey].quantity += quantityToAdd * scaleFactor;
           }
         }
       }
 
-      // Convert ingredients map back to list format for response
+      // Convert ingredients map back to list format for response  
       const ingredients: ShoppingListItem[] = Object.values(ingredientMap).map(item => ({
         name: item.name,
         quantity: item.quantity,
-        unit: item.unit
+        unit: item.unit,
+        category: item.category
       }));
 
-      return new ShoppingListResponse({
+      return plainToInstance(ShoppingListResponse, {
         recipes: recipeIdentifiers,
         totalRecipes: recipeIdentifiers.length,
         scaleFactor,
@@ -119,7 +109,7 @@ export class ShoppingService implements IShoppingService {
       });
     } catch (error) {
       // Return error response in case of failure
-      return new ShoppingListResponse({
+      return plainToInstance(ShoppingListResponse, {
         recipes: recipeIdentifiers,
         totalRecipes: recipeIdentifiers.length,
         scaleFactor,
@@ -140,7 +130,7 @@ export class ShoppingService implements IShoppingService {
     }
     
     if (recipe) {
-      return new RecipeInfoResponse({
+      return plainToInstance(RecipeInfoResponse, {
         id: recipe.id,
         name: recipe.name,
         servings: recipe.servings,

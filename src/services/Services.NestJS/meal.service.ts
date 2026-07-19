@@ -1,14 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { IMealService } from './meal.service.interface';
 import { RecipeRepositoryInterface } from '../../repositories/Repository.NestJS/recipe.repository';
 import { IngredientSearchResponse } from './models/ingredient-search-response.dto';
 import { RecipeDetailsResponse } from './models/recipe-details-response.dto';
 import { RecipeInfoResponse } from './models/recipe-info-response.dto';
 import { Recipe } from './models/recipe.dto';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class MealService implements IMealService {
   constructor(
+    @Inject('RecipeRepositoryInterface')
     private readonly recipeRepository: RecipeRepositoryInterface
   ) {}
 
@@ -58,7 +60,7 @@ export class MealService implements IMealService {
     }
 
     // Return structure matching .NET specification
-    return new IngredientSearchResponse({
+    return plainToInstance(IngredientSearchResponse, {
       query,
       searchTerms: foundIngredients,
       totalRecipesFound: recipes.length,
@@ -73,12 +75,12 @@ export class MealService implements IMealService {
     const recipe = await this.recipeRepository.getRecipeById(recipeId);
     
     if (!recipe) {
-      return new RecipeDetailsResponse({
+      return plainToInstance(RecipeDetailsResponse, {
         error: `No recipe found with ID ${recipeId}`
       });
     }
     
-    return new RecipeDetailsResponse({
+    return plainToInstance(RecipeDetailsResponse, {
       query: `Recipe details for ${recipe.name}`,
       recipe,
       message: `Details for recipe: ${recipe.name}`

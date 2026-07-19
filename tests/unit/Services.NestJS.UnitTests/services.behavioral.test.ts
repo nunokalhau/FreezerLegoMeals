@@ -1,22 +1,58 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { MealService } from './meal.service';
-import { ShoppingService } from './shopping.service';
-import { RecipeRepositoryInterface } from '../../repositories/Repository.NestJS/recipe.repository';
+import { MealService } from '../../../src/services/Services.NestJS/meal.service';
+import { ShoppingService } from '../../../src/services/Services.NestJS/shopping.service';
+import type { RecipeRepositoryInterface } from '../../../src/repositories/Repository.NestJS/recipe.repository';
 
 // Mock repository for unit testing
 class MockRecipeRepository implements RecipeRepositoryInterface {
   async getRecipes(): Promise<any[]> {
     return [
-      { id: 1, name: 'Chicken Curry', ingredients: ['chicken', 'onion', 'garlic'] },
-      { id: 2, name: 'Beef Stir Fry', ingredients: ['beef', 'broccoli', 'soy sauce'] }
+      {
+        id: 1,
+        name: 'Chicken Curry',
+        ingredients: ['chicken', 'onion', 'garlic'],
+        recipeIngredients: [
+          { amount: 1, ingredient: { name: 'chicken', category: 'protein' } },
+          { amount: 1, ingredient: { name: 'onion', category: 'produce' } },
+          { amount: 1, ingredient: { name: 'garlic', category: 'produce' } },
+        ]
+      },
+      {
+        id: 2,
+        name: 'Beef Stir Fry',
+        ingredients: ['beef', 'broccoli', 'soy sauce'],
+        recipeIngredients: [
+          { amount: 1, ingredient: { name: 'beef', category: 'protein' } },
+          { amount: 1, ingredient: { name: 'broccoli', category: 'produce' } },
+          { amount: 1, ingredient: { name: 'soy sauce', category: 'condiment' } },
+        ]
+      }
     ];
   }
 
   async getRecipeById(id: number): Promise<any | null> {
     if (id === 1) {
-      return { id: 1, name: 'Chicken Curry', ingredients: ['chicken', 'onion', 'garlic'] };
+      return {
+        id: 1,
+        name: 'Chicken Curry',
+        ingredients: ['chicken', 'onion', 'garlic'],
+        recipeIngredients: [
+          { amount: 1, ingredient: { name: 'chicken', category: 'protein' } },
+          { amount: 1, ingredient: { name: 'onion', category: 'produce' } },
+          { amount: 1, ingredient: { name: 'garlic', category: 'produce' } },
+        ]
+      };
     } else if (id === 2) {
-      return { id: 2, name: 'Beef Stir Fry', ingredients: ['beef', 'broccoli', 'soy sauce'] };
+      return {
+        id: 2,
+        name: 'Beef Stir Fry',
+        ingredients: ['beef', 'broccoli', 'soy sauce'],
+        recipeIngredients: [
+          { amount: 1, ingredient: { name: 'beef', category: 'protein' } },
+          { amount: 1, ingredient: { name: 'broccoli', category: 'produce' } },
+          { amount: 1, ingredient: { name: 'soy sauce', category: 'condiment' } },
+        ]
+      };
     }
     return null;
   }
@@ -58,7 +94,7 @@ describe('MealService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MealService,
-        { provide: RecipeRepositoryInterface, useValue: mockRepository }
+        { provide: 'RecipeRepositoryInterface', useValue: mockRepository }
       ],
     }).compile();
 
@@ -143,7 +179,7 @@ describe('ShoppingService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ShoppingService,
-        { provide: RecipeRepositoryInterface, useValue: mockRepository }
+        { provide: 'RecipeRepositoryInterface', useValue: mockRepository }
       ],
     }).compile();
 

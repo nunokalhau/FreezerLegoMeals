@@ -1,6 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { AppController } from '../../../src/api/WebApi.NestJS/app.controller';
+import { AppService } from '../../../src/api/WebApi.NestJS/app.service';
+import { MealService } from '../../../src/services/Services.NestJS/meal.service';
+import { ShoppingService } from '../../../src/services/Services.NestJS/shopping.service';
+
+const mealServiceMock = {
+  getRecipes: jest.fn(),
+  searchRecipesByIngredients: jest.fn(),
+  getRecipeById: jest.fn(),
+  getRecipeDetails: jest.fn(),
+  findMealsWithIngredients: jest.fn(),
+};
+
+const shoppingServiceMock = {
+  generateShoppingList: jest.fn(),
+  getRecipeIngredients: jest.fn(),
+  getMultipleRecipeIngredients: jest.fn(),
+  getRecipeInfo: jest.fn(),
+};
 
 describe('AppController', () => {
   let appController: AppController;
@@ -9,7 +26,11 @@ describe('AppController', () => {
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        AppService,
+        { provide: MealService, useValue: mealServiceMock },
+        { provide: ShoppingService, useValue: shoppingServiceMock },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);
@@ -18,7 +39,7 @@ describe('AppController', () => {
 
   describe('root', () => {
     it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+      expect(appController.getHello()).toBe('Welcome to Freezer Lego Meals NestJS API');
     });
   });
 
@@ -38,7 +59,7 @@ describe('AppController', () => {
     });
 
     it('should provide correct hello message', () => {
-      expect(appService.getHello()).toBe('Hello World!');
+      expect(appService.getHello()).toBe('Welcome to Freezer Lego Meals NestJS API');
     });
   });
 });

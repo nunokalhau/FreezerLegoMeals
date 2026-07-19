@@ -1,4 +1,4 @@
-import { IsString, ValidateNested } from 'class-validator';
+import { IsString, ValidateNested, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Recipe } from './recipe.dto';
 

@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, ValidateNested } from 'class-validator';
 import { Recipe } from './recipe.dto';
 
 export class RecipeDetailsResponse {
