@@ -6,7 +6,11 @@ from types import SimpleNamespace
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
 RAG_PATH = SRC_ROOT / "ai" / "RAG" / "Python"
+ORCHESTRATION_PATH = SRC_ROOT / "orchestration" / "Python"
 ASSISTANT_PATH = SRC_ROOT / "services" / "Services.Python" / "assistant_service.py"
+
+if str(ORCHESTRATION_PATH) not in sys.path:
+    sys.path.insert(0, str(ORCHESTRATION_PATH))
 
 
 def load_module(name: str, path: Path):
@@ -22,6 +26,8 @@ def load_module(name: str, path: Path):
 
 retrieval_module = load_module("rag_python_retrieval_service", RAG_PATH / "retrieval_service.py")
 prompt_module = load_module("rag_python_prompt_builder", RAG_PATH / "prompt_builder.py")
+orchestrator_module = load_module("orchestration_python_orchestrator_tests", ORCHESTRATION_PATH / "orchestrator.py")
+meal_planning_agent_module = load_module("orchestration_python_meal_planning_agent_tests", ORCHESTRATION_PATH / "meal_planning_agent.py")
 assistant_module = load_module("services_python_assistant_rag_tests", ASSISTANT_PATH)
 
 
@@ -123,13 +129,7 @@ def test_assistant_uses_rag_for_repository_question_after_no_tool_call():
     retrieval_service = retrieval_module.RetrievalService(StubSemanticSearchService([result]), StubMetadataProvider())
     prompt_builder = prompt_module.PromptBuilder()
     ollama = StubOllamaClient(SimpleNamespace(content="Direct draft", tool_calls=[]))
-    service = assistant_module.AssistantService(
-        ollama,
-        StubConversationStore(),
-        StubToolExecutor(),
-        retrieval_service=retrieval_service,
-        prompt_builder=prompt_builder,
-    )
+    service = create_assistant_service(ollama, StubConversationStore(), StubToolExecutor(), retrieval_service, prompt_builder)
 
     response = service.chat("What spicy chicken meal can I cook?")
 
@@ -146,9 +146,15 @@ def test_assistant_preserves_tool_calling_before_rag():
         SimpleNamespace(content="", tool_calls=[{"name": "search_recipes", "arguments": {"query": "chicken"}}]),
         rag_content="final tool answer",
     )
-    service = assistant_module.AssistantService(ollama, StubConversationStore(), tool_executor)
+    service = create_assistant_service(ollama, StubConversationStore(), tool_executor)
 
     response = service.chat("Search for chicken recipes")
 
     assert tool_executor.executed is True
     assert response.response == "final tool answer"
+
+
+def create_assistant_service(ollama, conversation_store, tool_executor, retrieval_service=None, prompt_builder=None):
+    agent = meal_planning_agent_module.MealPlanningAgent(ollama, tool_executor, retrieval_service, prompt_builder)
+    orchestrator = orchestrator_module.Orchestrator([agent])
+    return assistant_module.AssistantService(conversation_store, orchestrator)

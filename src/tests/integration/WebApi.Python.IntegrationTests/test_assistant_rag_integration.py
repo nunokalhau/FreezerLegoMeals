@@ -25,13 +25,8 @@ def load_app_module():
 
 def test_assistant_chat_uses_rag_and_keeps_public_contract():
     app_module = load_app_module()
-    app_module.assistant_service = app_module.AssistantService(
-        StubOllamaClient(),
-        app_module.InMemoryConversationStore(),
-        StubToolExecutor(),
-        retrieval_service=StubRetrievalService(),
-        prompt_builder=StubPromptBuilder(),
-    )
+    agent = app_module.MealPlanningAgent(StubOllamaClient(), StubToolExecutor(), StubRetrievalService(), StubPromptBuilder())
+    app_module.assistant_service = app_module.AssistantService(app_module.InMemoryConversationStore(), app_module.Orchestrator([agent]))
 
     response = asyncio.run(post_assistant_chat(app_module.app))
 

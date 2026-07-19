@@ -3,6 +3,7 @@ using Repository.DotNet;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 using Embedding.DotNet;
+using Orchestration.DotNet;
 using RAG.DotNet;
 using SemanticSearch.DotNet;
 using VectorStores.DotNet;
@@ -20,6 +21,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 
 builder.Services.AddScoped<IAssistantService, AssistantService>();
+builder.Services.AddScoped<IAgent, MealPlanningAgent>();
+builder.Services.AddScoped<IOrchestrator, Orchestrator>();
 builder.Services.AddSingleton<IConversationStore, InMemoryConversationStore>();
 builder.Services.AddSingleton<IToolRegistry>(_ => new ToolRegistry(
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools", "tool_registry.json"))));

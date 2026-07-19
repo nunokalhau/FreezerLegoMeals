@@ -54,7 +54,8 @@ describe('Embedding Endpoint (End-to-End Integration)', () => {
   embeddingIt(testName, async () => {
     const response = await request(app.getHttpServer())
       .post('/embeddings')
-      .send({ text: 'Chicken curry with rice' })
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ text: 'Chicken curry with rice' }))
       .timeout({ response: 70000, deadline: EMBEDDING_INTEGRATION_TIMEOUT_MS })
       .expect(201);
 

@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import os
 import sys
-import json
 import logging
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 import importlib.util
+import uuid
 
 
 CONVERSATION_STORE_PATH = Path(__file__).with_name("conversation_store.py")
@@ -42,20 +41,15 @@ class AssistantOptions:
 
 
 class AssistantService:
-    def __init__(self, ollama_client, conversation_store, tool_executor, options: AssistantOptions | None = None, retrieval_service=None, prompt_builder=None):
-        if ollama_client is None:
-            raise ValueError("Ollama client is required")
+    def __init__(self, conversation_store, orchestrator, options: AssistantOptions | None = None):
         if conversation_store is None:
             raise ValueError("Conversation store is required")
-        if tool_executor is None:
-            raise ValueError("Tool executor is required")
+        if orchestrator is None:
+            raise ValueError("Orchestrator is required")
 
-        self.ollama_client = ollama_client
         self.conversation_store = conversation_store
-        self.tool_executor = tool_executor
+        self.orchestrator = orchestrator
         self.options = options or AssistantOptions()
-        self.retrieval_service = retrieval_service
-        self.prompt_builder = prompt_builder
         self.logger = logging.getLogger(__name__)
 
     def chat(self, message: str, conversation_id: str | None = None) -> AssistantChatResult:
@@ -67,107 +61,28 @@ class AssistantService:
         user_message = ConversationMessage("User", message, now)
         messages = [ConversationMessage("System", self.options.system_prompt, now), *conversation.messages, user_message]
         messages_to_persist = [user_message]
-        tools = self.tool_executor.get_tools()
-        total_tool_calls = 0
-        started_at = time.monotonic()
+        context = self._create_context(conversation.conversation_id, message, now, messages, messages_to_persist)
+        result = self.orchestrator.execute(context)
 
-        while True:
-            limit_error = self._get_limit_error(messages, started_at)
-            if limit_error:
-                return self._persist_and_return_error(conversation.conversation_id, messages_to_persist, limit_error)
+        self.conversation_store.append_messages(conversation.conversation_id, result.messages_to_persist)
+        if result.errors:
+            self.logger.warning("Assistant request completed with orchestration errors: %s", "; ".join(result.errors))
 
-            assistant_result = self.ollama_client.chat(None, messages, tools)
-            if not assistant_result.tool_calls:
-                content = assistant_result.content
-                if self._requires_repository_knowledge(message) and self.retrieval_service is not None and self.prompt_builder is not None:
-                    content = self._answer_with_retrieval(message)
+        return AssistantChatResult(conversation.conversation_id, result.final_response)
 
-                final_message = ConversationMessage("Assistant", content, datetime.now(timezone.utc))
-                messages_to_persist.append(final_message)
-                self.conversation_store.append_messages(conversation.conversation_id, messages_to_persist)
-                self.logger.info("Assistant request completed with %s tool calls", total_tool_calls)
-                return AssistantChatResult(conversation.conversation_id, content)
+    def _create_context(self, conversation_id, message, now, messages, messages_to_persist):
+        return self.orchestrator_context_class(
+            user_request=message,
+            current_timestamp=now,
+            correlation_id=uuid.uuid4().hex,
+            metadata={},
+            conversation_id=conversation_id,
+            messages=messages,
+            messages_to_persist=messages_to_persist,
+            assistant_options=self.options,
+            create_message=lambda role, content: ConversationMessage(role, content, datetime.now(timezone.utc)),
+        )
 
-            if assistant_result.content.strip():
-                assistant_message = ConversationMessage("Assistant", assistant_result.content, datetime.now(timezone.utc))
-                messages.append(assistant_message)
-                messages_to_persist.append(assistant_message)
-
-            for tool_call in assistant_result.tool_calls:
-                if total_tool_calls >= self.options.maximum_tool_calls_per_request:
-                    return self._persist_and_return_error(
-                        conversation.conversation_id,
-                        messages_to_persist,
-                        f"The request could not be completed because it exceeded the maximum tool call limit of {self.options.maximum_tool_calls_per_request}.",
-                    )
-
-                tool_name = tool_call.get("name", "")
-                arguments = tool_call.get("arguments") or {}
-                total_tool_calls += 1
-                tool_started_at = time.monotonic()
-                self.logger.info("Assistant requested tool %s with arguments %s", tool_name, json.dumps(arguments))
-
-                try:
-                    tool_result = self.tool_executor.execute(tool_name, arguments)
-                except Exception as error:
-                    tool_result = {"success": False, "tool": tool_name, "error": str(error)}
-
-                self.logger.info(
-                    "Assistant tool %s finished in %.2fms with success=%s",
-                    tool_result.get("tool", tool_name),
-                    (time.monotonic() - tool_started_at) * 1000,
-                    tool_result.get("success", False),
-                )
-
-                tool_message = ConversationMessage("Tool", json.dumps(tool_result, default=str), datetime.now(timezone.utc))
-                messages.append(tool_message)
-                messages_to_persist.append(tool_message)
-
-    def _get_limit_error(self, messages, started_at) -> str | None:
-        if self.options.maximum_conversation_size > 0 and len(messages) > self.options.maximum_conversation_size:
-            return f"The request could not be completed because the conversation exceeded the maximum size of {self.options.maximum_conversation_size} messages."
-
-        if self.options.maximum_execution_time_seconds > 0 and time.monotonic() - started_at > self.options.maximum_execution_time_seconds:
-            return f"The request could not be completed because it exceeded the maximum execution time of {self.options.maximum_execution_time_seconds} seconds."
-
-        return None
-
-    def _persist_and_return_error(self, conversation_id, messages_to_persist, error):
-        messages_to_persist.append(ConversationMessage("Assistant", error, datetime.now(timezone.utc)))
-        self.conversation_store.append_messages(conversation_id, messages_to_persist)
-        self.logger.warning("Assistant request failed gracefully: %s", error)
-        return AssistantChatResult(conversation_id, error)
-
-    def _requires_repository_knowledge(self, message: str) -> bool:
-        normalized = message.lower()
-        knowledge_terms = [
-            "recipe", "recipes", "meal", "meals", "cook", "cooking", "dinner", "lunch", "freezer",
-            "ingredient", "ingredients", "prep", "preparation", "what can i", "what should i", "recommend",
-        ]
-        return any(term in normalized for term in knowledge_terms)
-
-    def _answer_with_retrieval(self, question: str) -> str:
-        retrieval = self.retrieval_service.retrieve(question)
-        if not retrieval.recipes:
-            return "The repository does not contain enough information to answer that question.\n\nSources: none"
-
-        prompt = self.prompt_builder.build(question, retrieval.recipes)
-        now = datetime.now(timezone.utc)
-        rag_messages = [
-            ConversationMessage("System", self.options.system_prompt, now),
-            ConversationMessage("User", prompt, now),
-        ]
-        response = self.ollama_client.chat(None, rag_messages, []).content.strip()
-        if not response:
-            response = "The repository does not contain enough information to answer that question."
-
-        return f"{response}\n\n{self._format_sources(retrieval.sources)}"
-
-    def _format_sources(self, sources) -> str:
-        if not sources:
-            return "Sources: none"
-
-        lines = ["Sources:"]
-        for source in sources:
-            lines.append(f"- {source.recipeId}: {source.title} (similarityScore: {source.similarityScore:.6f})")
-        return "\n".join(lines)
+    @property
+    def orchestrator_context_class(self):
+        return self.orchestrator.context_class

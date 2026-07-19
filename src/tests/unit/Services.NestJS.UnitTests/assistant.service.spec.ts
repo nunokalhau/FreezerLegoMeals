@@ -4,6 +4,8 @@ import { OllamaClient } from '../../../services/Services.NestJS/ollama.client';
 import { ToolExecutor } from '../../../services/Services.NestJS/tool-executor';
 import { PromptBuilder } from '../../../ai/RAG/NestJS/prompt-builder';
 import { RetrievalService } from '../../../ai/RAG/NestJS/retrieval.service';
+import { MealPlanningAgent } from '../../../orchestration/NestJS/meal-planning.agent';
+import { OrchestratorService } from '../../../orchestration/NestJS/orchestrator.service';
 
 describe('AssistantService', () => {
   it('creates a conversation and persists messages', async () => {
@@ -12,7 +14,7 @@ describe('AssistantService', () => {
     } as unknown as jest.Mocked<OllamaClient>;
     const conversationStore = new FakeConversationStore();
     const toolExecutor = createToolExecutor();
-    const service = new AssistantService(ollamaClient, conversationStore, toolExecutor, createOptions());
+    const service = createService(ollamaClient, conversationStore, toolExecutor);
 
     const result = await service.chat('Hello');
 
@@ -32,7 +34,7 @@ describe('AssistantService', () => {
       { role: 'User', content: 'First', timestamp: new Date() },
       { role: 'Assistant', content: 'First response', timestamp: new Date() },
     ]);
-    const service = new AssistantService(ollamaClient, conversationStore, createToolExecutor(), createOptions());
+    const service = createService(ollamaClient, conversationStore, createToolExecutor());
 
     const result = await service.chat('Second', 'conversation-1');
 
@@ -53,7 +55,7 @@ describe('AssistantService', () => {
     } as unknown as jest.Mocked<OllamaClient>;
     const toolExecutor = createToolExecutor();
     const conversationStore = new FakeConversationStore();
-    const service = new AssistantService(ollamaClient, conversationStore, toolExecutor, createOptions());
+    const service = createService(ollamaClient, conversationStore, toolExecutor);
 
     const result = await service.chat('Use tool');
 
@@ -78,14 +80,7 @@ describe('AssistantService', () => {
     const promptBuilder = {
       build: jest.fn().mockReturnValue('rag prompt'),
     } as unknown as jest.Mocked<PromptBuilder>;
-    const service = new AssistantService(
-      ollamaClient,
-      new FakeConversationStore(),
-      createToolExecutor(),
-      createOptions(),
-      retrievalService,
-      promptBuilder
-    );
+    const service = createService(ollamaClient, new FakeConversationStore(), createToolExecutor(), createOptions(), retrievalService, promptBuilder);
 
     const result = await service.chat('What spicy chicken meal can I cook?');
 
@@ -103,14 +98,7 @@ describe('AssistantService', () => {
     const retrievalService = {
       retrieve: jest.fn().mockResolvedValue({ question: 'unknown', recipes: [], sources: [] }),
     } as unknown as jest.Mocked<RetrievalService>;
-    const service = new AssistantService(
-      ollamaClient,
-      new FakeConversationStore(),
-      createToolExecutor(),
-      createOptions(),
-      retrievalService,
-      { build: jest.fn() } as unknown as PromptBuilder
-    );
+    const service = createService(ollamaClient, new FakeConversationStore(), createToolExecutor(), createOptions(), retrievalService, { build: jest.fn() } as unknown as PromptBuilder);
 
     const result = await service.chat('What freezer meal uses moon dust?');
 
@@ -126,7 +114,7 @@ describe('AssistantService', () => {
         .mockResolvedValueOnce({ content: 'complete', toolCalls: [] }),
     } as unknown as jest.Mocked<OllamaClient>;
     const toolExecutor = createToolExecutor();
-    const service = new AssistantService(ollamaClient, new FakeConversationStore(), toolExecutor, createOptions());
+    const service = createService(ollamaClient, new FakeConversationStore(), toolExecutor);
 
     const result = await service.chat('Use tools');
 
@@ -142,7 +130,7 @@ describe('AssistantService', () => {
     } as unknown as jest.Mocked<OllamaClient>;
     const toolExecutor = createToolExecutor({ success: false });
     const conversationStore = new FakeConversationStore();
-    const service = new AssistantService(ollamaClient, conversationStore, toolExecutor, createOptions());
+    const service = createService(ollamaClient, conversationStore, toolExecutor);
 
     const result = await service.chat('Use failing tool');
 
@@ -158,7 +146,7 @@ describe('AssistantService', () => {
     } as unknown as jest.Mocked<OllamaClient>;
     const toolExecutor = createToolExecutor();
     toolExecutor.execute.mockRejectedValueOnce(new Error('Unknown tool: missing_tool'));
-    const service = new AssistantService(ollamaClient, new FakeConversationStore(), toolExecutor, createOptions());
+    const service = createService(ollamaClient, new FakeConversationStore(), toolExecutor);
 
     const result = await service.chat('Use missing tool');
 
@@ -176,7 +164,7 @@ describe('AssistantService', () => {
       }),
     } as unknown as jest.Mocked<OllamaClient>;
     const toolExecutor = createToolExecutor();
-    const service = new AssistantService(ollamaClient, new FakeConversationStore(), toolExecutor, {
+    const service = createService(ollamaClient, new FakeConversationStore(), toolExecutor, {
       ...createOptions(),
       maximumToolCallsPerRequest: 1,
     });
@@ -212,6 +200,19 @@ function createOptions() {
     maximumConversationSize: 100,
     maximumExecutionTimeMs: 120000,
   };
+}
+
+function createService(
+  ollamaClient: jest.Mocked<OllamaClient>,
+  conversationStore: ConversationStore,
+  toolExecutor: jest.Mocked<ToolExecutor>,
+  options = createOptions(),
+  retrievalService?: jest.Mocked<RetrievalService>,
+  promptBuilder?: jest.Mocked<PromptBuilder> | PromptBuilder
+) {
+  const agent = new MealPlanningAgent(ollamaClient, toolExecutor, retrievalService, promptBuilder);
+  const orchestrator = new OrchestratorService([agent]);
+  return new AssistantService(conversationStore, orchestrator, options);
 }
 
 function createToolExecutor(result = { success: true }) {

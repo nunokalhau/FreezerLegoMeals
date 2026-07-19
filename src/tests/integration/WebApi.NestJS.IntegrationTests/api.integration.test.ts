@@ -197,7 +197,8 @@ describe('AI Assistant Endpoint (End-to-End Integration)', () => {
   assistantIntegrationIt(assistantIntegrationTestName, async () => {
     const response = await request(app.getHttpServer())
       .post('/api/assistant/chat')
-      .send({ message: 'Reply with the single word: OK' })
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ message: 'Reply with the single word: OK' }))
       .timeout({ response: 70000, deadline: ASSISTANT_INTEGRATION_TIMEOUT_MS })
       .expect(201);
 
@@ -209,7 +210,8 @@ describe('AI Assistant Endpoint (End-to-End Integration)', () => {
 
     const followUpResponse = await request(app.getHttpServer())
       .post('/api/assistant/chat')
-      .send({ conversationId: response.body.conversationId, message: 'Reply with the single word: OK' })
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ conversationId: response.body.conversationId, message: 'Reply with the single word: OK' }))
       .timeout({ response: 70000, deadline: ASSISTANT_INTEGRATION_TIMEOUT_MS })
       .expect(201);
 

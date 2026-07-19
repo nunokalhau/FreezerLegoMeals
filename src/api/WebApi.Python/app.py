@@ -18,12 +18,18 @@ VECTOR_STORE_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_
 SEMANTIC_SEARCH_PATH = SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py"
 RAG_RETRIEVAL_PATH = SRC_ROOT / "ai" / "RAG" / "Python" / "retrieval_service.py"
 RAG_PROMPT_BUILDER_PATH = SRC_ROOT / "ai" / "RAG" / "Python" / "prompt_builder.py"
+ORCHESTRATION_PYTHON_PATH = SRC_ROOT / "orchestration" / "Python"
+ORCHESTRATOR_PATH = ORCHESTRATION_PYTHON_PATH / "orchestrator.py"
+MEAL_PLANNING_AGENT_PATH = ORCHESTRATION_PYTHON_PATH / "meal_planning_agent.py"
 CONVERSATION_STORE_PATH = SRC_ROOT / "services" / "Services.Python" / "conversation_store.py"
 SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
 TOOL_EXECUTOR_PATH = SRC_ROOT / "services" / "Services.Python" / "tool_executor.py"
 TOOL_REGISTRY_PATH = SRC_ROOT / "tools" / "tool_registry.json"
 REPOSITORY_PATH = SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py"
 EMBEDDINGS_DIR = SRC_ROOT.parent / "data" / "embeddings"
+
+if str(ORCHESTRATION_PYTHON_PATH) not in sys.path:
+    sys.path.insert(0, str(ORCHESTRATION_PYTHON_PATH))
 
 assistant_spec = importlib.util.spec_from_file_location("services_python_assistant", ASSISTANT_SERVICE_PATH)
 meal_spec = importlib.util.spec_from_file_location("services_python_meal", MEAL_SERVICE_PATH)
@@ -33,6 +39,8 @@ vector_store_spec = importlib.util.spec_from_file_location("vector_store_python"
 semantic_search_spec = importlib.util.spec_from_file_location("semantic_search_python", SEMANTIC_SEARCH_PATH)
 rag_retrieval_spec = importlib.util.spec_from_file_location("rag_python_retrieval", RAG_RETRIEVAL_PATH)
 rag_prompt_builder_spec = importlib.util.spec_from_file_location("rag_python_prompt_builder", RAG_PROMPT_BUILDER_PATH)
+orchestrator_spec = importlib.util.spec_from_file_location("orchestration_python_orchestrator", ORCHESTRATOR_PATH)
+meal_planning_agent_spec = importlib.util.spec_from_file_location("orchestration_python_meal_planning_agent", MEAL_PLANNING_AGENT_PATH)
 conversation_store_spec = importlib.util.spec_from_file_location("services_python_conversation_store", CONVERSATION_STORE_PATH)
 shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
 tool_executor_spec = importlib.util.spec_from_file_location("services_python_tool_executor", TOOL_EXECUTOR_PATH)
@@ -54,6 +62,10 @@ if rag_retrieval_spec is None or rag_retrieval_spec.loader is None:
     raise ImportError(f"Unable to load RAG Retrieval module from {RAG_RETRIEVAL_PATH}")
 if rag_prompt_builder_spec is None or rag_prompt_builder_spec.loader is None:
     raise ImportError(f"Unable to load RAG PromptBuilder module from {RAG_PROMPT_BUILDER_PATH}")
+if orchestrator_spec is None or orchestrator_spec.loader is None:
+    raise ImportError(f"Unable to load Orchestrator module from {ORCHESTRATOR_PATH}")
+if meal_planning_agent_spec is None or meal_planning_agent_spec.loader is None:
+    raise ImportError(f"Unable to load MealPlanningAgent module from {MEAL_PLANNING_AGENT_PATH}")
 if conversation_store_spec is None or conversation_store_spec.loader is None:
     raise ImportError(f"Unable to load ConversationStore module from {CONVERSATION_STORE_PATH}")
 if shopping_spec is None or shopping_spec.loader is None:
@@ -87,6 +99,12 @@ rag_retrieval_spec.loader.exec_module(rag_retrieval_module)
 rag_prompt_builder_module = importlib.util.module_from_spec(rag_prompt_builder_spec)
 sys.modules[rag_prompt_builder_spec.name] = rag_prompt_builder_module
 rag_prompt_builder_spec.loader.exec_module(rag_prompt_builder_module)
+orchestrator_module = importlib.util.module_from_spec(orchestrator_spec)
+sys.modules[orchestrator_spec.name] = orchestrator_module
+orchestrator_spec.loader.exec_module(orchestrator_module)
+meal_planning_agent_module = importlib.util.module_from_spec(meal_planning_agent_spec)
+sys.modules[meal_planning_agent_spec.name] = meal_planning_agent_module
+meal_planning_agent_spec.loader.exec_module(meal_planning_agent_module)
 conversation_store_module = importlib.util.module_from_spec(conversation_store_spec)
 sys.modules[conversation_store_spec.name] = conversation_store_module
 conversation_store_spec.loader.exec_module(conversation_store_module)
@@ -109,6 +127,8 @@ SemanticSearchService = semantic_search_module.SemanticSearchService
 RecipeMetadataProvider = semantic_search_module.RecipeMetadataProvider
 RetrievalService = rag_retrieval_module.RetrievalService
 PromptBuilder = rag_prompt_builder_module.PromptBuilder
+Orchestrator = orchestrator_module.Orchestrator
+MealPlanningAgent = meal_planning_agent_module.MealPlanningAgent
 InMemoryConversationStore = conversation_store_module.InMemoryConversationStore
 ShoppingService = shopping_module.ShoppingService
 ToolRegistry = tool_executor_module.ToolRegistry
@@ -145,7 +165,9 @@ prompt_builder = PromptBuilder()
 conversation_store = InMemoryConversationStore()
 tool_registry = ToolRegistry(TOOL_REGISTRY_PATH)
 tool_executor = ToolExecutor(tool_registry)
-assistant_service = AssistantService(ollama_client, conversation_store, tool_executor, retrieval_service=retrieval_service, prompt_builder=prompt_builder)
+meal_planning_agent = MealPlanningAgent(ollama_client, tool_executor, retrieval_service, prompt_builder)
+orchestrator = Orchestrator([meal_planning_agent])
+assistant_service = AssistantService(conversation_store, orchestrator)
 meal_service = MealService()
 shopping_service = ShoppingService()
 

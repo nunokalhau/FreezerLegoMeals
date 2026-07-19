@@ -1,6 +1,7 @@
 using Moq;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
+using Orchestration.DotNet;
 using RAG.DotNet;
 using Xunit;
 
@@ -232,13 +233,12 @@ public class AssistantServiceTests
     }
 
     [Fact]
-    public void Constructor_WithNullOllamaClientThrowsArgumentNullException()
+    public void Constructor_WithNullOrchestratorThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new AssistantService(
-            null!,
             Mock.Of<IConversationStore>(),
-            Mock.Of<IToolExecutor>(),
+            null!,
             Options.Create(new AssistantOptions()),
             NullLogger<AssistantService>.Instance));
     }
@@ -251,14 +251,18 @@ public class AssistantServiceTests
         IRetrievalService? retrievalService = null,
         IPromptBuilder? promptBuilder = null)
     {
-        return new AssistantService(
+        var agent = new MealPlanningAgent(
             ollamaClient,
-            conversationStore,
             toolExecutor,
-            Options.Create(options ?? new AssistantOptions()),
-            NullLogger<AssistantService>.Instance,
+            NullLogger<MealPlanningAgent>.Instance,
             retrievalService,
             promptBuilder);
+        var orchestrator = new Orchestrator([agent], NullLogger<Orchestrator>.Instance);
+        return new AssistantService(
+            conversationStore,
+            orchestrator,
+            Options.Create(options ?? new AssistantOptions()),
+            NullLogger<AssistantService>.Instance);
     }
 
     private static Mock<IToolExecutor> CreateToolExecutor(bool success = true)

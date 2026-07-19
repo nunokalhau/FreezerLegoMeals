@@ -14,17 +14,27 @@ import importlib.util
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
 ASSISTANT_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'assistant_service.py'
+ORCHESTRATION_PATH = SRC_ROOT / 'orchestration' / 'Python'
 MEAL_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'meal_service.py'
 OLLAMA_CLIENT_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'ollama_client.py'
 SHOPPING_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'shopping_service.py'
 
+if str(ORCHESTRATION_PATH) not in sys.path:
+    sys.path.insert(0, str(ORCHESTRATION_PATH))
+
 assistant_spec = importlib.util.spec_from_file_location('assistant_service', ASSISTANT_SERVICE_PATH)
+orchestrator_spec = importlib.util.spec_from_file_location('orchestration_python_orchestrator_service_tests', ORCHESTRATION_PATH / 'orchestrator.py')
+meal_planning_agent_spec = importlib.util.spec_from_file_location('orchestration_python_meal_planning_agent_service_tests', ORCHESTRATION_PATH / 'meal_planning_agent.py')
 meal_spec = importlib.util.spec_from_file_location('meal_service', MEAL_SERVICE_PATH)
 ollama_spec = importlib.util.spec_from_file_location('ollama_client', OLLAMA_CLIENT_PATH)
 shopping_spec = importlib.util.spec_from_file_location('shopping_service', SHOPPING_SERVICE_PATH)
 
 if assistant_spec is None or assistant_spec.loader is None:
     raise ImportError(f'Unable to load assistant_service from {ASSISTANT_SERVICE_PATH}')
+if orchestrator_spec is None or orchestrator_spec.loader is None:
+    raise ImportError(f'Unable to load orchestrator from {ORCHESTRATION_PATH}')
+if meal_planning_agent_spec is None or meal_planning_agent_spec.loader is None:
+    raise ImportError(f'Unable to load meal_planning_agent from {ORCHESTRATION_PATH}')
 if meal_spec is None or meal_spec.loader is None:
     raise ImportError(f'Unable to load meal_service from {MEAL_SERVICE_PATH}')
 if ollama_spec is None or ollama_spec.loader is None:
@@ -34,6 +44,10 @@ if shopping_spec is None or shopping_spec.loader is None:
 
 assistant_module = importlib.util.module_from_spec(assistant_spec)
 assistant_spec.loader.exec_module(assistant_module)
+orchestrator_module = importlib.util.module_from_spec(orchestrator_spec)
+orchestrator_spec.loader.exec_module(orchestrator_module)
+meal_planning_agent_module = importlib.util.module_from_spec(meal_planning_agent_spec)
+meal_planning_agent_spec.loader.exec_module(meal_planning_agent_module)
 meal_module = importlib.util.module_from_spec(meal_spec)
 meal_spec.loader.exec_module(meal_module)
 ollama_module = importlib.util.module_from_spec(ollama_spec)
@@ -63,7 +77,7 @@ class TestAssistantService:
         ollama_client.chat.return_value = FakeOllamaResult('assistant response')
         conversation_store = FakeConversationStore()
         tool_executor = FakeToolExecutor()
-        service = AssistantService(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
+        service = create_assistant_service(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
 
         result = service.chat('Hello')
 
@@ -74,13 +88,13 @@ class TestAssistantService:
         assert [message.content for message in messages] == ['system prompt', 'Hello']
         assert [message.content for message in conversation_store.messages] == ['Hello', 'assistant response']
 
-    def test_initialization_requires_ollama_client(self):
+    def test_initialization_requires_orchestrator(self):
         with pytest.raises(ValueError):
-            AssistantService(None, mock.Mock(), mock.Mock())
+            AssistantService(mock.Mock(), None)
 
     def test_initialization_requires_conversation_store(self):
         with pytest.raises(ValueError):
-            AssistantService(mock.Mock(), None, mock.Mock())
+            AssistantService(None, mock.Mock())
 
     def test_chat_executes_one_tool_call_and_returns_final_response(self):
         ollama_client = mock.Mock()
@@ -90,7 +104,7 @@ class TestAssistantService:
         ]
         tool_executor = FakeToolExecutor()
         conversation_store = FakeConversationStore()
-        service = AssistantService(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
+        service = create_assistant_service(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
 
         result = service.chat('Use tool')
 
@@ -106,7 +120,7 @@ class TestAssistantService:
             FakeOllamaResult('complete'),
         ]
         tool_executor = FakeToolExecutor()
-        service = AssistantService(ollama_client, FakeConversationStore(), tool_executor, AssistantOptions(system_prompt='system prompt'))
+        service = create_assistant_service(ollama_client, FakeConversationStore(), tool_executor, AssistantOptions(system_prompt='system prompt'))
 
         result = service.chat('Use tools')
 
@@ -121,7 +135,7 @@ class TestAssistantService:
         ]
         tool_executor = FakeToolExecutor(success=False)
         conversation_store = FakeConversationStore()
-        service = AssistantService(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
+        service = create_assistant_service(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
 
         result = service.chat('Use failing tool')
 
@@ -135,7 +149,7 @@ class TestAssistantService:
             FakeOllamaResult('invalid tool handled'),
         ]
         tool_executor = FakeToolExecutor(raise_on_execute=True)
-        service = AssistantService(ollama_client, FakeConversationStore(), tool_executor, AssistantOptions(system_prompt='system prompt'))
+        service = create_assistant_service(ollama_client, FakeConversationStore(), tool_executor, AssistantOptions(system_prompt='system prompt'))
 
         result = service.chat('Use missing tool')
 
@@ -148,7 +162,7 @@ class TestAssistantService:
             {'name': 'second_tool', 'arguments': {}},
         ])
         tool_executor = FakeToolExecutor()
-        service = AssistantService(
+        service = create_assistant_service(
             ollama_client,
             FakeConversationStore(),
             tool_executor,
@@ -159,6 +173,12 @@ class TestAssistantService:
 
         assert 'maximum tool call limit' in result.response
         assert len(tool_executor.calls) == 1
+
+
+def create_assistant_service(ollama_client, conversation_store, tool_executor, options=None):
+    agent = meal_planning_agent_module.MealPlanningAgent(ollama_client, tool_executor)
+    orchestrator = orchestrator_module.Orchestrator([agent])
+    return AssistantService(conversation_store, orchestrator, options)
 
 
 class TestOllamaClient:
