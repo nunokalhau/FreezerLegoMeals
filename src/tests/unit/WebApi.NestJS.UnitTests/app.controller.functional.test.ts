@@ -1,16 +1,22 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AppController } from '../../../api/WebApi.NestJS/app.controller';
 import { AppService } from '../../../api/WebApi.NestJS/app.service';
+import { AssistantService } from '../../../services/Services.NestJS/assistant.service';
 import { MealService } from '../../../services/Services.NestJS/meal.service';
 import { ShoppingService } from '../../../services/Services.NestJS/shopping.service';
 
 describe('AppController functional behavior', () => {
   let controller: AppController;
+  let assistantService: jest.Mocked<AssistantService>;
   let mealService: jest.Mocked<MealService>;
   let shoppingService: jest.Mocked<ShoppingService>;
 
   beforeEach(() => {
     const appService = { getHello: () => 'hello' } as AppService;
+    assistantService = {
+      chat: jest.fn(),
+    } as unknown as jest.Mocked<AssistantService>;
+
     mealService = {
       getRecipes: jest.fn(),
       searchRecipesByIngredients: jest.fn(),
@@ -26,7 +32,7 @@ describe('AppController functional behavior', () => {
       getRecipeInfo: jest.fn(),
     } as unknown as jest.Mocked<ShoppingService>;
 
-    controller = new AppController(appService, mealService, shoppingService);
+    controller = new AppController(appService, assistantService, mealService, shoppingService);
   });
 
   it('searchRecipesByIngredients validates empty input', async () => {
@@ -70,5 +76,18 @@ describe('AppController functional behavior', () => {
     shoppingService.getRecipeInfo.mockResolvedValue(null);
 
     await expect(controller.getRecipeInfo('abc')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('chatWithAssistant delegates to AssistantService', async () => {
+    assistantService.chat.mockResolvedValue('assistant response');
+
+    const result = await controller.chatWithAssistant({ message: 'Hello' });
+
+    expect(assistantService.chat).toHaveBeenCalledWith('Hello');
+    expect(result.response).toBe('assistant response');
+  });
+
+  it('chatWithAssistant validates empty messages', async () => {
+    await expect(controller.chatWithAssistant({ message: ' ' })).rejects.toBeInstanceOf(BadRequestException);
   });
 });

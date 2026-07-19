@@ -36,6 +36,7 @@ class TestWebAPI:
         """Test that key API routes are defined."""
         route_paths = {route.path for route in app.routes}
         assert '/health' in route_paths
+        assert '/api/assistant/chat' in route_paths
         assert '/api/recipes/search' in route_paths
         assert '/api/shopping/generate' in route_paths
 
@@ -62,6 +63,21 @@ class TestWebAPI:
 
         assert response.total_recipes_found == 1
         assert response.recipes[0]['name'] == 'Chicken Rice'
+
+    def test_chat_with_assistant_returns_wrapped_payload(self, monkeypatch):
+        monkeypatch.setattr(app_module.assistant_service, 'chat', lambda message: f'assistant:{message}')
+
+        response = app_module.chat_with_assistant(
+            app_module.AssistantChatRequest(message='Hello')
+        )
+
+        assert response.response == 'assistant:Hello'
+
+    def test_chat_with_assistant_rejects_empty_message(self):
+        with pytest.raises(HTTPException) as exc:
+            app_module.chat_with_assistant(app_module.AssistantChatRequest(message=' '))
+
+        assert exc.value.status_code == 400
 
     def test_generate_shopping_list_rejects_invalid_scale_factor(self):
         with pytest.raises(HTTPException) as exc:

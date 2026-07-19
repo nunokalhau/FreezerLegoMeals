@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from '../../../api/WebApi.NestJS/app.controller';
 import { AppService } from '../../../api/WebApi.NestJS/app.service';
+import { AssistantService } from '../../../services/Services.NestJS/assistant.service';
 import { MealService } from '../../../services/Services.NestJS/meal.service';
 import { ShoppingService } from '../../../services/Services.NestJS/shopping.service';
 
@@ -19,6 +20,10 @@ const shoppingServiceMock = {
   getRecipeInfo: jest.fn(),
 };
 
+const assistantServiceMock = {
+  chat: jest.fn(),
+};
+
 describe('AppController', () => {
   let appController: AppController;
   let appService: AppService;
@@ -28,6 +33,7 @@ describe('AppController', () => {
       controllers: [AppController],
       providers: [
         AppService,
+        { provide: AssistantService, useValue: assistantServiceMock },
         { provide: MealService, useValue: mealServiceMock },
         { provide: ShoppingService, useValue: shoppingServiceMock },
       ],

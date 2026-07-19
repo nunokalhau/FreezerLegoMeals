@@ -6,24 +6,38 @@ These are proper pytest-based unit tests with mocked repository dependencies.
 
 import sys
 import os
+import json
 import unittest.mock as mock
 from pathlib import Path
 import importlib.util
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
+ASSISTANT_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'assistant_service.py'
 MEAL_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'meal_service.py'
+OLLAMA_CLIENT_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'ollama_client.py'
 SHOPPING_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'shopping_service.py'
 
+assistant_spec = importlib.util.spec_from_file_location('assistant_service', ASSISTANT_SERVICE_PATH)
 meal_spec = importlib.util.spec_from_file_location('meal_service', MEAL_SERVICE_PATH)
+ollama_spec = importlib.util.spec_from_file_location('ollama_client', OLLAMA_CLIENT_PATH)
 shopping_spec = importlib.util.spec_from_file_location('shopping_service', SHOPPING_SERVICE_PATH)
 
+if assistant_spec is None or assistant_spec.loader is None:
+    raise ImportError(f'Unable to load assistant_service from {ASSISTANT_SERVICE_PATH}')
 if meal_spec is None or meal_spec.loader is None:
     raise ImportError(f'Unable to load meal_service from {MEAL_SERVICE_PATH}')
+if ollama_spec is None or ollama_spec.loader is None:
+    raise ImportError(f'Unable to load ollama_client from {OLLAMA_CLIENT_PATH}')
 if shopping_spec is None or shopping_spec.loader is None:
     raise ImportError(f'Unable to load shopping_service from {SHOPPING_SERVICE_PATH}')
 
+assistant_module = importlib.util.module_from_spec(assistant_spec)
+assistant_spec.loader.exec_module(assistant_module)
 meal_module = importlib.util.module_from_spec(meal_spec)
 meal_spec.loader.exec_module(meal_module)
+ollama_module = importlib.util.module_from_spec(ollama_spec)
+sys.modules['ollama_client'] = ollama_module
+ollama_spec.loader.exec_module(ollama_module)
 shopping_module = importlib.util.module_from_spec(shopping_spec)
 shopping_spec.loader.exec_module(shopping_module)
 
@@ -32,8 +46,107 @@ sys.modules['meal_service'] = meal_module
 sys.modules['shopping_service'] = shopping_module
 
 import pytest
+AssistantService = assistant_module.AssistantService
 MealService = meal_module.MealService
+OllamaClient = ollama_module.OllamaClient
+OllamaClientConfig = ollama_module.OllamaClientConfig
 ShoppingService = shopping_module.ShoppingService
+
+
+class TestAssistantService:
+    """Unit tests for AssistantService."""
+
+    def test_chat_delegates_to_ollama_client(self):
+        ollama_client = mock.Mock()
+        ollama_client.chat.return_value = 'assistant response'
+        service = AssistantService(ollama_client)
+
+        result = service.chat('Hello')
+
+        assert result == 'assistant response'
+        ollama_client.chat.assert_called_once_with(None, 'Hello')
+
+    def test_initialization_requires_ollama_client(self):
+        with pytest.raises(ValueError):
+            AssistantService(None)
+
+
+class TestOllamaClient:
+    """Unit tests for OllamaClient."""
+
+    def test_chat_uses_default_model_and_returns_assistant_content(self, monkeypatch):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return b'{"message":{"role":"assistant","content":"Hello from Ollama"}}'
+
+        def fake_urlopen(chat_request, timeout):
+            captured['url'] = chat_request.full_url
+            captured['body'] = chat_request.data
+            captured['timeout'] = timeout
+            return FakeResponse()
+
+        monkeypatch.setattr(ollama_module.request, 'urlopen', fake_urlopen)
+        client = OllamaClient(OllamaClientConfig(
+            base_url='http://localhost:11434',
+            default_model='llama3.2',
+            timeout=30.0,
+        ))
+
+        result = client.chat(None, 'Hello')
+
+        assert result == 'Hello from Ollama'
+        assert captured['url'] == 'http://localhost:11434/api/chat'
+        assert captured['timeout'] == 30.0
+        body = json.loads(captured['body'].decode('utf-8'))
+        assert body == {
+            'model': 'llama3.2',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': 'Hello',
+                }
+            ],
+            'stream': False,
+        }
+
+    def test_chat_uses_provided_model(self, monkeypatch):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return b'{"message":{"content":"ok"}}'
+
+        def fake_urlopen(chat_request, timeout):
+            captured['body'] = chat_request.data
+            return FakeResponse()
+
+        monkeypatch.setattr(ollama_module.request, 'urlopen', fake_urlopen)
+        client = OllamaClient(OllamaClientConfig(default_model='default-model'))
+
+        client.chat('custom-model', 'Hello')
+
+        body = json.loads(captured['body'].decode('utf-8'))
+        assert body['model'] == 'custom-model'
+
+    def test_chat_rejects_empty_user_message(self):
+        client = OllamaClient(OllamaClientConfig())
+
+        with pytest.raises(ValueError):
+            client.chat('llama3.2', ' ')
 
 
 class TestMealService:

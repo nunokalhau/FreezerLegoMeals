@@ -9,23 +9,37 @@ from pathlib import Path
 import importlib.util
 
 SRC_ROOT = Path(__file__).resolve().parents[2]
+ASSISTANT_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "assistant_service.py"
 MEAL_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "meal_service.py"
+OLLAMA_CLIENT_PATH = SRC_ROOT / "services" / "Services.Python" / "ollama_client.py"
 SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
 
+assistant_spec = importlib.util.spec_from_file_location("services_python_assistant", ASSISTANT_SERVICE_PATH)
 meal_spec = importlib.util.spec_from_file_location("services_python_meal", MEAL_SERVICE_PATH)
+ollama_spec = importlib.util.spec_from_file_location("services_python_ollama", OLLAMA_CLIENT_PATH)
 shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
 
+if assistant_spec is None or assistant_spec.loader is None:
+    raise ImportError(f"Unable to load AssistantService module from {ASSISTANT_SERVICE_PATH}")
 if meal_spec is None or meal_spec.loader is None:
     raise ImportError(f"Unable to load MealService module from {MEAL_SERVICE_PATH}")
+if ollama_spec is None or ollama_spec.loader is None:
+    raise ImportError(f"Unable to load OllamaClient module from {OLLAMA_CLIENT_PATH}")
 if shopping_spec is None or shopping_spec.loader is None:
     raise ImportError(f"Unable to load ShoppingService module from {SHOPPING_SERVICE_PATH}")
 
+assistant_module = importlib.util.module_from_spec(assistant_spec)
+assistant_spec.loader.exec_module(assistant_module)
 meal_module = importlib.util.module_from_spec(meal_spec)
 meal_spec.loader.exec_module(meal_module)
+ollama_module = importlib.util.module_from_spec(ollama_spec)
+ollama_spec.loader.exec_module(ollama_module)
 shopping_module = importlib.util.module_from_spec(shopping_spec)
 shopping_spec.loader.exec_module(shopping_module)
 
+AssistantService = assistant_module.AssistantService
 MealService = meal_module.MealService
+OllamaClient = ollama_module.OllamaClient
 ShoppingService = shopping_module.ShoppingService
 
 app = FastAPI(
@@ -44,6 +58,8 @@ app.add_middleware(
 )
 
 # Initialize the services as singletons
+ollama_client = OllamaClient()
+assistant_service = AssistantService(ollama_client)
 meal_service = MealService()
 shopping_service = ShoppingService()
 
@@ -111,6 +127,12 @@ class GetRecipeInfoRequest(BaseModel):
 class GetRecipeInfoResponse(BaseModel):
     info: Optional[Dict[str, Any]]
 
+class AssistantChatRequest(BaseModel):
+    message: str
+
+class AssistantChatResponse(BaseModel):
+    response: str
+
 @app.get("/")
 def read_root():
     return {
@@ -176,6 +198,20 @@ def find_meals_with_ingredients(request: FindMealsWithIngredientsRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error finding meals: {str(e)}")
+
+@app.post("/api/assistant/chat", response_model=AssistantChatResponse)
+def chat_with_assistant(request: AssistantChatRequest):
+    """Send a basic chat message to the assistant."""
+    if not request.message or len(request.message.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    try:
+        response = assistant_service.chat(request.message)
+        return AssistantChatResponse(response=response)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calling Ollama: {str(e)}")
 
 @app.get("/api/recipes/{id}/details", response_model=GetRecipeDetailsResponse)
 def get_recipe_details(id: int):

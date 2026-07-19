@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, BadRequestException, NotFoundException } from '@nestjs/common';
 import { AppService } from './app.service';
+import { AssistantService } from '../../services/Services.NestJS/assistant.service';
 import { MealService } from '../../services/Services.NestJS/meal.service';
 import { ShoppingService } from '../../services/Services.NestJS/shopping.service';
 import { ApiTags, ApiResponse, ApiOperation } from '@nestjs/swagger';
+import { AssistantChatRequest } from '../../services/Services.NestJS/models/assistant-chat-request.dto';
 import { ShoppingIngredientsRequest } from '../../services/Services.NestJS/models/shopping-ingredients-request.dto';
 
 @ApiTags('meals')
@@ -10,6 +12,7 @@ import { ShoppingIngredientsRequest } from '../../services/Services.NestJS/model
 export class AppController {
   constructor(
     private readonly appService: AppService,
+    private readonly assistantService: AssistantService,
     private readonly mealService: MealService,
     private readonly shoppingService: ShoppingService
   ) {}
@@ -89,6 +92,18 @@ export class AppController {
     }
 
     return await this.mealService.findMealsWithIngredients(query.query);
+  }
+
+  @Post('assistant/chat')
+  @ApiOperation({ summary: 'Send a basic chat message to the assistant' })
+  @ApiResponse({ status: 200, description: 'Returns the assistant response' })
+  async chatWithAssistant(@Body() body: AssistantChatRequest) {
+    if (!body || !body.message || !body.message.trim()) {
+      throw new BadRequestException('Message is required');
+    }
+
+    const response = await this.assistantService.chat(body.message);
+    return { response };
   }
 
   @Post('shopping/generate')

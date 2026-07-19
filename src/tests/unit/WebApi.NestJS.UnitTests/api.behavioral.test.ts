@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppController } from '../../../api/WebApi.NestJS/app.controller';
 import { AppService } from '../../../api/WebApi.NestJS/app.service';
+import { AssistantService } from '../../../services/Services.NestJS/assistant.service';
 import { MealService } from '../../../services/Services.NestJS/meal.service';
 import { ShoppingService } from '../../../services/Services.NestJS/shopping.service';
 
@@ -21,6 +22,10 @@ const shoppingServiceMock = {
   getRecipeInfo: jest.fn(),
 };
 
+const assistantServiceMock = {
+  chat: jest.fn(),
+};
+
 describe('API Endpoints (Integration)', () => {
   let app: INestApplication;
 
@@ -29,6 +34,7 @@ describe('API Endpoints (Integration)', () => {
       controllers: [AppController],
       providers: [
         AppService,
+        { provide: AssistantService, useValue: assistantServiceMock },
         { provide: MealService, useValue: mealServiceMock },
         { provide: ShoppingService, useValue: shoppingServiceMock },
       ],
@@ -93,6 +99,7 @@ describe('API Controller Behavior', () => {
       controllers: [AppController],
       providers: [
         AppService,
+        { provide: AssistantService, useValue: assistantServiceMock },
         { provide: MealService, useValue: mealServiceMock },
         { provide: ShoppingService, useValue: shoppingServiceMock },
       ],
