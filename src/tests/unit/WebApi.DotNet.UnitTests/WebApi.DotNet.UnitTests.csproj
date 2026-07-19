@@ -24,6 +24,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\ai\Embedding.DotNet\Embedding.DotNet.csproj" />
+    <ProjectReference Include="..\..\..\ai\SemanticSearch\DotNet\SemanticSearch.DotNet.csproj" />
+    <ProjectReference Include="..\..\..\ai\VectorStores\DotNet\VectorStores.DotNet.csproj" />
     <ProjectReference Include="..\..\..\api\WebApi.DotNet\WebApi.DotNet.csproj" />
   </ItemGroup>
 

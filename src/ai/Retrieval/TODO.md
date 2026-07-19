@@ -1,0 +1,1 @@
+TODO: Future retrieval orchestration belongs here. Do not add retrieval logic in the embedding client.

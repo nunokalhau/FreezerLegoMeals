@@ -2,6 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "tools": [
     {
+      "name": "semantic_search",
+      "description": "Semantic recipe search for recommendations, similar meals, what-to-cook questions, and natural-language meal requests based on meaning rather than exact keyword filters. Use for queries like spicy meals, quick dinner after work, healthy lunches, similar meals, or broad recommendations. Continue using search_recipes for explicit ingredient/filter keyword searches.",
+      "keywords": ["semantic search", "recommendations", "similar meals", "what should I cook", "natural language recipe search"],
+      "parameters": ["query", "topK"],
+      "examples": [
+        "I want something spicy",
+        "What should I cook for a quick dinner after work?",
+        "Find meals similar to chicken curry",
+        "Healthy lunch under 500 calories"
+      ],
+      "wrapper": "semantic_search.py",
+      "expected_json_output": [{ "recipeId": "1", "title": "Recipe name", "score": 0.94, "matchedText": "semantic document excerpt", "reason": "High semantic similarity between the query and Recipe name." }],
+      "output_description": "Ranked semantic recipe matches with recipeId, title, similarity score, matched text, and deterministic reason.",
+      "aliases": ["recommend_recipes", "similar_recipes", "meal_recommendations"]
+    },
+    {
       "name": "search_recipes",
       "description": "Primary recipe discovery tool. Search and filter recipes by ingredients, excluded ingredients, category, tags, cuisine, prep/cook/total time, difficulty, servings, freezer/batch/dietary flags, and optional fuzzy matching.",
       "keywords": ["find recipes", "recipe search", "ingredient lookup", "meal discovery"],

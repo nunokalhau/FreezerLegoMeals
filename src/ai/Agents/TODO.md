@@ -1,0 +1,1 @@
+TODO: Future AI agent orchestration belongs here. Do not add tool-planning or agent workflows to semantic search, vector stores, embedding clients, or the embedding indexing pipeline.

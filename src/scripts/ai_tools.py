@@ -8,6 +8,8 @@ import json
 import math
 import re
 import sqlite3
+import importlib.util
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
@@ -15,6 +17,8 @@ FOOD_DIR = DATA_DIR / "food"
 DB_PATH = DATA_DIR / "recipes_local.db"
 SCHEMA_PATH = DATA_DIR / "recipes.sqlite.sql"
 SEED_PATH = DATA_DIR / "recipes_manual_seed.sql"
+EMBEDDINGS_DIR = DATA_DIR / "embeddings"
+SRC_ROOT = ROOT / "src"
 
 MEAT_TERMS = {"beef", "chicken", "pork", "turkey", "duck", "lamb", "fish", "salmon", "shrimp", "tuna", "bacon", "sausage", "frango", "vaca", "porco", "peru", "peixe", "camarao", "camarão", "carne"}
 DAIRY_TERMS = {"milk", "cream", "cheese", "butter", "yogurt", "parmesan", "mozzarella", "leite", "natas", "queijo", "manteiga", "iogurte"}
@@ -206,6 +210,25 @@ def ingredient_substitutions(parameters: dict[str, Any]) -> dict[str, Any]:
     return {"suggestions": suggestions, "recipe": parameters.get("recipe")}
 
 
+def semantic_search(parameters: dict[str, Any]) -> list[dict[str, Any]]:
+    query = str(parameters.get("query") or parameters.get("text") or "")
+    top_k = max(0, _int(parameters.get("topK", parameters.get("top_k")), 5))
+    if not query.strip() or top_k <= 0:
+        return []
+
+    embedding_module = _load_module("embedding_python_service", SRC_ROOT / "ai" / "Embedding.Python" / "embedding_service.py")
+    vector_store_module = _load_module("semantic_local_vector_store", SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_store.py")
+    semantic_module = _load_module("semantic_search_python_service", SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py")
+    repository_module = _load_module("repository_python", SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py")
+
+    service = semantic_module.SemanticSearchService(
+        embedding_module.OllamaEmbeddingService(),
+        vector_store_module.LocalVectorStore(EMBEDDINGS_DIR),
+        semantic_module.RecipeMetadataProvider(repository_module.Repository(DB_PATH)),
+    )
+    return [result.__dict__ for result in service.search(query, top_k)]
+
+
 def run_tool(tool_name: str, parameters: dict[str, Any]) -> Any:
     tools = {
         "search_recipes": search_recipes,
@@ -216,10 +239,22 @@ def run_tool(tool_name: str, parameters: dict[str, Any]) -> Any:
         "batch_cooking_plan": batch_cooking_plan,
         "convert_servings": convert_servings,
         "ingredient_substitutions": ingredient_substitutions,
+        "semantic_search": semantic_search,
     }
     if tool_name not in tools:
         raise ValueError(f"Unknown canonical AI tool: {tool_name}")
     return tools[tool_name](parameters or {})
+
+
+def _load_module(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load {module_name} from {path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _recipes_with_ingredients() -> list[dict[str, Any]]:

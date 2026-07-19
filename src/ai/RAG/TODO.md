@@ -1,0 +1,1 @@
+TODO: Future RAG orchestration belongs here. Do not add RAG logic in the embedding client.

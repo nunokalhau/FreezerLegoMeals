@@ -2,6 +2,10 @@ using Services.DotNet;
 using Repository.DotNet;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
+using Embedding.DotNet;
+using SemanticSearch.DotNet;
+using VectorStores.DotNet;
+using WebApi.DotNet.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,13 +27,24 @@ builder.Services.AddScoped<IToolExecutor>(serviceProvider => new PythonToolExecu
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools"))));
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
+builder.Services.AddSingleton<IVectorStore>(_ => new LocalVectorStore(
+    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "..", "data", "embeddings"))));
+builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
+builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("Assistant"));
 builder.Services.Configure<ConversationStoreOptions>(builder.Configuration.GetSection("ConversationStore"));
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection("Ollama"));
+builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embeddings"));
 builder.Services.AddHttpClient<IOllamaClient, OllamaClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OllamaOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = options.Timeout;
+});
+builder.Services.AddHttpClient<IEmbeddingService, OllamaEmbeddingService>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<EmbeddingOptions>>().Value;
+    client.BaseAddress = new Uri(options.OllamaBaseUrl);
     client.Timeout = options.Timeout;
 });
 

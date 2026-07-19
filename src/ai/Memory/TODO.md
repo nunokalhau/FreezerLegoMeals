@@ -1,0 +1,1 @@
+TODO: Future conversation memory belongs here. Do not add memory logic to semantic search, vector stores, embedding clients, or the embedding indexing pipeline.

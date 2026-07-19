@@ -13,17 +13,26 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 ASSISTANT_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "assistant_service.py"
 MEAL_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "meal_service.py"
 OLLAMA_CLIENT_PATH = SRC_ROOT / "services" / "Services.Python" / "ollama_client.py"
+EMBEDDING_SERVICE_PATH = SRC_ROOT / "ai" / "Embedding.Python" / "embedding_service.py"
+VECTOR_STORE_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_store.py"
+SEMANTIC_SEARCH_PATH = SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py"
 CONVERSATION_STORE_PATH = SRC_ROOT / "services" / "Services.Python" / "conversation_store.py"
 SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
 TOOL_EXECUTOR_PATH = SRC_ROOT / "services" / "Services.Python" / "tool_executor.py"
 TOOL_REGISTRY_PATH = SRC_ROOT / "tools" / "tool_registry.json"
+REPOSITORY_PATH = SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py"
+EMBEDDINGS_DIR = SRC_ROOT.parent / "data" / "embeddings"
 
 assistant_spec = importlib.util.spec_from_file_location("services_python_assistant", ASSISTANT_SERVICE_PATH)
 meal_spec = importlib.util.spec_from_file_location("services_python_meal", MEAL_SERVICE_PATH)
 ollama_spec = importlib.util.spec_from_file_location("services_python_ollama", OLLAMA_CLIENT_PATH)
+embedding_spec = importlib.util.spec_from_file_location("embedding_python_service", EMBEDDING_SERVICE_PATH)
+vector_store_spec = importlib.util.spec_from_file_location("vector_store_python", VECTOR_STORE_PATH)
+semantic_search_spec = importlib.util.spec_from_file_location("semantic_search_python", SEMANTIC_SEARCH_PATH)
 conversation_store_spec = importlib.util.spec_from_file_location("services_python_conversation_store", CONVERSATION_STORE_PATH)
 shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
 tool_executor_spec = importlib.util.spec_from_file_location("services_python_tool_executor", TOOL_EXECUTOR_PATH)
+repository_spec = importlib.util.spec_from_file_location("repository_python", REPOSITORY_PATH)
 
 if assistant_spec is None or assistant_spec.loader is None:
     raise ImportError(f"Unable to load AssistantService module from {ASSISTANT_SERVICE_PATH}")
@@ -31,12 +40,20 @@ if meal_spec is None or meal_spec.loader is None:
     raise ImportError(f"Unable to load MealService module from {MEAL_SERVICE_PATH}")
 if ollama_spec is None or ollama_spec.loader is None:
     raise ImportError(f"Unable to load OllamaClient module from {OLLAMA_CLIENT_PATH}")
+if embedding_spec is None or embedding_spec.loader is None:
+    raise ImportError(f"Unable to load EmbeddingService module from {EMBEDDING_SERVICE_PATH}")
+if vector_store_spec is None or vector_store_spec.loader is None:
+    raise ImportError(f"Unable to load VectorStore module from {VECTOR_STORE_PATH}")
+if semantic_search_spec is None or semantic_search_spec.loader is None:
+    raise ImportError(f"Unable to load SemanticSearch module from {SEMANTIC_SEARCH_PATH}")
 if conversation_store_spec is None or conversation_store_spec.loader is None:
     raise ImportError(f"Unable to load ConversationStore module from {CONVERSATION_STORE_PATH}")
 if shopping_spec is None or shopping_spec.loader is None:
     raise ImportError(f"Unable to load ShoppingService module from {SHOPPING_SERVICE_PATH}")
 if tool_executor_spec is None or tool_executor_spec.loader is None:
     raise ImportError(f"Unable to load ToolExecutor module from {TOOL_EXECUTOR_PATH}")
+if repository_spec is None or repository_spec.loader is None:
+    raise ImportError(f"Unable to load Repository module from {REPOSITORY_PATH}")
 
 assistant_module = importlib.util.module_from_spec(assistant_spec)
 sys.modules[assistant_spec.name] = assistant_module
@@ -47,6 +64,15 @@ meal_spec.loader.exec_module(meal_module)
 ollama_module = importlib.util.module_from_spec(ollama_spec)
 sys.modules[ollama_spec.name] = ollama_module
 ollama_spec.loader.exec_module(ollama_module)
+embedding_module = importlib.util.module_from_spec(embedding_spec)
+sys.modules[embedding_spec.name] = embedding_module
+embedding_spec.loader.exec_module(embedding_module)
+vector_store_module = importlib.util.module_from_spec(vector_store_spec)
+sys.modules[vector_store_spec.name] = vector_store_module
+vector_store_spec.loader.exec_module(vector_store_module)
+semantic_search_module = importlib.util.module_from_spec(semantic_search_spec)
+sys.modules[semantic_search_spec.name] = semantic_search_module
+semantic_search_spec.loader.exec_module(semantic_search_module)
 conversation_store_module = importlib.util.module_from_spec(conversation_store_spec)
 sys.modules[conversation_store_spec.name] = conversation_store_module
 conversation_store_spec.loader.exec_module(conversation_store_module)
@@ -56,14 +82,22 @@ shopping_spec.loader.exec_module(shopping_module)
 tool_executor_module = importlib.util.module_from_spec(tool_executor_spec)
 sys.modules[tool_executor_spec.name] = tool_executor_module
 tool_executor_spec.loader.exec_module(tool_executor_module)
+repository_module = importlib.util.module_from_spec(repository_spec)
+sys.modules[repository_spec.name] = repository_module
+repository_spec.loader.exec_module(repository_module)
 
 AssistantService = assistant_module.AssistantService
 MealService = meal_module.MealService
 OllamaClient = ollama_module.OllamaClient
+OllamaEmbeddingService = embedding_module.OllamaEmbeddingService
+LocalVectorStore = vector_store_module.LocalVectorStore
+SemanticSearchService = semantic_search_module.SemanticSearchService
+RecipeMetadataProvider = semantic_search_module.RecipeMetadataProvider
 InMemoryConversationStore = conversation_store_module.InMemoryConversationStore
 ShoppingService = shopping_module.ShoppingService
 ToolRegistry = tool_executor_module.ToolRegistry
 ToolExecutor = tool_executor_module.ToolExecutor
+Repository = repository_module.Repository
 
 app = FastAPI(
     title="Freezer Lego Meals Python API",
@@ -82,6 +116,12 @@ app.add_middleware(
 
 # Initialize the services as singletons
 ollama_client = OllamaClient()
+embedding_service = OllamaEmbeddingService()
+semantic_search_service = SemanticSearchService(
+    embedding_service,
+    LocalVectorStore(EMBEDDINGS_DIR),
+    RecipeMetadataProvider(Repository()),
+)
 conversation_store = InMemoryConversationStore()
 tool_registry = ToolRegistry(TOOL_REGISTRY_PATH)
 tool_executor = ToolExecutor(tool_registry)
@@ -160,6 +200,25 @@ class AssistantChatRequest(BaseModel):
 class AssistantChatResponse(BaseModel):
     conversationId: str
     response: str
+
+class EmbeddingRequest(BaseModel):
+    text: str
+
+class EmbeddingResponse(BaseModel):
+    model: str
+    dimensions: int
+    embedding: List[float]
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    topK: int = 5
+
+class SemanticSearchResponse(BaseModel):
+    recipeId: str
+    title: str
+    score: float
+    matchedText: str
+    reason: str
 
 @app.get("/")
 def read_root():
@@ -240,6 +299,34 @@ def chat_with_assistant(request: AssistantChatRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling Ollama: {str(e)}")
+
+@app.post("/embeddings", response_model=EmbeddingResponse)
+@app.post("/api/embeddings", response_model=EmbeddingResponse)
+def generate_embedding(request: EmbeddingRequest):
+    """Generate an embedding vector for supplied text."""
+    if not request.text or len(request.text.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    try:
+        result = embedding_service.generate_embedding(request.text)
+        return EmbeddingResponse(model=result.model, dimensions=result.dimensions, embedding=result.embedding)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating embedding: {str(e)}")
+
+@app.post("/api/semantic-search", response_model=List[SemanticSearchResponse])
+def semantic_search(request: SemanticSearchRequest):
+    """Search recipes semantically using the prebuilt local embedding index."""
+    if not request.query or len(request.query.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Query is required")
+
+    try:
+        return [SemanticSearchResponse(**result.__dict__) for result in semantic_search_service.search(request.query, request.topK)]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error running semantic search: {str(e)}")
 
 @app.get("/api/recipes/{id}/details", response_model=GetRecipeDetailsResponse)
 def get_recipe_details(id: int):

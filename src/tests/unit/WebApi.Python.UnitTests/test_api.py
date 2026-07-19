@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 import importlib.util
+from types import SimpleNamespace
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
 APP_PATH = SRC_ROOT / 'api' / 'WebApi.Python' / 'app.py'
@@ -39,6 +40,9 @@ class TestWebAPI:
         assert '/api/assistant/chat' in route_paths
         assert '/api/recipes/search' in route_paths
         assert '/api/shopping/generate' in route_paths
+        assert '/embeddings' in route_paths
+        assert '/api/embeddings' in route_paths
+        assert '/api/semantic-search' in route_paths
 
     def test_health_handler_response(self):
         """Test that health handler returns expected payload."""
@@ -85,6 +89,54 @@ class TestWebAPI:
     def test_chat_with_assistant_rejects_empty_message(self):
         with pytest.raises(HTTPException) as exc:
             app_module.chat_with_assistant(app_module.AssistantChatRequest(message=' '))
+
+        assert exc.value.status_code == 400
+
+    def test_generate_embedding_returns_wrapped_payload(self, monkeypatch):
+        monkeypatch.setattr(
+            app_module.embedding_service,
+            'generate_embedding',
+            lambda _text: type(
+                'EmbeddingResult',
+                (),
+                {'model': 'test-model', 'dimensions': 3, 'embedding': [0.1, 0.2, 0.3]}
+            )()
+        )
+
+        response = app_module.generate_embedding(app_module.EmbeddingRequest(text='Chicken curry'))
+
+        assert response.model == 'test-model'
+        assert response.dimensions == 3
+        assert response.embedding == [0.1, 0.2, 0.3]
+
+    def test_generate_embedding_rejects_empty_text(self):
+        with pytest.raises(HTTPException) as exc:
+            app_module.generate_embedding(app_module.EmbeddingRequest(text=' '))
+
+        assert exc.value.status_code == 400
+
+    def test_semantic_search_returns_results(self, monkeypatch):
+        monkeypatch.setattr(
+            app_module.semantic_search_service,
+            'search',
+            lambda query, top_k: [SimpleNamespace(
+                recipeId='1',
+                title='Spicy Chicken',
+                score=0.94,
+                matchedText='spicy chicken dinner',
+                reason='High semantic similarity between the query and Spicy Chicken.',
+            )]
+        )
+
+        response = app_module.semantic_search(app_module.SemanticSearchRequest(query='something spicy', topK=1))
+
+        assert len(response) == 1
+        assert response[0].recipeId == '1'
+        assert response[0].title == 'Spicy Chicken'
+
+    def test_semantic_search_rejects_empty_query(self):
+        with pytest.raises(HTTPException) as exc:
+            app_module.semantic_search(app_module.SemanticSearchRequest(query=' ', topK=5))
 
         assert exc.value.status_code == 400
 
