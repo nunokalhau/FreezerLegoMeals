@@ -1,117 +1,302 @@
 # 🧊 Freezer Lego Meals
 
-A modular meal-prep system designed to make batch cooking simpler, more flexible, and easier to scale.
+An AI-powered meal planning platform built as a software engineering portfolio project.
 
-## What this project is
+The project combines meal preparation, clean software architecture, multiple backend implementations, local LLMs, semantic search and Retrieval-Augmented Generation (RAG) to simplify freezer meal preparation and weekly meal planning.
 
-This project solves a practical problem: cooking well during the week is often time-consuming, repetitive, and hard to plan. The solution is to separate meals into reusable components such as proteins, starches, vegetables, sauces, and pickles, then freeze them as modular building blocks.
+---
 
-The repository is both a real-world food system and a portfolio project that demonstrates structured thinking, documentation, and gradual product development. It also serves as a learning space for Python, AI, product thinking, and software engineering.
+# What this project is
 
-## What the project does
+Freezer Lego Meals started as a modular freezer meal repository.
 
-- helps users build freezer-friendly meal components
-- supports batch cooking and weekly meal prep
-- encourages modular recipe design instead of one-off meals
-- creates a foundation for future automation and AI features
+It has evolved into a complete AI-assisted Food Operating System designed to help users:
 
-## Who it is for
+- discover recipes
+- plan weekly meals
+- generate shopping lists
+- organize batch cooking
+- interact with recipes using natural language
 
-- people who want a practical weekly meal-prep workflow
-- anyone interested in modular cooking systems
-- developers and recruiters reviewing a thoughtful, well-documented project
+The repository also serves as a software engineering portfolio demonstrating modern backend development, AI integration and clean architecture across multiple technology stacks.
 
-## How the repository is structured
+---
 
-- src/food/ — the main content layer for recipes, meal components, and meal ideas
-- src/scripts/ — automation and tooling scripts (source of truth for AI capabilities)
-- src/tools/ — AI-native interface including ask.py (human-friendly CLI wrapper)
-- tests/ — future validation and quality checks
-- .docs/ — architecture, roadmap, and project documentation
+# Current Features
 
-## What has been built already
+## Meal Planning
 
-- a modular recipe library with reusable components
-- category-based recipe organization
-- recipe templates and contribution guidance
-- a structured roadmap for future phases
-- documentation for batch cooking and freezer-friendly workflows
+- Modular freezer-friendly recipes
+- Batch cooking workflow
+- Weekly meal planning
+- Shopping list generation
+- Ingredient substitutions
+- Serving conversion
+- Batch preparation scheduling
 
-## What is being built next
+## AI
 
-- automation with Python
-- local AI experimentation
-- an AI assistant for repository-aware questions
-- semantic search and retrieval-based assistants
-- later product-facing features such as a website and richer planning tools
+- Local Ollama integration
+- AI Assistant
+- Tool Calling
+- Semantic Search
+- Embeddings
+- Local Vector Store
+- Retrieval-Augmented Generation (RAG)
 
-## Local AI Setup
+## APIs
 
-For instructions on setting up a local AI coding environment using OpenCode and Ollama, see the [local AI setup guide](.docs/local-ai-setup.md).
+Three equivalent backend implementations:
 
-## AI Agent Integration
+- .NET
+- NestJS
+- Python (FastAPI)
 
-AI agents should inspect the tools in `src/scripts/` and execute them directly for maximum compatibility. The `src/tools/ask.py` script is provided as a human-friendly CLI wrapper that demonstrates what capabilities are available.
+Each implementation exposes the same public API and follows the same architectural principles.
 
-## Showcase
+## Frontend
 
-### Sample workflow
+- React + TypeScript frontend
+- AI Assistant interface
+- REST API integration
 
-1. Choose 3 proteins, 2 bases, and 2 vegetables.
-2. Cook everything in one batch session.
-3. Portion and freeze each component separately.
-4. Combine them into different meals across the week.
+---
 
-### Example meal combination
+# Repository Structure
 
-- turkey chili
-- white rice
-- roasted vegetables
-- cilantro crema
+```text
+src/
 
-### Example AI direction
+    ai/
+        Embedding/
+        SemanticSearch/
+        Retrieval/
+        RAG/
+        Memory/
+        VectorStores/
 
-A future assistant could answer prompts such as:
+    orchestration/
+        DotNet/
+        NestJS/
+        Python/
 
-- “What can I cook with tofu and rice?”
-- “Suggest a vegetarian meal from the repository.”
-- “Show me a quick freezer-friendly combo.”
+    api/
+        WebApi.DotNet/
+        WebApi.NestJS/
+        WebApi.Python/
 
-### Example automation direction
+    frontend/
+        React/
 
-A future script could generate:
+    services/
 
-- recipe indexes
-- shopping lists
-- metadata validation
-- simple meal-planning summaries
+    repositories/
 
-## Quick start
+    domain/
 
-1. browse the recipe categories
-2. choose a few components to prep
-3. follow the batch-cooking workflow
-4. combine the frozen blocks into different meals
+    scripts/
 
-## Project goals
+    tools/
+```
 
-- reduce weekly cooking friction
-- make meal prep more structured and repeatable
-- build a strong documentation-first project for learning and portfolio use
-- evolve gradually from recipes to automation and AI
+---
 
-## Automation guidelines
+# AI Architecture
 
-When adding automation, prefer generating structured JSON as the primary artifact.
+The assistant combines multiple AI capabilities.
 
-Why:
-- JSON is easy for Python scripts, future APIs, and assistants to consume.
-- It keeps the project interoperable instead of locking automation to one presentation format.
-- Markdown can still be generated from the JSON later for human-readable output in the repository.
+```text
+User
 
-Recommended pattern:
-1. Parse or scan repository content.
-2. Generate JSON with structured metadata.
-3. Optionally render a Markdown view from that JSON for readability.
+↓
 
-This keeps the repository both human-friendly and machine-friendly.
+Assistant API
+
+↓
+
+Orchestration
+
+↓
+
+Meal Planning Agent
+
+↓
+
+Semantic Search
+Tool Executor
+Retrieval
+
+↓
+
+Prompt Builder
+
+↓
+
+Ollama
+
+↓
+
+Answer
+```
+
+Current capabilities include:
+
+- Semantic Search
+- Tool Calling
+- RAG
+- Local LLM execution
+
+Planned capabilities include:
+
+- Conversation Memory
+- Redis-backed memory
+- MCP
+- Multiple specialized agents
+
+---
+
+# Technologies
+
+Backend
+
+- .NET
+- C#
+- ASP.NET Core
+
+- NestJS
+- TypeScript
+
+- Python
+- FastAPI
+
+AI
+
+- Ollama
+- Embeddings
+- Semantic Search
+- RAG
+- Tool Calling
+
+Frontend
+
+- React
+- TypeScript
+
+Testing
+
+- Unit Tests
+- Integration Tests
+
+---
+
+# Current AI Workflow
+
+Example request:
+
+> "Plan my dinners for next week."
+
+The assistant may perform:
+
+```text
+User Request
+
+↓
+
+Semantic Search
+
+↓
+
+Retrieve Recipes
+
+↓
+
+Execute Planning Tools
+
+↓
+
+Generate Shopping List
+
+↓
+
+RAG
+
+↓
+
+Final Response
+```
+
+---
+
+# Goals
+
+The project aims to:
+
+- simplify weekly meal planning
+- reduce food waste
+- reduce decision fatigue
+- automate repetitive cooking tasks
+- demonstrate modern software engineering
+- demonstrate practical AI integration
+- serve as a long-term portfolio project
+
+---
+
+# Roadmap
+
+Completed
+
+- Modular recipes
+- Automation scripts
+- Three backend implementations
+- Tool Calling
+- AI Assistant
+- Embeddings
+- Semantic Search
+- RAG
+- React frontend
+
+Next
+
+- Orchestration layer
+- Specialized AI agents
+- Conversation memory
+- Redis
+- MCP
+- ChromaDB
+- User accounts
+- Pantry management
+- Nutrition tracking
+
+---
+
+# Running the Project
+
+Each backend includes its own README describing:
+
+- installation
+- dependencies
+- running locally
+- Swagger
+- testing
+
+Refer to the documentation inside:
+
+- WebApi.DotNet
+- WebApi.NestJS
+- WebApi.Python
+
+---
+
+# Philosophy
+
+This project is intentionally iterative.
+
+Every new feature should:
+
+- solve a real problem
+- remain well documented
+- be implemented consistently across .NET, NestJS and Python
+- include tests
+- keep the architecture clean
+
+The repository is both the product and the learning journey.
