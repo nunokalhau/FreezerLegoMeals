@@ -21,11 +21,17 @@ class OllamaClientConfig:
         )
 
 
+class OllamaChatResult:
+    def __init__(self, content: str, tool_calls: Optional[list[dict[str, Any]]] = None):
+        self.content = content
+        self.tool_calls = tool_calls or []
+
+
 class OllamaClient:
     def __init__(self, config: Optional[OllamaClientConfig] = None):
         self.config = config or OllamaClientConfig.from_environment()
 
-    def chat(self, model: Optional[str], messages: list[Any]) -> str:
+    def chat(self, model: Optional[str], messages: list[Any], tools: Optional[list[dict[str, Any]]] = None) -> OllamaChatResult:
         if not messages:
             raise ValueError("At least one chat message is required")
 
@@ -36,6 +42,7 @@ class OllamaClient:
         payload = {
             "model": selected_model,
             "messages": [self._to_ollama_message(message) for message in messages],
+            "tools": [self._to_ollama_tool(tool) for tool in (tools or [])],
             "stream": False,
         }
 
@@ -52,7 +59,18 @@ class OllamaClient:
         except HTTPError as error:
             raise RuntimeError(f"Ollama chat request failed with status {error.code}") from error
 
-        return response_body.get("message", {}).get("content", "")
+        message = response_body.get("message") or {}
+        tool_calls = []
+        for tool_call in message.get("tool_calls") or []:
+            function = tool_call.get("function") or {}
+            name = function.get("name")
+            if name:
+                tool_calls.append({
+                    "name": name,
+                    "arguments": function.get("arguments") or {},
+                })
+
+        return OllamaChatResult(message.get("content") or "", tool_calls)
 
     def _to_ollama_message(self, message: Any) -> dict[str, str]:
         role = getattr(message, "role", None) if not isinstance(message, dict) else message.get("role")
@@ -64,4 +82,26 @@ class OllamaClient:
         return {
             "role": str(role).lower(),
             "content": str(content),
+        }
+
+    def _to_ollama_tool(self, tool: dict[str, Any]) -> dict[str, Any]:
+        properties = {
+            str(parameter).lstrip("-").replace("-", "_"): {
+                "type": "string",
+                "description": f"Parameter for {tool.get('name')}",
+            }
+            for parameter in tool.get("parameters", [])
+        }
+
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.get("name"),
+                "description": tool.get("description", ""),
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": [],
+                },
+            },
         }

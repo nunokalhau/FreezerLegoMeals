@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
-export type ConversationRole = 'System' | 'User' | 'Assistant';
+export type ConversationRole = 'System' | 'User' | 'Assistant' | 'Tool';
 
 export interface ConversationMessage {
   role: ConversationRole;

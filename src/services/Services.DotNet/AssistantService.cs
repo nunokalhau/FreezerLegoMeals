@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace Services.DotNet;
 
@@ -6,16 +9,22 @@ public class AssistantService : IAssistantService
 {
     private readonly IOllamaClient _ollamaClient;
     private readonly IConversationStore _conversationStore;
+    private readonly IToolExecutor _toolExecutor;
+    private readonly ILogger<AssistantService> _logger;
     private readonly AssistantOptions _options;
 
     public AssistantService(
         IOllamaClient ollamaClient,
         IConversationStore conversationStore,
-        IOptions<AssistantOptions> options)
+        IToolExecutor toolExecutor,
+        IOptions<AssistantOptions> options,
+        ILogger<AssistantService> logger)
     {
         _ollamaClient = ollamaClient ?? throw new ArgumentNullException(nameof(ollamaClient));
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
+        _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<AssistantChatResult> ChatAsync(string message, string? conversationId = null, CancellationToken cancellationToken = default)
@@ -32,14 +41,108 @@ public class AssistantService : IAssistantService
         };
         messages.AddRange(conversation.Messages);
         messages.Add(currentUserMessage);
+        var messagesToPersist = new List<ConversationMessage> { currentUserMessage };
+        var tools = _toolExecutor.GetTools();
+        var totalToolCalls = 0;
+        var startedAt = Stopwatch.StartNew();
 
-        var assistantResponse = await _ollamaClient.ChatAsync(null, messages, cancellationToken);
+        while (true)
+        {
+            if (HasExceededExecutionLimits(messages, startedAt, out var limitError))
+            {
+                return PersistAndReturnError(conversation.ConversationId, messagesToPersist, limitError);
+            }
 
-        _conversationStore.AppendMessages(conversation.ConversationId, [
-            currentUserMessage,
-            new ConversationMessage(ConversationRole.Assistant, assistantResponse, DateTimeOffset.UtcNow)
-        ]);
+            var assistantResult = await _ollamaClient.ChatAsync(null, messages, tools, cancellationToken);
+            if (!assistantResult.HasToolCalls)
+            {
+                var finalMessage = new ConversationMessage(ConversationRole.Assistant, assistantResult.Content, DateTimeOffset.UtcNow);
+                messagesToPersist.Add(finalMessage);
+                _conversationStore.AppendMessages(conversation.ConversationId, messagesToPersist);
+                _logger.LogInformation("Assistant request completed with {TotalToolCalls} tool calls", totalToolCalls);
+                return new AssistantChatResult(conversation.ConversationId, assistantResult.Content);
+            }
 
-        return new AssistantChatResult(conversation.ConversationId, assistantResponse);
+            if (!string.IsNullOrWhiteSpace(assistantResult.Content))
+            {
+                var assistantMessage = new ConversationMessage(ConversationRole.Assistant, assistantResult.Content, DateTimeOffset.UtcNow);
+                messages.Add(assistantMessage);
+                messagesToPersist.Add(assistantMessage);
+            }
+
+            foreach (var toolCall in assistantResult.ToolCalls)
+            {
+                if (totalToolCalls >= _options.MaximumToolCallsPerRequest)
+                {
+                    return PersistAndReturnError(
+                        conversation.ConversationId,
+                        messagesToPersist,
+                        $"The request could not be completed because it exceeded the maximum tool call limit of {_options.MaximumToolCallsPerRequest}.");
+                }
+
+                var toolStartedAt = Stopwatch.StartNew();
+                totalToolCalls++;
+                _logger.LogInformation("Assistant requested tool {ToolName} with arguments {ToolArguments}", toolCall.Name, JsonSerializer.Serialize(toolCall.Arguments));
+
+                ToolExecutionResult toolResult;
+                try
+                {
+                    toolResult = await _toolExecutor.ExecuteAsync(toolCall.Name, toolCall.Arguments, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    toolResult = new ToolExecutionResult
+                    {
+                        Success = false,
+                        Tool = toolCall.Name,
+                        Error = ex.Message
+                    };
+                }
+                finally
+                {
+                    toolStartedAt.Stop();
+                }
+
+                _logger.LogInformation(
+                    "Assistant tool {ToolName} finished in {ExecutionDurationMs}ms with success={ToolSuccess}",
+                    toolResult.Tool,
+                    toolStartedAt.ElapsedMilliseconds,
+                    toolResult.Success);
+
+                var toolMessage = new ConversationMessage(
+                    ConversationRole.Tool,
+                    JsonSerializer.Serialize(toolResult),
+                    DateTimeOffset.UtcNow);
+                messages.Add(toolMessage);
+                messagesToPersist.Add(toolMessage);
+            }
+        }
+    }
+
+    private bool HasExceededExecutionLimits(IReadOnlyList<ConversationMessage> messages, Stopwatch startedAt, out string error)
+    {
+        if (_options.MaximumConversationSize > 0 && messages.Count > _options.MaximumConversationSize)
+        {
+            error = $"The request could not be completed because the conversation exceeded the maximum size of {_options.MaximumConversationSize} messages.";
+            return true;
+        }
+
+        if (_options.MaximumExecutionTime > TimeSpan.Zero && startedAt.Elapsed > _options.MaximumExecutionTime)
+        {
+            error = $"The request could not be completed because it exceeded the maximum execution time of {_options.MaximumExecutionTime}.";
+            return true;
+        }
+
+        error = string.Empty;
+        return false;
+    }
+
+    private AssistantChatResult PersistAndReturnError(string conversationId, List<ConversationMessage> messagesToPersist, string error)
+    {
+        var errorMessage = new ConversationMessage(ConversationRole.Assistant, error, DateTimeOffset.UtcNow);
+        messagesToPersist.Add(errorMessage);
+        _conversationStore.AppendMessages(conversationId, messagesToPersist);
+        _logger.LogWarning("Assistant request failed gracefully: {AssistantError}", error);
+        return new AssistantChatResult(conversationId, error);
     }
 }

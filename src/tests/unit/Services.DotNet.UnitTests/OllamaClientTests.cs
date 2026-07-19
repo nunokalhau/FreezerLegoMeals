@@ -40,10 +40,11 @@ public class OllamaClientTests
         var result = await client.ChatAsync(null, [
             new ConversationMessage(ConversationRole.System, "system prompt", DateTimeOffset.UtcNow),
             new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)
-        ]);
+        ], [new ToolDefinition { Name = "example_tool", Description = "Example tool", Parameters = ["--message"] }]);
 
         // Assert
-        Assert.Equal("Hello from Ollama", result);
+        Assert.Equal("Hello from Ollama", result.Content);
+        Assert.Empty(result.ToolCalls);
         Assert.Equal(HttpMethod.Post, handler.Request?.Method);
         Assert.Equal("http://localhost:11434/api/chat", handler.Request?.RequestUri?.ToString());
 
@@ -55,6 +56,7 @@ public class OllamaClientTests
         Assert.Equal("system prompt", root.GetProperty("messages")[0].GetProperty("content").GetString());
         Assert.Equal("user", root.GetProperty("messages")[1].GetProperty("role").GetString());
         Assert.Equal("Hello", root.GetProperty("messages")[1].GetProperty("content").GetString());
+        Assert.Equal("example_tool", root.GetProperty("tools")[0].GetProperty("function").GetProperty("name").GetString());
     }
 
     [Fact]
@@ -77,7 +79,7 @@ public class OllamaClientTests
             Options.Create(new OllamaOptions { DefaultModel = "default-model" }));
 
         // Act
-        await client.ChatAsync("custom-model", [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)]);
+        await client.ChatAsync("custom-model", [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], []);
 
         // Assert
         using var document = JsonDocument.Parse(handler.RequestBody!);
@@ -93,7 +95,46 @@ public class OllamaClientTests
             Options.Create(new OllamaOptions()));
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => client.ChatAsync("llama3.2", []));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.ChatAsync("llama3.2", [], []));
+    }
+
+    [Fact]
+    public async Task ChatAsync_ReturnsNativeToolCallsFromOllamaResponse()
+    {
+        // Arrange
+        var handler = new CapturingHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new
+            {
+                message = new
+                {
+                    role = "assistant",
+                    content = "",
+                    tool_calls = new[]
+                    {
+                        new
+                        {
+                            function = new
+                            {
+                                name = "example_tool",
+                                arguments = new { message = "hello" }
+                            }
+                        }
+                    }
+                }
+            })
+        });
+        var client = new OllamaClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://localhost:11434") },
+            Options.Create(new OllamaOptions { DefaultModel = "default-model" }));
+
+        // Act
+        var result = await client.ChatAsync(null, [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], []);
+
+        // Assert
+        Assert.Single(result.ToolCalls);
+        Assert.Equal("example_tool", result.ToolCalls[0].Name);
+        Assert.Equal("hello", result.ToolCalls[0].Arguments["message"]?.ToString());
     }
 
     private sealed class CapturingHttpMessageHandler : HttpMessageHandler

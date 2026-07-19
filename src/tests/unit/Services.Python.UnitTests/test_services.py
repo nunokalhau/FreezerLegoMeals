@@ -48,6 +48,7 @@ sys.modules['shopping_service'] = shopping_module
 
 import pytest
 AssistantService = assistant_module.AssistantService
+AssistantOptions = assistant_module.AssistantOptions
 MealService = meal_module.MealService
 OllamaClient = ollama_module.OllamaClient
 OllamaClientConfig = ollama_module.OllamaClientConfig
@@ -59,9 +60,10 @@ class TestAssistantService:
 
     def test_chat_delegates_to_ollama_client(self):
         ollama_client = mock.Mock()
-        ollama_client.chat.return_value = 'assistant response'
+        ollama_client.chat.return_value = FakeOllamaResult('assistant response')
         conversation_store = FakeConversationStore()
-        service = AssistantService(ollama_client, conversation_store, 'system prompt')
+        tool_executor = FakeToolExecutor()
+        service = AssistantService(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
 
         result = service.chat('Hello')
 
@@ -74,11 +76,89 @@ class TestAssistantService:
 
     def test_initialization_requires_ollama_client(self):
         with pytest.raises(ValueError):
-            AssistantService(None, mock.Mock())
+            AssistantService(None, mock.Mock(), mock.Mock())
 
     def test_initialization_requires_conversation_store(self):
         with pytest.raises(ValueError):
-            AssistantService(mock.Mock(), None)
+            AssistantService(mock.Mock(), None, mock.Mock())
+
+    def test_chat_executes_one_tool_call_and_returns_final_response(self):
+        ollama_client = mock.Mock()
+        ollama_client.chat.side_effect = [
+            FakeOllamaResult('', [{'name': 'example_tool', 'arguments': {'message': 'hello'}}]),
+            FakeOllamaResult('done'),
+        ]
+        tool_executor = FakeToolExecutor()
+        conversation_store = FakeConversationStore()
+        service = AssistantService(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
+
+        result = service.chat('Use tool')
+
+        assert result.response == 'done'
+        assert tool_executor.calls == [('example_tool', {'message': 'hello'})]
+        assert any(message.role == 'Tool' for message in conversation_store.messages)
+
+    def test_chat_executes_multiple_sequential_tool_calls(self):
+        ollama_client = mock.Mock()
+        ollama_client.chat.side_effect = [
+            FakeOllamaResult('', [{'name': 'example_tool', 'arguments': {}}]),
+            FakeOllamaResult('', [{'name': 'second_tool', 'arguments': {}}]),
+            FakeOllamaResult('complete'),
+        ]
+        tool_executor = FakeToolExecutor()
+        service = AssistantService(ollama_client, FakeConversationStore(), tool_executor, AssistantOptions(system_prompt='system prompt'))
+
+        result = service.chat('Use tools')
+
+        assert result.response == 'complete'
+        assert [call[0] for call in tool_executor.calls] == ['example_tool', 'second_tool']
+
+    def test_chat_appends_tool_failure_and_returns_final_response(self):
+        ollama_client = mock.Mock()
+        ollama_client.chat.side_effect = [
+            FakeOllamaResult('', [{'name': 'example_tool', 'arguments': {}}]),
+            FakeOllamaResult('tool failed gracefully'),
+        ]
+        tool_executor = FakeToolExecutor(success=False)
+        conversation_store = FakeConversationStore()
+        service = AssistantService(ollama_client, conversation_store, tool_executor, AssistantOptions(system_prompt='system prompt'))
+
+        result = service.chat('Use failing tool')
+
+        assert result.response == 'tool failed gracefully'
+        assert 'failed' in next(message.content for message in conversation_store.messages if message.role == 'Tool')
+
+    def test_chat_handles_invalid_tool(self):
+        ollama_client = mock.Mock()
+        ollama_client.chat.side_effect = [
+            FakeOllamaResult('', [{'name': 'missing_tool', 'arguments': {}}]),
+            FakeOllamaResult('invalid tool handled'),
+        ]
+        tool_executor = FakeToolExecutor(raise_on_execute=True)
+        service = AssistantService(ollama_client, FakeConversationStore(), tool_executor, AssistantOptions(system_prompt='system prompt'))
+
+        result = service.chat('Use missing tool')
+
+        assert result.response == 'invalid tool handled'
+
+    def test_chat_returns_graceful_error_when_tool_limit_exceeded(self):
+        ollama_client = mock.Mock()
+        ollama_client.chat.return_value = FakeOllamaResult('', [
+            {'name': 'example_tool', 'arguments': {}},
+            {'name': 'second_tool', 'arguments': {}},
+        ])
+        tool_executor = FakeToolExecutor()
+        service = AssistantService(
+            ollama_client,
+            FakeConversationStore(),
+            tool_executor,
+            AssistantOptions(system_prompt='system prompt', maximum_tool_calls_per_request=1),
+        )
+
+        result = service.chat('Loop')
+
+        assert 'maximum tool call limit' in result.response
+        assert len(tool_executor.calls) == 1
 
 
 class TestOllamaClient:
@@ -115,7 +195,8 @@ class TestOllamaClient:
             {'role': 'User', 'content': 'Hello'},
         ])
 
-        assert result == 'Hello from Ollama'
+        assert result.content == 'Hello from Ollama'
+        assert result.tool_calls == []
         assert captured['url'] == 'http://localhost:11434/api/chat'
         assert captured['timeout'] == 30.0
         body = json.loads(captured['body'].decode('utf-8'))
@@ -131,6 +212,7 @@ class TestOllamaClient:
                     'content': 'Hello',
                 }
             ],
+            'tools': [],
             'stream': False,
         }
 
@@ -163,7 +245,25 @@ class TestOllamaClient:
         client = OllamaClient(OllamaClientConfig())
 
         with pytest.raises(ValueError):
-            client.chat('llama3.2', ' ')
+            client.chat('llama3.2', [])
+
+    def test_chat_returns_native_tool_calls(self, monkeypatch):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return b'{"message":{"content":"","tool_calls":[{"function":{"name":"example_tool","arguments":{"message":"hello"}}}]}}'
+
+        monkeypatch.setattr(ollama_module.request, 'urlopen', lambda _request, timeout=None: FakeResponse())
+        client = OllamaClient(OllamaClientConfig(default_model='default-model'))
+
+        result = client.chat(None, [{'role': 'User', 'content': 'Hello'}])
+
+        assert result.tool_calls == [{'name': 'example_tool', 'arguments': {'message': 'hello'}}]
 
 
 class TestMealService:
@@ -286,6 +386,37 @@ class FakeConversationStore:
 
     def append_messages(self, conversation_id, messages):
         self.messages.extend(messages)
+
+
+class FakeOllamaResult:
+    def __init__(self, content, tool_calls=None):
+        self.content = content
+        self.tool_calls = tool_calls or []
+
+
+class FakeToolExecutor:
+    def __init__(self, success=True, raise_on_execute=False):
+        self.success = success
+        self.raise_on_execute = raise_on_execute
+        self.calls = []
+
+    def get_tools(self):
+        return [
+            {'name': 'example_tool', 'description': 'Example tool'},
+            {'name': 'second_tool', 'description': 'Second tool'},
+        ]
+
+    def execute(self, tool_name, parameters=None):
+        if self.raise_on_execute:
+            raise ValueError(f'Unknown tool: {tool_name}')
+
+        self.calls.append((tool_name, parameters or {}))
+        return {
+            'success': self.success,
+            'tool': tool_name,
+            'output': {'ok': True} if self.success else None,
+            'error': None if self.success else 'failed',
+        }
 
 
 class TestShoppingService:

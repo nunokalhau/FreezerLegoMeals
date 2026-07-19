@@ -4,5 +4,6 @@ public enum ConversationRole
 {
     System,
     User,
-    Assistant
+    Assistant,
+    Tool
 }

@@ -24,9 +24,9 @@ describe('OllamaClient', () => {
     const result = await client.chat(undefined, [
       { role: 'System', content: 'system prompt', timestamp: new Date() },
       { role: 'User', content: 'Hello', timestamp: new Date() },
-    ]);
+    ], [{ name: 'example_tool', description: 'Example tool', parameters: ['--message'] }]);
 
-    expect(result).toBe('Hello from Ollama');
+    expect(result).toEqual({ content: 'Hello from Ollama', toolCalls: [] });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect((url as URL).toString()).toBe('http://localhost:11434/api/chat');
@@ -41,6 +41,22 @@ describe('OllamaClient', () => {
         {
           role: 'user',
           content: 'Hello',
+        },
+      ],
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'example_tool',
+            description: 'Example tool',
+            parameters: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'Parameter for example_tool' },
+              },
+              required: [],
+            },
+          },
         },
       ],
       stream: false,
@@ -58,7 +74,7 @@ describe('OllamaClient', () => {
       timeoutMs: 30000,
     });
 
-    await client.chat('custom-model', [{ role: 'User', content: 'Hello', timestamp: new Date() }]);
+    await client.chat('custom-model', [{ role: 'User', content: 'Hello', timestamp: new Date() }], []);
 
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(init?.body as string).model).toBe('custom-model');
@@ -72,5 +88,33 @@ describe('OllamaClient', () => {
     });
 
     await expect(client.chat('llama3.2', [])).rejects.toThrow('At least one chat message is required');
+  });
+
+  it('returns native tool calls from Ollama responses', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: {
+          content: '',
+          tool_calls: [
+            {
+              function: {
+                name: 'example_tool',
+                arguments: { message: 'hello' },
+              },
+            },
+          ],
+        },
+      }),
+    } as Response);
+    const client = new OllamaClient({
+      baseUrl: 'http://localhost:11434',
+      defaultModel: 'llama3.2',
+      timeoutMs: 30000,
+    });
+
+    const result = await client.chat(undefined, [{ role: 'User', content: 'Hello', timestamp: new Date() }], []);
+
+    expect(result.toolCalls).toEqual([{ name: 'example_tool', arguments: { message: 'hello' } }]);
   });
 });

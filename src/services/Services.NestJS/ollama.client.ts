@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { OllamaClientInterface } from './ollama-client.interface';
 import { ConversationMessage, ConversationRole } from './conversation-store';
+import { OllamaChatResult } from './ollama-chat-result';
 import { OLLAMA_OPTIONS, OllamaOptions } from './ollama-options';
+import { ToolDefinition } from './tool-registry';
 
 @Injectable()
 export class OllamaClient implements OllamaClientInterface {
@@ -10,7 +12,7 @@ export class OllamaClient implements OllamaClientInterface {
     private readonly options: OllamaOptions
   ) {}
 
-  async chat(model: string | undefined, messages: ConversationMessage[]): Promise<string> {
+  async chat(model: string | undefined, messages: ConversationMessage[], tools: ToolDefinition[] = []): Promise<OllamaChatResult> {
     if (!Array.isArray(messages) || messages.length === 0) {
       throw new Error('At least one chat message is required');
     }
@@ -35,6 +37,7 @@ export class OllamaClient implements OllamaClientInterface {
             role: this.toOllamaRole(message.role),
             content: message.content,
           })),
+          tools: tools.map((tool) => this.toOllamaTool(tool)),
           stream: false,
         }),
         signal: controller.signal,
@@ -45,7 +48,15 @@ export class OllamaClient implements OllamaClientInterface {
       }
 
       const data = await response.json();
-      return data?.message?.content || '';
+      return {
+        content: data?.message?.content || '',
+        toolCalls: (data?.message?.tool_calls || [])
+          .filter((toolCall) => toolCall?.function?.name)
+          .map((toolCall) => ({
+            name: toolCall.function.name,
+            arguments: toolCall.function.arguments || {},
+          })),
+      };
     } finally {
       clearTimeout(timeout);
     }
@@ -53,5 +64,27 @@ export class OllamaClient implements OllamaClientInterface {
 
   private toOllamaRole(role: ConversationRole): string {
     return role.toLowerCase();
+  }
+
+  private toOllamaTool(tool: ToolDefinition) {
+    const properties = Object.fromEntries(
+      (tool.parameters || []).map((parameter) => [
+        parameter.replace(/^-+/, '').replace(/-/g, '_'),
+        { type: 'string', description: `Parameter for ${tool.name}` },
+      ])
+    );
+
+    return {
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          type: 'object',
+          properties,
+          required: [],
+        },
+      },
+    };
   }
 }

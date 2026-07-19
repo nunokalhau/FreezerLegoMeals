@@ -15,12 +15,15 @@ MEAL_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "meal_service.py
 OLLAMA_CLIENT_PATH = SRC_ROOT / "services" / "Services.Python" / "ollama_client.py"
 CONVERSATION_STORE_PATH = SRC_ROOT / "services" / "Services.Python" / "conversation_store.py"
 SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
+TOOL_EXECUTOR_PATH = SRC_ROOT / "services" / "Services.Python" / "tool_executor.py"
+TOOL_REGISTRY_PATH = SRC_ROOT / "tools" / "tool_registry.json"
 
 assistant_spec = importlib.util.spec_from_file_location("services_python_assistant", ASSISTANT_SERVICE_PATH)
 meal_spec = importlib.util.spec_from_file_location("services_python_meal", MEAL_SERVICE_PATH)
 ollama_spec = importlib.util.spec_from_file_location("services_python_ollama", OLLAMA_CLIENT_PATH)
 conversation_store_spec = importlib.util.spec_from_file_location("services_python_conversation_store", CONVERSATION_STORE_PATH)
 shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
+tool_executor_spec = importlib.util.spec_from_file_location("services_python_tool_executor", TOOL_EXECUTOR_PATH)
 
 if assistant_spec is None or assistant_spec.loader is None:
     raise ImportError(f"Unable to load AssistantService module from {ASSISTANT_SERVICE_PATH}")
@@ -32,6 +35,8 @@ if conversation_store_spec is None or conversation_store_spec.loader is None:
     raise ImportError(f"Unable to load ConversationStore module from {CONVERSATION_STORE_PATH}")
 if shopping_spec is None or shopping_spec.loader is None:
     raise ImportError(f"Unable to load ShoppingService module from {SHOPPING_SERVICE_PATH}")
+if tool_executor_spec is None or tool_executor_spec.loader is None:
+    raise ImportError(f"Unable to load ToolExecutor module from {TOOL_EXECUTOR_PATH}")
 
 assistant_module = importlib.util.module_from_spec(assistant_spec)
 sys.modules[assistant_spec.name] = assistant_module
@@ -48,12 +53,17 @@ conversation_store_spec.loader.exec_module(conversation_store_module)
 shopping_module = importlib.util.module_from_spec(shopping_spec)
 sys.modules[shopping_spec.name] = shopping_module
 shopping_spec.loader.exec_module(shopping_module)
+tool_executor_module = importlib.util.module_from_spec(tool_executor_spec)
+sys.modules[tool_executor_spec.name] = tool_executor_module
+tool_executor_spec.loader.exec_module(tool_executor_module)
 
 AssistantService = assistant_module.AssistantService
 MealService = meal_module.MealService
 OllamaClient = ollama_module.OllamaClient
 InMemoryConversationStore = conversation_store_module.InMemoryConversationStore
 ShoppingService = shopping_module.ShoppingService
+ToolRegistry = tool_executor_module.ToolRegistry
+ToolExecutor = tool_executor_module.ToolExecutor
 
 app = FastAPI(
     title="Freezer Lego Meals Python API",
@@ -73,7 +83,9 @@ app.add_middleware(
 # Initialize the services as singletons
 ollama_client = OllamaClient()
 conversation_store = InMemoryConversationStore()
-assistant_service = AssistantService(ollama_client, conversation_store)
+tool_registry = ToolRegistry(TOOL_REGISTRY_PATH)
+tool_executor = ToolExecutor(tool_registry)
+assistant_service = AssistantService(ollama_client, conversation_store, tool_executor)
 meal_service = MealService()
 shopping_service = ShoppingService()
 
