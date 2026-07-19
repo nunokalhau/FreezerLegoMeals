@@ -13,6 +13,7 @@ SRC_ROOT = Path(__file__).resolve().parents[3]
 APP_PATH = SRC_ROOT / 'api' / 'WebApi.Python' / 'app.py'
 
 import pytest
+from fastapi import HTTPException
 
 app_spec = importlib.util.spec_from_file_location('webapi_python_app', APP_PATH)
 if app_spec is None or app_spec.loader is None:
@@ -43,6 +44,44 @@ class TestWebAPI:
         payload = app_module.health_check()
         assert payload.status == 'healthy'
         assert payload.service == 'WebApi.Python'
+
+    def test_search_recipes_rejects_empty_ingredients(self):
+        with pytest.raises(HTTPException) as exc:
+            app_module.search_recipes(app_module.RecipeSearchRequest(ingredients=[]))
+
+        assert exc.value.status_code == 400
+
+    def test_search_recipes_returns_wrapped_payload(self, monkeypatch):
+        monkeypatch.setattr(
+            app_module.meal_service,
+            'search_recipes_by_ingredients',
+            lambda _ingredients: [{"id": 1, "name": "Chicken Rice"}]
+        )
+
+        response = app_module.search_recipes(app_module.RecipeSearchRequest(ingredients=['chicken']))
+
+        assert response.total_recipes_found == 1
+        assert response.recipes[0]['name'] == 'Chicken Rice'
+
+    def test_generate_shopping_list_rejects_invalid_scale_factor(self):
+        with pytest.raises(HTTPException) as exc:
+            app_module.generate_shopping_list(
+                app_module.GenerateShoppingListRequest(
+                    recipe_identifiers=['Chicken Rice'],
+                    scale_factor=0,
+                    group_by_category=True,
+                )
+            )
+
+        assert exc.value.status_code == 400
+
+    def test_get_recipe_info_returns_error_response_when_missing(self, monkeypatch):
+        monkeypatch.setattr(app_module.shopping_service, 'get_recipe_info', lambda _identifier: None)
+
+        with pytest.raises(HTTPException) as exc:
+            app_module.get_recipe_info('missing')
+
+        assert exc.value.status_code == 500
 
 
 def test_basic_web_structure():

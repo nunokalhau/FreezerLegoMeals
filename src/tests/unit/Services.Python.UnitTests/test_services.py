@@ -232,6 +232,40 @@ class TestShoppingService:
         result = service.generate_shopping_list(["Chicken Curry"], scale_factor=2.0)
         
         assert result["scale_factor"] == 2.0
+
+    def test_get_recipe_info_success(self):
+        """Test get_recipe_info returns mapped recipe info."""
+        mock_repo_instance = mock.Mock()
+        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
+        mock_repo_instance.get_recipe_details.return_value = [
+            {
+                "id": 1,
+                "name": "Chicken Curry",
+                "servings": 2,
+                "time_to_prepare": 30,
+            }
+        ]
+
+        service = ShoppingService()
+        service.repository = mock_repo_instance
+
+        info = service.get_recipe_info("Chicken Curry")
+
+        assert info is not None
+        assert info["id"] == 1
+        assert info["name"] == "Chicken Curry"
+
+    def test_get_recipe_info_not_found(self):
+        """Test get_recipe_info returns None when recipe is not found."""
+        mock_repo_instance = mock.Mock()
+        mock_repo_instance.search_recipes_by_ingredients.return_value = []
+
+        service = ShoppingService()
+        service.repository = mock_repo_instance
+
+        info = service.get_recipe_info("Missing Recipe")
+
+        assert info is None
         
     def test_categorize_ingredients(self):
         """Test _categorize_ingredients helper method."""

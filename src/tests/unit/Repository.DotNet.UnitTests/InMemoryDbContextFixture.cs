@@ -13,8 +13,9 @@ public class InMemoryDbContextFixture : IDisposable
 
     public InMemoryDbContextFixture()
     {
+        var databaseName = $"TestDatabase_{Guid.NewGuid()}";
         var options = new DbContextOptionsBuilder<FreezerLegoMealsContext>()
-            .UseInMemoryDatabase(databaseName: "TestDatabase")
+            .UseInMemoryDatabase(databaseName: databaseName)
             .Options;
             
         Context = new FreezerLegoMealsContext(options);
