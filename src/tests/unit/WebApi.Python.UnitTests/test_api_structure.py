@@ -8,11 +8,27 @@ import sys
 import os
 import unittest.mock as mock
 from pathlib import Path
+import importlib.util
 
-# Set up path to include project source
-test_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(test_dir, '..', '..', 'src')
-sys.path.insert(0, os.path.abspath(src_dir))
+SRC_ROOT = Path(__file__).resolve().parents[3]
+MEAL_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'meal_service.py'
+SHOPPING_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'shopping_service.py'
+
+meal_spec = importlib.util.spec_from_file_location('meal_service', MEAL_SERVICE_PATH)
+shopping_spec = importlib.util.spec_from_file_location('shopping_service', SHOPPING_SERVICE_PATH)
+
+if meal_spec is None or meal_spec.loader is None:
+    raise ImportError(f'Unable to load meal_service from {MEAL_SERVICE_PATH}')
+if shopping_spec is None or shopping_spec.loader is None:
+    raise ImportError(f'Unable to load shopping_service from {SHOPPING_SERVICE_PATH}')
+
+meal_module = importlib.util.module_from_spec(meal_spec)
+meal_spec.loader.exec_module(meal_module)
+shopping_module = importlib.util.module_from_spec(shopping_spec)
+shopping_spec.loader.exec_module(shopping_module)
+
+sys.modules['meal_service'] = meal_module
+sys.modules['shopping_service'] = shopping_module
 
 import pytest
 
@@ -34,40 +50,25 @@ class TestAPIIntegration:
     
     def test_services_integration(self):
         """Test that API can integrate with services layer."""
-        try:
-            # These imports would exist if the project structure is correct
-            from services.Services.Python.meal_service import MealService
-            from services.Services.Python.shopping_service import ShoppingService
-            
-            # Test basic instantiation 
-            meal_service = MealService()
-            shopping_service = ShoppingService()
-            
-            assert meal_service is not None
-            assert shopping_service is not None
-            
-        except ImportError:
-            # If imports fail, that's expected for this project analysis
-            # but the test structure is still valid
-            assert True  # Test passes by default
+        MealService = meal_module.MealService
+        ShoppingService = shopping_module.ShoppingService
+
+        meal_service = MealService()
+        shopping_service = ShoppingService()
+
+        assert meal_service is not None
+        assert shopping_service is not None
     
     def test_service_layer_integration(self):
         """Test basic integration between API and service layers."""
-        try:
-            # Import main components  
-            from services.Services.Python.meal_service import MealService
-            from services.Services.Python.shopping_service import ShoppingService
-            
-            # Basic functionality test  
-            meal_service = MealService()
-            shopping_service = ShoppingService()
-            
-            assert hasattr(meal_service, 'find_meals_with_ingredients')
-            assert hasattr(shopping_service, 'generate_shopping_list')
-            
-        except Exception:
-            # Expected behavior in this analysis
-            assert True
+        MealService = meal_module.MealService
+        ShoppingService = shopping_module.ShoppingService
+
+        meal_service = MealService()
+        shopping_service = ShoppingService()
+
+        assert hasattr(meal_service, 'find_meals_with_ingredients')
+        assert hasattr(shopping_service, 'generate_shopping_list')
 
 
 def test_test_structure():
@@ -82,7 +83,7 @@ class TestComponentMocking:
     
     def test_mock_service_creation(self):
         """Test that service mocking works in tests."""
-        with mock.patch('services.Services.Python.meal_service.Repository') as mock_repo:
+        with mock.patch('meal_service.Repository') as mock_repo:
             # This should work even if there are no real imports
             assert True
             

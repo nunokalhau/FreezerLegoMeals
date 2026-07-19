@@ -1,10 +1,12 @@
 import json
+import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "shopping"))
 
 from generate_shopping_list import generate_shopping_list
 
@@ -57,15 +59,39 @@ class GenerateShoppingListTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            db_path = root / "recipes_local.db"
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE recipes (
+                      id INTEGER PRIMARY KEY,
+                      name TEXT,
+                      source_path TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    "INSERT INTO recipes (id, name, source_path) VALUES (1, 'Chicken', 'proteins/chicken.md')"
+                )
+                conn.execute(
+                    "INSERT INTO recipes (id, name, source_path) VALUES (2, 'Beef', 'proteins/beef.md')"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
             json_output_path = food_dir / "shopping_list.json"
             markdown_output_path = food_dir / "shopping_list.md"
-            result_paths = generate_shopping_list(
-                food_dir,
-                recipes_file,
-                inventory_file,
-                json_output_path,
-                markdown_output_path,
-            )
+            real_connect = sqlite3.connect
+            with mock.patch("generate_shopping_list.sqlite3.connect", side_effect=lambda _ignored: real_connect(db_path)):
+                result_paths = generate_shopping_list(
+                    food_dir,
+                    recipes_file,
+                    inventory_file,
+                    json_output_path,
+                    markdown_output_path,
+                )
 
             self.assertEqual(result_paths[0], json_output_path)
             self.assertEqual(result_paths[1], markdown_output_path)

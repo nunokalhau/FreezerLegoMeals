@@ -8,14 +8,32 @@ import sys
 import os
 import unittest.mock as mock
 from pathlib import Path
+import importlib.util
 
-test_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(test_dir, '..', '..', 'src')
-sys.path.insert(0, os.path.abspath(src_dir))
+SRC_ROOT = Path(__file__).resolve().parents[3]
+MEAL_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'meal_service.py'
+SHOPPING_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'shopping_service.py'
+
+meal_spec = importlib.util.spec_from_file_location('meal_service', MEAL_SERVICE_PATH)
+shopping_spec = importlib.util.spec_from_file_location('shopping_service', SHOPPING_SERVICE_PATH)
+
+if meal_spec is None or meal_spec.loader is None:
+    raise ImportError(f'Unable to load meal_service from {MEAL_SERVICE_PATH}')
+if shopping_spec is None or shopping_spec.loader is None:
+    raise ImportError(f'Unable to load shopping_service from {SHOPPING_SERVICE_PATH}')
+
+meal_module = importlib.util.module_from_spec(meal_spec)
+meal_spec.loader.exec_module(meal_module)
+shopping_module = importlib.util.module_from_spec(shopping_spec)
+shopping_spec.loader.exec_module(shopping_module)
+
+# Register modules so unittest.mock.patch can resolve by module name.
+sys.modules['meal_service'] = meal_module
+sys.modules['shopping_service'] = shopping_module
 
 import pytest
-from services.Services.Python.meal_service import MealService
-from services.Services.Python.shopping_service import ShoppingService
+MealService = meal_module.MealService
+ShoppingService = shopping_module.ShoppingService
 
 
 class TestMealService:
@@ -27,11 +45,9 @@ class TestMealService:
         assert service is not None
         assert hasattr(service, 'repository')
     
-    @mock.patch('services.Services.Python.meal_service.Repository')
-    def test_search_recipes_by_ingredients(self, mock_repo_class):
+    def test_search_recipes_by_ingredients(self):
         """Test search_recipes_by_ingredients method."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         expected_data = [
             {"id": 1, "name": "Chicken Curry", "source_path": "/recipes/chicken_curry.md", "matched_ingredients": ["chicken"]}
@@ -39,16 +55,15 @@ class TestMealService:
         mock_repo_instance.search_recipes_by_ingredients.return_value = expected_data
         
         service = MealService()
+        service.repository = mock_repo_instance
         result = service.search_recipes_by_ingredients(["chicken"])
         
         assert result == expected_data
         mock_repo_instance.search_recipes_by_ingredients.assert_called_once_with(["chicken"])
     
-    @mock.patch('services.Services.Python.meal_service.Repository')
-    def test_get_recipe_by_id(self, mock_repo_class):
+    def test_get_recipe_by_id(self):
         """Test get_recipe_by_id method."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         expected_data = {
             "id": 1,
@@ -58,16 +73,15 @@ class TestMealService:
         mock_repo_instance.get_recipe_by_id.return_value = expected_data
         
         service = MealService()
+        service.repository = mock_repo_instance
         result = service.get_recipe_by_id(1)
         
         assert result == expected_data
         mock_repo_instance.get_recipe_by_id.assert_called_once_with(1)
     
-    @mock.patch('services.Services.Python.meal_service.Repository')
-    def test_find_meals_with_ingredients_success(self, mock_repo_class):
+    def test_find_meals_with_ingredients_success(self):
         """Test find_meals_with_ingredients with ingredients found."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         expected_data = [
             {"id": 1, "name": "Chicken Curry", "source_path": "/recipes/chicken_curry.md", "matched_ingredients": ["chicken"]}
@@ -75,6 +89,7 @@ class TestMealService:
         mock_repo_instance.search_recipes_by_ingredients.return_value = expected_data
         
         service = MealService()
+        service.repository = mock_repo_instance
         result = service.find_meals_with_ingredients("Find meals with chicken")
         
         assert "query" in result
@@ -82,25 +97,22 @@ class TestMealService:
         assert "total_recipes_found" in result
         assert result["total_recipes_found"] == 1
         
-    @mock.patch('services.Services.Python.meal_service.Repository')
-    def test_find_meals_with_ingredients_no_ingredients(self, mock_repo_class):
+    def test_find_meals_with_ingredients_no_ingredients(self):
         """Test find_meals_with_ingredients when no ingredients found."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         mock_repo_instance.search_recipes_by_ingredients.return_value = []
         
         service = MealService()
+        service.repository = mock_repo_instance
         result = service.find_meals_with_ingredients("Find meals with nonexistent ingredient")
         
         assert result["total_recipes_found"] == 0
         assert "message" in result
     
-    @mock.patch('services.Services.Python.meal_service.Repository')
-    def test_get_recipe_details_success(self, mock_repo_class):
+    def test_get_recipe_details_success(self):
         """Test get_recipe_details with valid recipe."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         expected_data = {
             "id": 1,
@@ -110,20 +122,20 @@ class TestMealService:
         mock_repo_instance.get_recipe_by_id.return_value = expected_data
         
         service = MealService()
+        service.repository = mock_repo_instance
         result = service.get_recipe_details(1)
         
         assert result["recipe"] == expected_data
         assert "message" in result
 
-    @mock.patch('services.Services.Python.meal_service.Repository')
-    def test_get_recipe_details_not_found(self, mock_repo_class):
+    def test_get_recipe_details_not_found(self):
         """Test get_recipe_details with invalid recipe."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         mock_repo_instance.get_recipe_by_id.return_value = None
         
         service = MealService()
+        service.repository = mock_repo_instance
         result = service.get_recipe_details(999)
         
         assert "error" in result
@@ -138,11 +150,9 @@ class TestShoppingService:
         assert service is not None
         assert hasattr(service, 'repository')
     
-    @mock.patch('services.Services.Python.shopping_service.Repository')
-    def test_get_recipe_ingredients_success(self, mock_repo_class):
+    def test_get_recipe_ingredients_success(self):
         """Test get_recipe_ingredients method with valid recipe."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         expected_data = [
             {"name": "chicken breast", "amount": 500.0, "unit": "g"}
@@ -150,16 +160,16 @@ class TestShoppingService:
         mock_repo_instance.get_recipe_ingredients.return_value = expected_data
         
         service = ShoppingService()
+        service.repository = mock_repo_instance
+        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         result = service.get_recipe_ingredients("Chicken Curry")
         
         assert result == expected_data
         mock_repo_instance.get_recipe_ingredients.assert_called_once_with(1)
     
-    @mock.patch('services.Services.Python.shopping_service.Repository')
-    def test_get_multiple_recipe_ingredients(self, mock_repo_class):
+    def test_get_multiple_recipe_ingredients(self):
         """Test get_multiple_recipe_ingredients method."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         expected_data = {
             "Chicken Curry": [{"name": "chicken breast", "amount": 500.0, "unit": "g"}]
@@ -167,16 +177,16 @@ class TestShoppingService:
         mock_repo_instance.get_recipe_ingredients.return_value = expected_data["Chicken Curry"]
         
         service = ShoppingService()
+        service.repository = mock_repo_instance
+        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         result = service.get_multiple_recipe_ingredients(["Chicken Curry"])
         
         assert "Chicken Curry" in result
         assert len(result["Chicken Curry"]) == 1
     
-    @mock.patch('services.Services.Python.shopping_service.Repository')
-    def test_generate_shopping_list_basic(self, mock_repo_class):
+    def test_generate_shopping_list_basic(self):
         """Test generate_shopping_list with basic functionality."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         mock_repo_instance.get_recipe_ingredients.side_effect = [
             [{"name": "chicken breast", "amount": 500.0, "unit": "g"}],
@@ -184,6 +194,11 @@ class TestShoppingService:
         ]
         
         service = ShoppingService()
+        service.repository = mock_repo_instance
+        mock_repo_instance.search_recipes_by_ingredients.side_effect = [
+            [{"id": 1, "name": "Chicken Curry"}],
+            [{"id": 2, "name": "Vegetable Soup"}],
+        ]
         result = service.generate_shopping_list(["Chicken Curry", "Vegetable Soup"], scale_factor=1.0)
         
         assert "recipes" in result
@@ -191,40 +206,35 @@ class TestShoppingService:
         assert "ingredients" in result
         assert result["total_recipes"] == 2
     
-    @mock.patch('services.Services.Python.shopping_service.Repository')
-    def test_generate_shopping_list_empty(self, mock_repo_class):
+    def test_generate_shopping_list_empty(self):
         """Test generate_shopping_list with empty recipe list."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         service = ShoppingService()
+        service.repository = mock_repo_instance
         result = service.generate_shopping_list([], scale_factor=1.0)
         
         assert "recipes" in result
         assert result["total_recipes"] == 0
         assert "ingredients" in result
     
-    @mock.patch('services.Services.Python.shopping_service.Repository')
-    def test_generate_shopping_list_with_scaling(self, mock_repo_class):
+    def test_generate_shopping_list_with_scaling(self):
         """Test generate_shopping_list with scale factor."""
         mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
         
         mock_repo_instance.get_recipe_ingredients.return_value = [
             {"name": "chicken breast", "amount": 500.0, "unit": "g"}
         ]
         
         service = ShoppingService()
+        service.repository = mock_repo_instance
+        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         result = service.generate_shopping_list(["Chicken Curry"], scale_factor=2.0)
         
         assert result["scale_factor"] == 2.0
         
-    @mock.patch('services.Services.Python.shopping_service.Repository')
-    def test_categorize_ingredients(self, mock_repo_class):
+    def test_categorize_ingredients(self):
         """Test _categorize_ingredients helper method."""
-        mock_repo_instance = mock.Mock()
-        mock_repo_class.return_value = mock_repo_instance
-        
         service = ShoppingService()
         
         ingredients = [

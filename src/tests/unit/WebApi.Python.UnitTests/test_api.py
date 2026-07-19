@@ -6,24 +6,21 @@ These are proper pytest-based unit tests for API endpoints and functionality.
 
 import sys
 import os
-import unittest.mock as mock
 from pathlib import Path
+import importlib.util
 
-# Add the src directory to Python path
-test_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(test_dir, '..', '..', 'src')
-sys.path.insert(0, os.path.abspath(src_dir))
+SRC_ROOT = Path(__file__).resolve().parents[3]
+APP_PATH = SRC_ROOT / 'api' / 'WebApi.Python' / 'app.py'
 
 import pytest
-from flask import Flask
-from unittest.mock import Mock, patch
 
-# Import the main app module (will be created if it doesn't exist, based on project structure)
-try:
-    from Api.FrezerLegoMeals.WebApi.Python.app import create_app
-except ImportError:
-    # If there's an import error, we'll simulate the API functionality 
-    pass
+app_spec = importlib.util.spec_from_file_location('webapi_python_app', APP_PATH)
+if app_spec is None or app_spec.loader is None:
+    raise ImportError(f'Unable to load app module from {APP_PATH}')
+
+app_module = importlib.util.module_from_spec(app_spec)
+app_spec.loader.exec_module(app_module)
+app = app_module.app
 
 
 class TestWebAPI:
@@ -31,30 +28,21 @@ class TestWebAPI:
     
     def test_api_initialization(self):
         """Test that API can be initialized successfully."""
-        try:
-            # Try to import and initialize
-            app = create_app()
-            assert app is not None
-            assert hasattr(app, 'config')
-        except ImportError:
-            # If we can't import the actual app (due to path issues), 
-            # we'll at least test that our structure works
-            assert True  # Test passes by default - this indicates proper setup
+        assert app is not None
+        assert app.title == 'Freezer Lego Meals Python API'
     
     def test_app_routes_exist(self):
-        """Test that key API routes are defined."""  
-        try:
-            app = create_app()
-            
-            # Check if basic routes exist (these would be defined in actual implementation) 
-            with app.test_client() as client:
-                # Test health endpoint
-                response = client.get('/health')
-                assert response.status_code == 200 or response.status_code == 404
-                
-        except Exception:
-            # If route testing fails, that's expected if we don't have full implementation yet
-            assert True  # Test passes by default
+        """Test that key API routes are defined."""
+        route_paths = {route.path for route in app.routes}
+        assert '/health' in route_paths
+        assert '/api/recipes/search' in route_paths
+        assert '/api/shopping/generate' in route_paths
+
+    def test_health_handler_response(self):
+        """Test that health handler returns expected payload."""
+        payload = app_module.health_check()
+        assert payload.status == 'healthy'
+        assert payload.service == 'WebApi.Python'
 
 
 def test_basic_web_structure():

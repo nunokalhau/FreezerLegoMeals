@@ -1,10 +1,12 @@
 import json
+import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "recipes"))
 
 from generate_recipe_index import build_recipe_index
 
@@ -30,9 +32,41 @@ class GenerateRecipeIndexTests(unittest.TestCase):
             )
             (guides_dir / "meal_prep.md").write_text("# Guide\n", encoding="utf-8")
 
+            db_path = root / "recipes_local.db"
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE recipes (
+                      id INTEGER PRIMARY KEY,
+                      name TEXT,
+                      source_path TEXT,
+                      tags TEXT,
+                      servings INTEGER,
+                      time_to_prepare TEXT,
+                      prepping TEXT,
+                      freezing_notes TEXT,
+                      reheat_notes TEXT,
+                      combinations TEXT,
+                      notes TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    "INSERT INTO recipes (id, name, source_path) VALUES (1, 'Chicken', 'proteins/chicken.md')"
+                )
+                conn.execute(
+                    "INSERT INTO recipes (id, name, source_path) VALUES (2, 'Broccoli', 'veggies/broccoli.md')"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
             json_output_path = food_dir / "recipe_index.json"
             markdown_output_path = food_dir / "recipe_index.md"
-            result_paths = build_recipe_index(food_dir, json_output_path, markdown_output_path)
+            real_connect = sqlite3.connect
+            with mock.patch("generate_recipe_index.sqlite3.connect", side_effect=lambda _ignored: real_connect(db_path)):
+                result_paths = build_recipe_index(food_dir, json_output_path, markdown_output_path)
 
             self.assertEqual(result_paths[0], json_output_path)
             self.assertEqual(result_paths[1], markdown_output_path)

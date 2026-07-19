@@ -5,7 +5,7 @@ const config: Config = {
     {
       displayName: 'unit',
 
-      rootDir: '.',
+      rootDir: '../..',
 
       preset: 'ts-jest',
 
@@ -19,20 +19,27 @@ const config: Config = {
       moduleFileExtensions: ['ts', 'js', 'json'],
 
       transform: {
-        '^.+\\.(t|j)s$': 'ts-jest'
+        '^.+\\.(t|j)s$': [
+          'ts-jest',
+          {
+            tsconfig: '<rootDir>/api/WebApi.NestJS/tsconfig.json'
+          }
+        ]
       },
 
       collectCoverageFrom: [
-        'src/**/*.ts',
-        '!src/**/*.module.ts',
-        '!src/**/main.ts'
+        '<rootDir>/api/WebApi.NestJS/**/*.ts',
+        '<rootDir>/services/Services.NestJS/**/*.ts',
+        '<rootDir>/repositories/Repository.NestJS/**/*.ts',
+        '!<rootDir>/**/*.module.ts',
+        '!<rootDir>/**/main.ts'
       ]
     },
 
     {
       displayName: 'integration',
 
-      rootDir: '.',
+      rootDir: '../..',
 
       preset: 'ts-jest',
 
@@ -46,7 +53,12 @@ const config: Config = {
       moduleFileExtensions: ['ts', 'js', 'json'],
 
       transform: {
-        '^.+\\.(t|j)s$': 'ts-jest'
+        '^.+\\.(t|j)s$': [
+          'ts-jest',
+          {
+            tsconfig: '<rootDir>/api/WebApi.NestJS/tsconfig.json'
+          }
+        ]
       }
     }
   ],
