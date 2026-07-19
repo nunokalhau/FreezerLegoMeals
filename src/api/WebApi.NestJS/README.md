@@ -58,13 +58,6 @@ Development:
 npm run start:dev
 ```
 
-Production:
-
-```bash
-npm run build
-npm run start:prod
-```
-
 The API will be available at:
 
 ```
