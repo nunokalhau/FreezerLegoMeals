@@ -26,7 +26,7 @@ def load_module(name: str, path: Path):
 
 retrieval_module = load_module("rag_python_retrieval_service", RAG_PATH / "retrieval_service.py")
 prompt_module = load_module("rag_python_prompt_builder", RAG_PATH / "prompt_builder.py")
-orchestrator_module = load_module("orchestration_python_orchestrator_tests", ORCHESTRATION_PATH / "orchestrator.py")
+assistant_orchestrator_module = load_module("orchestration_python_assistant_orchestrator_tests", ORCHESTRATION_PATH / "assistant_orchestrator.py")
 meal_planning_agent_module = load_module("orchestration_python_meal_planning_agent_tests", ORCHESTRATION_PATH / "meal_planning_agent.py")
 assistant_module = load_module("services_python_assistant_rag_tests", ASSISTANT_PATH)
 
@@ -156,5 +156,5 @@ def test_assistant_preserves_tool_calling_before_rag():
 
 def create_assistant_service(ollama, conversation_store, tool_executor, retrieval_service=None, prompt_builder=None):
     agent = meal_planning_agent_module.MealPlanningAgent(ollama, tool_executor, retrieval_service, prompt_builder)
-    orchestrator = orchestrator_module.Orchestrator([agent])
+    orchestrator = assistant_orchestrator_module.AssistantOrchestrator([agent])
     return assistant_module.AssistantService(conversation_store, orchestrator)

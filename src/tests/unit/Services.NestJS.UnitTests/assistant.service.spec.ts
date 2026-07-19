@@ -4,8 +4,8 @@ import { OllamaClient } from '../../../services/Services.NestJS/ollama.client';
 import { ToolExecutor } from '../../../services/Services.NestJS/tool-executor';
 import { PromptBuilder } from '../../../ai/RAG/NestJS/prompt-builder';
 import { RetrievalService } from '../../../ai/RAG/NestJS/retrieval.service';
+import { AssistantOrchestratorService } from '../../../orchestration/NestJS/assistant-orchestrator.service';
 import { MealPlanningAgent } from '../../../orchestration/NestJS/meal-planning.agent';
-import { OrchestratorService } from '../../../orchestration/NestJS/orchestrator.service';
 
 describe('AssistantService', () => {
   it('creates a conversation and persists messages', async () => {
@@ -211,7 +211,7 @@ function createService(
   promptBuilder?: jest.Mocked<PromptBuilder> | PromptBuilder
 ) {
   const agent = new MealPlanningAgent(ollamaClient, toolExecutor, retrievalService, promptBuilder);
-  const orchestrator = new OrchestratorService([agent]);
+  const orchestrator = new AssistantOrchestratorService([agent]);
   return new AssistantService(conversationStore, orchestrator, options);
 }
 

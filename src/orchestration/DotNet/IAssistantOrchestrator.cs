@@ -1,6 +1,6 @@
 namespace Orchestration.DotNet;
 
-public interface IOrchestrator
+public interface IAssistantOrchestrator
 {
     Task<OrchestratorResult> ExecuteAsync(OrchestratorContext context, CancellationToken cancellationToken = default);
 }

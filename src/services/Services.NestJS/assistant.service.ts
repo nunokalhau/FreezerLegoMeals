@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { AssistantChatResult, AssistantServiceInterface } from './assistant.service.interface';
 import { ASSISTANT_OPTIONS, AssistantOptions, createAssistantOptions } from './assistant-options';
 import { ConversationMessage, ConversationStore } from './conversation-store';
-import { OrchestratorService } from '../../orchestration/NestJS/orchestrator.service';
+import { AssistantOrchestratorService } from '../../orchestration/NestJS/assistant-orchestrator.service';
 
 @Injectable()
 export class AssistantService implements AssistantServiceInterface {
@@ -11,7 +11,7 @@ export class AssistantService implements AssistantServiceInterface {
   constructor(
     @Inject(ConversationStore)
     private readonly conversationStore: ConversationStore,
-    private readonly orchestrator: OrchestratorService,
+    private readonly orchestrator: AssistantOrchestratorService,
     @Optional()
     @Inject(ASSISTANT_OPTIONS)
     private readonly options: AssistantOptions = createAssistantOptions()

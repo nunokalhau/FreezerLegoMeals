@@ -7,13 +7,13 @@ namespace Services.DotNet;
 public class AssistantService : IAssistantService
 {
     private readonly IConversationStore _conversationStore;
-    private readonly IOrchestrator _orchestrator;
+    private readonly IAssistantOrchestrator _orchestrator;
     private readonly ILogger<AssistantService> _logger;
     private readonly AssistantOptions _options;
 
     public AssistantService(
         IConversationStore conversationStore,
-        IOrchestrator orchestrator,
+        IAssistantOrchestrator orchestrator,
         IOptions<AssistantOptions> options,
         ILogger<AssistantService> logger)
     {

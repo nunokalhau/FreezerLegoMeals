@@ -8,7 +8,7 @@ ORCHESTRATION_PATH = SRC_ROOT / "orchestration" / "Python"
 if str(ORCHESTRATION_PATH) not in sys.path:
     sys.path.insert(0, str(ORCHESTRATION_PATH))
 
-from orchestrator import Orchestrator
+from assistant_orchestrator import AssistantOrchestrator
 from orchestrator_context import OrchestratorContext
 from orchestrator_result import OrchestratorResult
 
@@ -16,7 +16,7 @@ from orchestrator_result import OrchestratorResult
 def test_orchestrator_selects_first_agent_that_can_handle_context():
     skipped_agent = StubAgent("SkippedAgent", False, "skipped")
     selected_agent = StubAgent("SelectedAgent", True, "selected response")
-    orchestrator = Orchestrator([skipped_agent, selected_agent])
+    orchestrator = AssistantOrchestrator([skipped_agent, selected_agent])
 
     result = orchestrator.execute(create_context())
 
@@ -27,7 +27,7 @@ def test_orchestrator_selects_first_agent_that_can_handle_context():
 
 
 def test_orchestrator_returns_observable_error_when_no_agent_can_handle_context():
-    orchestrator = Orchestrator([StubAgent("InactiveAgent", False, "unused")])
+    orchestrator = AssistantOrchestrator([StubAgent("InactiveAgent", False, "unused")])
 
     result = orchestrator.execute(create_context())
 
@@ -63,4 +63,4 @@ class StubAgent:
 
     def execute(self, context):
         self.was_executed = True
-        return OrchestratorResult(self._response, self.name, [], [], ["Assistant", "Orchestrator", self.name], 0.001, [], context.messages_to_persist)
+        return OrchestratorResult(self._response, self.name, [], [], ["Assistant", "AssistantOrchestrator", self.name], 0.001, [], context.messages_to_persist)

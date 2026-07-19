@@ -3,8 +3,8 @@ import { resolve } from 'path';
 import { PromptBuilder } from '../../ai/RAG/NestJS/prompt-builder';
 import { RetrievalService } from '../../ai/RAG/NestJS/retrieval.service';
 import { ISemanticRecipeMetadataProvider, SemanticSearchService } from '../../ai/SemanticSearch/NestJS/semantic-search.service';
+import { AssistantOrchestratorService } from '../../orchestration/NestJS/assistant-orchestrator.service';
 import { MealPlanningAgent } from '../../orchestration/NestJS/meal-planning.agent';
-import { OrchestratorService } from '../../orchestration/NestJS/orchestrator.service';
 import { AssistantService } from '../../services/Services.NestJS/assistant.service';
 import { ASSISTANT_OPTIONS, createAssistantOptions } from '../../services/Services.NestJS/assistant-options';
 import { CONVERSATION_STORE_OPTIONS, ConversationStore, createConversationStoreOptions, InMemoryConversationStore } from '../../services/Services.NestJS/conversation-store';
@@ -57,8 +57,8 @@ import { SemanticSearchModule } from './semantic-search.module';
       inject: [OllamaClient, ToolExecutor, RetrievalService, PromptBuilder],
     },
     {
-      provide: OrchestratorService,
-      useFactory: (mealPlanningAgent: MealPlanningAgent) => new OrchestratorService([mealPlanningAgent]),
+      provide: AssistantOrchestratorService,
+      useFactory: (mealPlanningAgent: MealPlanningAgent) => new AssistantOrchestratorService([mealPlanningAgent]),
       inject: [MealPlanningAgent],
     },
     OllamaClient,

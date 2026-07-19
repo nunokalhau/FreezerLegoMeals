@@ -13,4 +13,4 @@ class ShoppingAgent(Agent):
         return False
 
     def execute(self, context) -> OrchestratorResult:
-        return OrchestratorResult("ShoppingAgent is not active yet.", self.name, [], [], ["Assistant", "Orchestrator", self.name], 0.0, ["Agent is not active."], context.messages_to_persist)
+        return OrchestratorResult("ShoppingAgent is not active yet.", self.name, [], [], ["Assistant", "AssistantOrchestrator", self.name], 0.0, ["Agent is not active."], context.messages_to_persist)

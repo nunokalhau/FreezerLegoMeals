@@ -45,7 +45,7 @@ class AssistantService:
         if conversation_store is None:
             raise ValueError("Conversation store is required")
         if orchestrator is None:
-            raise ValueError("Orchestrator is required")
+            raise ValueError("AssistantOrchestrator is required")
 
         self.conversation_store = conversation_store
         self.orchestrator = orchestrator

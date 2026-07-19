@@ -257,7 +257,7 @@ public class AssistantServiceTests
             NullLogger<MealPlanningAgent>.Instance,
             retrievalService,
             promptBuilder);
-        var orchestrator = new Orchestrator([agent], NullLogger<Orchestrator>.Instance);
+        var orchestrator = new AssistantOrchestrator([agent], NullLogger<AssistantOrchestrator>.Instance);
         return new AssistantService(
             conversationStore,
             orchestrator,

@@ -32,7 +32,7 @@ export class MealPlanningAgent implements Agent {
     const executedTools: string[] = [];
     const retrievedRecipes: RetrievedRecipeInfo[] = [];
     const errors: string[] = [];
-    const executionSteps = ['Assistant', 'Orchestrator', this.name];
+    const executionSteps = ['Assistant', 'AssistantOrchestrator', this.name];
     let totalToolCalls = 0;
 
     while (true) {

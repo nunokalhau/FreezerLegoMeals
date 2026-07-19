@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Services.DotNet.UnitTests;
 
-public class OrchestratorTests
+public class AssistantOrchestratorTests
 {
     [Fact]
     public async Task ExecuteAsync_SelectsFirstAgentThatCanHandleContext()
@@ -13,7 +13,7 @@ public class OrchestratorTests
         var context = CreateContext();
         var skippedAgent = new StubAgent("SkippedAgent", false, "skipped");
         var selectedAgent = new StubAgent("SelectedAgent", true, "selected response");
-        var orchestrator = new Orchestrator([skippedAgent, selectedAgent], NullLogger<Orchestrator>.Instance);
+        var orchestrator = new AssistantOrchestrator([skippedAgent, selectedAgent], NullLogger<AssistantOrchestrator>.Instance);
 
         var result = await orchestrator.ExecuteAsync(context);
 
@@ -26,7 +26,7 @@ public class OrchestratorTests
     [Fact]
     public async Task ExecuteAsync_WhenNoAgentCanHandle_ReturnsObservableError()
     {
-        var orchestrator = new Orchestrator([new StubAgent("InactiveAgent", false, "unused")], NullLogger<Orchestrator>.Instance);
+        var orchestrator = new AssistantOrchestrator([new StubAgent("InactiveAgent", false, "unused")], NullLogger<AssistantOrchestrator>.Instance);
 
         var result = await orchestrator.ExecuteAsync(CreateContext());
 
@@ -67,7 +67,7 @@ public class OrchestratorTests
         public Task<OrchestratorResult> ExecuteAsync(OrchestratorContext context, CancellationToken cancellationToken = default)
         {
             WasExecuted = true;
-            return Task.FromResult(new OrchestratorResult(_response, Name, [], [], ["Assistant", "Orchestrator", Name], TimeSpan.FromMilliseconds(1), [], context.MessagesToPersist));
+            return Task.FromResult(new OrchestratorResult(_response, Name, [], [], ["Assistant", "AssistantOrchestrator", Name], TimeSpan.FromMilliseconds(1), [], context.MessagesToPersist));
         }
     }
 }

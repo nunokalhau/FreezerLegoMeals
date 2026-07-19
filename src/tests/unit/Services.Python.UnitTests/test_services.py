@@ -23,7 +23,7 @@ if str(ORCHESTRATION_PATH) not in sys.path:
     sys.path.insert(0, str(ORCHESTRATION_PATH))
 
 assistant_spec = importlib.util.spec_from_file_location('assistant_service', ASSISTANT_SERVICE_PATH)
-orchestrator_spec = importlib.util.spec_from_file_location('orchestration_python_orchestrator_service_tests', ORCHESTRATION_PATH / 'orchestrator.py')
+assistant_orchestrator_spec = importlib.util.spec_from_file_location('orchestration_python_assistant_orchestrator_service_tests', ORCHESTRATION_PATH / 'assistant_orchestrator.py')
 meal_planning_agent_spec = importlib.util.spec_from_file_location('orchestration_python_meal_planning_agent_service_tests', ORCHESTRATION_PATH / 'meal_planning_agent.py')
 meal_spec = importlib.util.spec_from_file_location('meal_service', MEAL_SERVICE_PATH)
 ollama_spec = importlib.util.spec_from_file_location('ollama_client', OLLAMA_CLIENT_PATH)
@@ -31,8 +31,8 @@ shopping_spec = importlib.util.spec_from_file_location('shopping_service', SHOPP
 
 if assistant_spec is None or assistant_spec.loader is None:
     raise ImportError(f'Unable to load assistant_service from {ASSISTANT_SERVICE_PATH}')
-if orchestrator_spec is None or orchestrator_spec.loader is None:
-    raise ImportError(f'Unable to load orchestrator from {ORCHESTRATION_PATH}')
+if assistant_orchestrator_spec is None or assistant_orchestrator_spec.loader is None:
+    raise ImportError(f'Unable to load assistant_orchestrator from {ORCHESTRATION_PATH}')
 if meal_planning_agent_spec is None or meal_planning_agent_spec.loader is None:
     raise ImportError(f'Unable to load meal_planning_agent from {ORCHESTRATION_PATH}')
 if meal_spec is None or meal_spec.loader is None:
@@ -44,8 +44,8 @@ if shopping_spec is None or shopping_spec.loader is None:
 
 assistant_module = importlib.util.module_from_spec(assistant_spec)
 assistant_spec.loader.exec_module(assistant_module)
-orchestrator_module = importlib.util.module_from_spec(orchestrator_spec)
-orchestrator_spec.loader.exec_module(orchestrator_module)
+assistant_orchestrator_module = importlib.util.module_from_spec(assistant_orchestrator_spec)
+assistant_orchestrator_spec.loader.exec_module(assistant_orchestrator_module)
 meal_planning_agent_module = importlib.util.module_from_spec(meal_planning_agent_spec)
 meal_planning_agent_spec.loader.exec_module(meal_planning_agent_module)
 meal_module = importlib.util.module_from_spec(meal_spec)
@@ -177,7 +177,7 @@ class TestAssistantService:
 
 def create_assistant_service(ollama_client, conversation_store, tool_executor, options=None):
     agent = meal_planning_agent_module.MealPlanningAgent(ollama_client, tool_executor)
-    orchestrator = orchestrator_module.Orchestrator([agent])
+    orchestrator = assistant_orchestrator_module.AssistantOrchestrator([agent])
     return AssistantService(conversation_store, orchestrator, options)
 
 

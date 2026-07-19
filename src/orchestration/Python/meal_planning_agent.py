@@ -37,7 +37,7 @@ class MealPlanningAgent(Agent):
         executed_tools: list[str] = []
         retrieved_recipes: list[RetrievedRecipeInfo] = []
         errors: list[str] = []
-        steps = ["Assistant", "Orchestrator", self.name]
+        steps = ["Assistant", "AssistantOrchestrator", self.name]
 
         while True:
             limit_error = self._get_limit_error(context.assistant_options, messages, started_at)

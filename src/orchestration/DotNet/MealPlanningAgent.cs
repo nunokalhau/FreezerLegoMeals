@@ -43,7 +43,7 @@ public sealed class MealPlanningAgent : IAgent
         var executedTools = new List<string>();
         var retrievedRecipes = new List<RetrievedRecipeInfo>();
         var errors = new List<string>();
-        var steps = new List<string> { "Assistant", "Orchestrator", Name };
+        var steps = new List<string> { "Assistant", "AssistantOrchestrator", Name };
 
         while (true)
         {

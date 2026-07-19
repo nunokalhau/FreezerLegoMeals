@@ -4,13 +4,13 @@ import { OrchestratorContext } from './orchestrator-context';
 import { OrchestratorResult } from './orchestrator-result';
 
 @Injectable()
-export class OrchestratorService {
-  private readonly logger = new Logger(OrchestratorService.name);
+export class AssistantOrchestratorService {
+  private readonly logger = new Logger(AssistantOrchestratorService.name);
 
   constructor(private readonly agents: Agent[]) {}
 
   async execute(context: OrchestratorContext): Promise<OrchestratorResult> {
-    this.logger.log(`Orchestrator started for correlation ${context.correlationId}`);
+    this.logger.log(`AssistantOrchestrator started for correlation ${context.correlationId}`);
     const agent = this.agents.find((candidate) => candidate.canHandle(context));
     if (!agent) {
       const error = 'No assistant agent is available to handle that request.';
@@ -20,14 +20,14 @@ export class OrchestratorService {
         selectedAgent: 'none',
         executedTools: [],
         retrievedRecipes: [],
-        executionSteps: ['Assistant', 'Orchestrator', 'NoAgent'],
+        executionSteps: ['Assistant', 'AssistantOrchestrator', 'NoAgent'],
         executionDurationMs: 0,
         errors: [error],
         messagesToPersist: context.messagesToPersist,
       };
     }
 
-    this.logger.log(`Orchestrator selected ${agent.name} for correlation ${context.correlationId}`);
+    this.logger.log(`AssistantOrchestrator selected ${agent.name} for correlation ${context.correlationId}`);
     return agent.execute(context);
   }
 }

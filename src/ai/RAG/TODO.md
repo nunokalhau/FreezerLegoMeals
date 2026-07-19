@@ -6,7 +6,7 @@ RAG is implemented here as reusable retrieval and prompt-building components for
 
 - `RetrievalService` receives a user question, calls `SemanticSearchService`, retrieves the top recipe matches, and returns structured context.
 - `PromptBuilder` receives the user question plus retrieved recipes and renders the final repository-grounded prompt from `prompts/rag_prompt.txt`.
-- `AssistantService` remains the orchestrator. It keeps existing tool calling first, then uses RAG for repository-knowledge questions, then falls back to direct Ollama answers for general chat.
+- `AssistantOrchestrator` owns Assistant workflow coordination. It keeps existing tool calling first, then uses RAG for repository-knowledge questions, then falls back to direct Ollama answers for general chat.
 
 ## Hallucination Prevention
 
@@ -40,4 +40,4 @@ TODO: Add Redis only when distributed caching or memory is introduced.
 
 TODO: Add ChromaDB or another vector database only if local disk-backed vectors become insufficient.
 
-TODO: Add AI Agents in `src/ai/Agents` when tool-planning workflows are explicitly implemented.
+TODO: Add autonomous AI-agent research only after its boundaries are explicitly defined outside deterministic Assistant orchestration.

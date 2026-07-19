@@ -1,12 +1,12 @@
 import { Agent } from '../../../orchestration/NestJS/agent.interface';
+import { AssistantOrchestratorService } from '../../../orchestration/NestJS/assistant-orchestrator.service';
 import { OrchestratorContext } from '../../../orchestration/NestJS/orchestrator-context';
-import { OrchestratorService } from '../../../orchestration/NestJS/orchestrator.service';
 
-describe('OrchestratorService', () => {
+describe('AssistantOrchestratorService', () => {
   it('selects the first agent that can handle the context', async () => {
     const skippedAgent = createAgent('SkippedAgent', false, 'skipped');
     const selectedAgent = createAgent('SelectedAgent', true, 'selected response');
-    const orchestrator = new OrchestratorService([skippedAgent, selectedAgent]);
+    const orchestrator = new AssistantOrchestratorService([skippedAgent, selectedAgent]);
 
     const result = await orchestrator.execute(createContext());
 
@@ -17,7 +17,7 @@ describe('OrchestratorService', () => {
   });
 
   it('returns an observable error when no agent can handle the context', async () => {
-    const orchestrator = new OrchestratorService([createAgent('InactiveAgent', false, 'unused')]);
+    const orchestrator = new AssistantOrchestratorService([createAgent('InactiveAgent', false, 'unused')]);
 
     const result = await orchestrator.execute(createContext());
 
@@ -37,7 +37,7 @@ function createAgent(name: string, canHandle: boolean, response: string): jest.M
       selectedAgent: name,
       executedTools: [],
       retrievedRecipes: [],
-      executionSteps: ['Assistant', 'Orchestrator', name],
+      executionSteps: ['Assistant', 'AssistantOrchestrator', name],
       executionDurationMs: 1,
       errors: [],
       messagesToPersist: context.messagesToPersist,

@@ -7,19 +7,19 @@ The orchestration layer is the Assistant brain. It decides which existing AI cap
 ```text
 User
 -> AssistantService
--> Orchestrator
+-> AssistantOrchestrator
 -> Agent
 -> Existing services
 -> Response
 ```
 
-`AssistantService` is only the public entry point. It validates the request, builds an `OrchestratorContext`, invokes the orchestrator, persists the returned conversation messages, and returns the existing Assistant response contract.
+`AssistantService` is only the public entry point. It validates the request, builds an `OrchestratorContext`, invokes the Assistant orchestrator, persists the returned conversation messages, and returns the existing Assistant response contract.
 
 The REST API is unchanged. The frontend does not know whether a response used direct Ollama, tool calling, semantic search, retrieval, or RAG.
 
-## Orchestrator
+## AssistantOrchestrator
 
-The orchestrator receives an `OrchestratorContext` and selects the first registered agent whose `CanHandle`/`canHandle` method returns true.
+The Assistant orchestrator receives an `OrchestratorContext` and selects the first registered agent whose `CanHandle`/`canHandle` method returns true.
 
 The active agent list currently contains only `MealPlanningAgent`. `ShoppingAgent` and `NutritionAgent` exist as inactive compatibility points for future phases.
 
@@ -40,7 +40,7 @@ Agents coordinate work; business services execute work.
 
 ```text
 Assistant
--> Orchestrator
+-> AssistantOrchestrator
 -> MealPlanningAgent
 -> Ollama
 -> Answer
@@ -50,7 +50,7 @@ For tool calls:
 
 ```text
 Assistant
--> Orchestrator
+-> AssistantOrchestrator
 -> MealPlanningAgent
 -> Ollama
 -> ToolExecutor
@@ -62,7 +62,7 @@ For repository knowledge questions:
 
 ```text
 Assistant
--> Orchestrator
+-> AssistantOrchestrator
 -> MealPlanningAgent
 -> Ollama
 -> Semantic Search
@@ -106,7 +106,7 @@ The result supports debugging and observability without changing the public Assi
 
 ## Future Expansion
 
-Future agents can be added by implementing the agent contract and registering the agent with the orchestrator. Candidate future agents include:
+Future agents can be added by implementing the agent contract and registering the agent with the Assistant orchestrator. Candidate future agents include:
 
 - ShoppingAgent
 - NutritionAgent

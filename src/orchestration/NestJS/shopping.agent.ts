@@ -15,7 +15,7 @@ export class ShoppingAgent implements Agent {
       selectedAgent: this.name,
       executedTools: [],
       retrievedRecipes: [],
-      executionSteps: ['Assistant', 'Orchestrator', this.name],
+      executionSteps: ['Assistant', 'AssistantOrchestrator', this.name],
       executionDurationMs: 0,
       errors: ['Agent is not active.'],
       messagesToPersist: context.messagesToPersist,
