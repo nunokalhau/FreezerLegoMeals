@@ -1,7 +1,8 @@
 // src/pages/Assistant.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { apiService, AssistantChatRequest, AssistantChatResponse } from '../services/apiService';
+import { apiService } from '../services/apiService';
+import type { AssistantChatRequest, AssistantChatResponse } from '../services/apiService';
 import './assistant.css';
 
 interface Message {

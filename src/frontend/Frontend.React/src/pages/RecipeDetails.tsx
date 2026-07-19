@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiService, Recipe, RecipeDetailsResponse } from '../services/apiService';
+import { apiService } from '../services/apiService';
+import type { Recipe } from '../services/apiService';
 import './recipe-details.css';
 
 const RecipeDetails: React.FC = () => {

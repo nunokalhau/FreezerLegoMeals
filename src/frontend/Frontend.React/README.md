@@ -1,32 +1,107 @@
-# React + TypeScript + Vite
+# Freezer Lego Meals Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A React + TypeScript frontend for the Freezer Lego Meals project that connects to the backend API.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Recipe browsing and search functionality
+- Detailed recipe viewing
+- AI assistant chat interface
+- Responsive design for all devices
+- Clean, modern UI with intuitive navigation
 
-## React Compiler
+## Requirements
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 18+ (recommended: LTS version)
+- npm 10+ or yarn 1.22+
+- Access to one of the backend APIs:
+  - .NET implementation at `http://localhost:5001`
+  - Python implementation at `http://localhost:5000` 
+  - NestJS implementation at `http://localhost:3000`
 
-## Expanding the Oxlint configuration
+## Getting Started
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+### Prerequisites
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+Make sure you have Node.js and npm installed on your system:
+
+```bash
+node --version
+npm --version
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+### Installation
+
+1. Navigate to the frontend directory:
+   ```bash
+   cd src/frontend/Frontend.React
+   ```
+
+2. Install project dependencies:
+   ```bash
+   npm install
+   ```
+
+### Running the Application
+
+#### Development Mode
+Start the development server with hot-reloading:
+```bash
+npm run dev
+```
+The application will be available at [http://localhost:5173](http://localhost:5173)
+
+#### Production Build
+Build the optimized production version:
+```bash
+npm run build
+```
+
+#### Preview Production Build
+Preview the production build locally:
+```bash
+npm run preview
+```
+
+### Configuration
+
+The API base URL can be configured in `src/config.ts`. By default, it points to the NestJS backend at `http://localhost:3000`, but you can change it to point to any of the three implementations.
+
+## Project Structure
+
+```
+src/
+├── components/           # Reusable UI components
+│   └── Layout/          # Layout components (navbar, footer)
+├── pages/               # Page components
+├── services/            # API service and data handling
+├── App.tsx              # Main application component with routing
+├── main.tsx             # Entry point
+└── config.ts            # Application configuration
+```
+
+## Available Pages
+
+- `/` - Home page
+- `/recipes` - Recipe browsing and search
+- `/recipes/:id` - Recipe details view
+- `/assistant` - AI assistant chat
+- `/meal-planner` - Meal planning (placeholder)
+- `/shopping-list` - Shopping list feature (placeholder)
+
+## API Integration
+
+The frontend communicates with the backend using a dedicated `ApiService` that handles:
+- Recipe retrieval and search
+- AI assistant conversations 
+- Shopping list generation
+- All REST endpoints defined in the backend
+
+## Contributing
+
+This project follows standard React + TypeScript best practices. When contributing:
+
+1. Make sure all changes compile without errors
+2. Follow existing code style and patterns
+3. Write appropriate tests for new functionality
+4. Update documentation when making significant changes

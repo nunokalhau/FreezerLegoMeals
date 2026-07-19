@@ -1,7 +1,8 @@
 // src/pages/Recipes.tsx
 
 import React, { useState, useEffect } from 'react';
-import { apiService, Recipe } from '../services/apiService';
+import { apiService } from '../services/apiService';
+import type { Recipe } from '../services/apiService';
 import './recipes.css';
 
 const Recipes: React.FC = () => {
