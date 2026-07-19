@@ -13,6 +13,9 @@ public sealed class ToolDefinition
     [JsonPropertyName("script")]
     public string Script { get; init; } = string.Empty;
 
+    [JsonPropertyName("wrapper")]
+    public string Wrapper { get; init; } = string.Empty;
+
     [JsonPropertyName("keywords")]
     public IReadOnlyList<string> Keywords { get; init; } = [];
 
@@ -24,6 +27,12 @@ public sealed class ToolDefinition
 
     [JsonPropertyName("output_description")]
     public string OutputDescription { get; init; } = string.Empty;
+
+    [JsonPropertyName("result_example")]
+    public object? ResultExample { get; init; }
+
+    [JsonPropertyName("expected_json_output")]
+    public object? ExpectedJsonOutput { get; init; }
 
     [JsonPropertyName("aliases")]
     public IReadOnlyList<string> Aliases { get; init; } = [];

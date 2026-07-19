@@ -265,6 +265,34 @@ class TestOllamaClient:
 
         assert result.tool_calls == [{'name': 'example_tool', 'arguments': {'message': 'hello'}}]
 
+    def test_chat_retries_without_tools_when_ollama_rejects_tool_payload(self, monkeypatch):
+        captured_bodies = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return b'{"message":{"content":"fallback ok"}}'
+
+        def fake_urlopen(chat_request, timeout=None):
+            captured_bodies.append(json.loads(chat_request.data.decode('utf-8')))
+            if len(captured_bodies) == 1:
+                raise ollama_module.HTTPError(chat_request.full_url, 400, 'Bad Request', hdrs=None, fp=None)
+            return FakeResponse()
+
+        monkeypatch.setattr(ollama_module.request, 'urlopen', fake_urlopen)
+        client = OllamaClient(OllamaClientConfig(default_model='default-model'))
+
+        result = client.chat(None, [{'role': 'User', 'content': 'Hello'}], [{'name': 'search_recipes', 'parameters': ['ingredients']}])
+
+        assert result.content == 'fallback ok'
+        assert captured_bodies[0]['tools']
+        assert captured_bodies[1]['tools'] == []
+
 
 class TestMealService:
     """Unit tests for MealService."""

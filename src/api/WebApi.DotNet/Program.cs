@@ -18,7 +18,9 @@ builder.Services.AddScoped<IAssistantService, AssistantService>();
 builder.Services.AddSingleton<IConversationStore, InMemoryConversationStore>();
 builder.Services.AddSingleton<IToolRegistry>(_ => new ToolRegistry(
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools", "tool_registry.json"))));
-builder.Services.AddScoped<IToolExecutor, ToolExecutor>();
+builder.Services.AddScoped<IToolExecutor>(serviceProvider => new PythonToolExecutor(
+    serviceProvider.GetRequiredService<IToolRegistry>(),
+    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools"))));
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
 builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("Assistant"));

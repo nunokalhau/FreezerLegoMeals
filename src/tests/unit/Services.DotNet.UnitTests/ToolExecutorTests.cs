@@ -18,34 +18,33 @@ public class ToolExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_DelegatesToRegisteredApplicationHandler()
+    public async Task ExecuteAsync_ExecutesRegistryWrapperAndParsesJson()
     {
-        using var tempFile = CreateRegistryFile();
-        var registry = new ToolRegistry(tempFile.Path);
-        var handler = new FakeToolHandler("example_tool", new { Handled = true });
-        var executor = new ToolExecutor(registry, new[] { handler });
+        using var tempRoot = CreateToolRoot();
+        var registry = new ToolRegistry(tempRoot.RegistryPath);
+        var executor = new PythonToolExecutor(registry, tempRoot.ToolsRoot);
         var parameters = new Dictionary<string, object?> { ["message"] = "hello" };
 
         var result = await executor.ExecuteAsync("example_alias", parameters);
 
         Assert.True(result.Success);
         Assert.Equal("example_tool", result.Tool);
-        Assert.Same(handler.Output, result.Output);
-        Assert.Same(parameters, handler.Parameters);
+        Assert.NotNull(result.Output);
+        Assert.Contains("hello", result.Output.ToString());
     }
 
     [Fact]
-    public async Task ExecuteAsync_DoesNotFallBackToCliScripts()
+    public async Task ExecuteAsync_ReturnsFailureWhenWrapperIsMissing()
     {
         using var tempFile = CreateRegistryFile();
         var registry = new ToolRegistry(tempFile.Path);
-        var executor = new ToolExecutor(registry, Array.Empty<IToolHandler>());
+        var executor = new PythonToolExecutor(registry, Path.GetDirectoryName(tempFile.Path)!);
 
         var result = await executor.ExecuteAsync("example_tool");
 
         Assert.False(result.Success);
         Assert.Equal("example_tool", result.Tool);
-        Assert.Contains("No application service handler", result.Error);
+        Assert.Contains("Tool wrapper not found", result.Error);
     }
 
     [Fact]
@@ -53,10 +52,37 @@ public class ToolExecutorTests
     {
         using var tempFile = CreateRegistryFile();
         var registry = new ToolRegistry(tempFile.Path);
-        var executor = new ToolExecutor(registry, Array.Empty<IToolHandler>());
+                var executor = new PythonToolExecutor(registry, Path.GetDirectoryName(tempFile.Path)!);
 
         await Assert.ThrowsAsync<ArgumentException>(() => executor.ExecuteAsync("missing_tool"));
     }
+
+        private static TemporaryToolRoot CreateToolRoot()
+        {
+                var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+                Directory.CreateDirectory(root);
+                var registryPath = Path.Combine(root, "tool_registry.json");
+                var wrapperPath = Path.Combine(root, "example_tool.py");
+                File.WriteAllText(
+                        wrapperPath,
+                        "import json, sys\nparameters = json.loads(sys.stdin.read() or '{}')\nprint(json.dumps({'handled': True, 'parameters': parameters}))\n");
+                File.WriteAllText(
+                        registryPath,
+                        """
+                        {
+                            "tools": [
+                                {
+                                    "name": "example_tool",
+                                    "description": "Example tool",
+                                    "wrapper": "example_tool.py",
+                                    "aliases": ["example_alias"]
+                                }
+                            ]
+                        }
+                        """);
+
+                return new TemporaryToolRoot(root, registryPath);
+        }
 
     private static TemporaryRegistryFile CreateRegistryFile()
     {
@@ -94,24 +120,21 @@ public class ToolExecutorTests
         }
     }
 
-    private sealed class FakeToolHandler : IToolHandler
+    private sealed class TemporaryToolRoot : IDisposable
     {
-        public FakeToolHandler(string toolName, object output)
+        public TemporaryToolRoot(string toolsRoot, string registryPath)
         {
-            ToolName = toolName;
-            Output = output;
+            ToolsRoot = toolsRoot;
+            RegistryPath = registryPath;
         }
 
-        public string ToolName { get; }
+        public string ToolsRoot { get; }
 
-        public object Output { get; }
+        public string RegistryPath { get; }
 
-        public IReadOnlyDictionary<string, object?>? Parameters { get; private set; }
-
-        public Task<object?> ExecuteAsync(IReadOnlyDictionary<string, object?> parameters, CancellationToken cancellationToken)
+        public void Dispose()
         {
-            Parameters = parameters;
-            return Task.FromResult<object?>(Output);
+            Directory.Delete(ToolsRoot, recursive: true);
         }
     }
 }

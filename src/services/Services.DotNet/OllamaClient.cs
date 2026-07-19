@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -29,13 +30,7 @@ public class OllamaClient : IOllamaClient
         if (string.IsNullOrWhiteSpace(selectedModel))
             throw new InvalidOperationException("An Ollama model must be provided or configured as the default model.");
 
-        var request = new OllamaChatRequest(
-            selectedModel,
-            messages.Select(message => new OllamaChatMessage(ToOllamaRole(message.Role), message.Content)),
-            tools.Select(ToOllamaTool),
-            Stream: false);
-
-        using var response = await _httpClient.PostAsJsonAsync("api/chat", request, cancellationToken);
+        using var response = await SendChatAsync(selectedModel, messages, tools, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var chatResponse = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
@@ -45,6 +40,27 @@ public class OllamaClient : IOllamaClient
             .ToList() ?? [];
 
         return new OllamaChatResult(chatResponse?.Message?.Content ?? string.Empty, toolCalls);
+    }
+
+    private async Task<HttpResponseMessage> SendChatAsync(
+        string selectedModel,
+        IReadOnlyList<ConversationMessage> messages,
+        IReadOnlyList<ToolDefinition> tools,
+        CancellationToken cancellationToken)
+    {
+        var request = new OllamaChatRequest(
+            selectedModel,
+            messages.Select(message => new OllamaChatMessage(ToOllamaRole(message.Role), message.Content)),
+            tools.Select(ToOllamaTool),
+            Stream: false);
+
+        var response = await _httpClient.PostAsJsonAsync("api/chat", request, cancellationToken);
+        if (response.StatusCode != HttpStatusCode.BadRequest || tools.Count == 0)
+            return response;
+
+        response.Dispose();
+        var fallbackRequest = request with { Tools = [] };
+        return await _httpClient.PostAsJsonAsync("api/chat", fallbackRequest, cancellationToken);
     }
 
     private sealed record OllamaChatRequest(string Model, IEnumerable<OllamaChatMessage> Messages, IEnumerable<OllamaTool> Tools, bool Stream);
@@ -96,7 +112,24 @@ public class OllamaClient : IOllamaClient
             "function",
             new OllamaToolFunction(
                 tool.Name,
-                tool.Description,
+                BuildToolDescription(tool),
                 new OllamaToolParameters("object", properties, [])));
+    }
+
+    private static string BuildToolDescription(ToolDefinition tool)
+    {
+        var parts = new List<string> { tool.Description };
+
+        if (!string.IsNullOrWhiteSpace(tool.OutputDescription))
+        {
+            parts.Add($"Output: {tool.OutputDescription}");
+        }
+
+        if (tool.ResultExample is not null)
+        {
+            parts.Add($"Result example: {JsonSerializer.Serialize(tool.ResultExample)}");
+        }
+
+        return string.Join("\n", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
     }
 }

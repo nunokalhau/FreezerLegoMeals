@@ -2,170 +2,130 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "tools": [
     {
-      "name": "weekly_meal_planner",
-      "description": "Generate a balanced weekly meal plan based on available recipes and ingredients with dietary preferences",
-      "script": "weekly_meal_planner.py",
-      "keywords": ["meal plan", "weekly plan", "recipe planning", "weekend prep", "meal schedule"],
+      "name": "search_recipes",
+      "description": "Primary recipe discovery tool. Search and filter recipes by ingredients, excluded ingredients, category, tags, cuisine, prep/cook/total time, difficulty, servings, freezer/batch/dietary flags, and optional fuzzy matching.",
+      "keywords": ["find recipes", "recipe search", "ingredient lookup", "meal discovery"],
       "parameters": [
-        "--num-days",
-        "--dietary-preferences",
-        "--start-date"
+        "ingredients",
+        "excluded_ingredients",
+        "category",
+        "tags",
+        "cuisine",
+        "preparation_time",
+        "cooking_time",
+        "total_time",
+        "difficulty",
+        "servings",
+        "freezer_friendly",
+        "batch_cooking_friendly",
+        "vegetarian",
+        "vegan",
+        "gluten_free",
+        "dairy_free",
+        "spicy",
+        "high_protein",
+        "low_calorie",
+        "sort_by",
+        "limit",
+        "fuzzy"
       ],
       "examples": [
-        "Create a 5-day vegetarian meal plan",
-        "Generate weekly plan with high-protein options",
-        "Plan weekend meals for 7 days",
-        "Weekend meal prep plan"
+        "Find freezer-friendly chicken recipes under 45 minutes",
+        "Search vegetarian recipes without dairy sorted by total time",
+        "Find spicy Vietnamese pickles or sides",
+        "Show 5 high protein recipes with rice but no pork"
       ],
-      "output_description": "JSON and markdown files containing the weekly meal plan with recipe details, categories, ingredients and preparation times",
-      "aliases": ["meal_plan", "recipe_planning"]
+      "wrapper": "search_recipes.py",
+      "result_example": {
+        "id": "chicken-teriyaki",
+        "name": "Chicken Teriyaki",
+        "description": "Sweet and savory freezer-friendly chicken with rice.",
+        "category": "Asian",
+        "tags": ["high-protein", "freezer-friendly"],
+        "prepTime": 20,
+        "cookTime": 15,
+        "servings": 4
+      },
+      "expected_json_output": { "total_recipes_found": 1, "recipes": ["recipe cards"], "filters": {} },
+      "output_description": "Filtered recipe discovery cards with id, name, description, category, tags, prepTime, cookTime, servings, and match metadata. Use the selected recipe id with the recipe-detail tool to fetch steps and full recipe details.",
+      "aliases": ["ingredient_search", "recipe_search", "ingredient_lookup"]
     },
     {
-      "name": "ingredient_search",
-      "description": "Search for recipes containing specific ingredients or find a recipe by ID",
-      "script": "search_recipes.py",
-      "keywords": ["find recipes", "ingredient lookup", "recipe search"],
-      "parameters": [
-        "--ingredients",
-        "--recipe-id"
-      ],
-      "examples": [
-        "Find recipes with chicken",
-        "Search for tofu and vegetables",
-        "Look up recipe by ID 123",
-        "Find recipes with 'carne de vaca' or 'frango'"
-      ],
-      "output_description": "JSON list of matching recipes with names, IDs, source paths, and ingredients",
-      "aliases": ["recipe_search", "ingredient_lookup"]
+      "name": "plan_weekly_meals",
+      "description": "Generate a balanced weekly meal plan that respects dietary preferences, excluded ingredients, preparation-time preference, and optional calorie target while avoiding repetition and encouraging freezer-friendly meals.",
+      "keywords": ["meal plan", "weekly plan", "meal schedule", "weekend prep"],
+      "parameters": ["number_of_days", "meals_per_day", "dietary_preferences", "excluded_ingredients", "preparation_time_preference", "calorie_target"],
+      "examples": ["Create a 5-day vegetarian meal plan", "Plan 7 days with 2 meals per day and no pork"],
+      "wrapper": "plan_weekly_meals.py",
+      "expected_json_output": { "days": ["planned days"], "calorie_target": null, "planning_notes": [] },
+      "output_description": "Day-by-day meal plan with balanced recipe suggestions and planning notes.",
+      "aliases": ["weekly_meal_planner", "meal_plan", "recipe_planning"]
     },
     {
-      "name": "get_recipe_ingredients",
-      "description": "Get detailed ingredient information for a specific recipe",
-      "script": "get_recipe_ingredients.py",
-      "keywords": ["recipe ingredients", "what's in", "ingredient details"],
-      "parameters": [
-        "--recipe"
-      ],
-      "examples": [
-        "Show ingredients in Black Beans",
-        "What are the ingredients for Salsa Verde Chicken?",
-        "List ingredients for Tofu Chorizo"
-      ],
-      "output_description": "Detailed list of ingredients with amounts and units for a specific recipe",
-      "aliases": ["ingredients", "recipe_detail"]
+      "name": "get_recipe",
+      "description": "Fetch full recipe details, ingredients, preparation steps, freezer notes, and reheating notes for a recipe selected from search_recipes.",
+      "keywords": ["recipe details", "get recipe", "recipe steps", "full recipe"],
+      "parameters": ["id", "name"],
+      "examples": ["Get the full recipe for chicken-teriyaki", "Show recipe steps for Chicken Teriyaki"],
+      "wrapper": "get_recipe.py",
+      "expected_json_output": { "recipe": {}, "numeric_id": 1, "ingredients": [], "steps": [], "freezing_notes": null, "reheat_notes": null },
+      "output_description": "Full recipe details for a selected search_recipes card, including ingredients and available preparation steps.",
+      "aliases": ["get_recipe_ingredients", "ingredients", "recipe_detail"]
     },
     {
-      "name": "generate_shopping_list",
-      "description": "Create shopping lists by parsing recipe files and subtracting existing inventory items",
-      "script": "generate_shopping_list.py",
-      "keywords": ["shopping list", "grocery list", "shopping cart"],
-      "parameters": [
-        "--recipes-file",
-        "--inventory-file"
-      ],
-      "examples": [
-        "Generate shopping list for 3 recipes",
-        "Create grocery list with inventory subtraction",
-        "Shopping list for Turkey Chili and Salsa Verde Chicken"
-      ],
-      "output_description": "JSON and markdown shopping list with items organized by category, accounting for existing inventory",
-      "aliases": ["shopping_list", "grocery_plan"]
+      "name": "replace_meal",
+      "description": "Replace a meal in an existing meal plan while preserving meal type, dietary restrictions, and preparation constraints, without suggesting the same recipe again.",
+      "keywords": ["replace meal", "swap recipe", "meal alternative"],
+      "parameters": ["existing_plan", "meal_type", "current_recipe", "dietary_preferences", "excluded_ingredients", "preparation_time_preference"],
+      "examples": ["Replace Tuesday dinner with another freezer-friendly vegetarian meal"],
+      "wrapper": "replace_meal.py",
+      "expected_json_output": { "meal_type": "dinner", "replacement": {}, "rationale": "" },
+      "output_description": "Replacement recipe suggestion with rationale and preserved constraints.",
+      "aliases": ["swap_meal", "meal_replacement"]
     },
     {
-      "name": "generate_recipe_index",
-      "description": "Generate a categorized index of all recipes for easy navigation",
-      "script": "generate_recipe_index.py",
-      "keywords": ["recipe index", "recipe listing", "catalog"],
-      "parameters": [
-        "--food-dir"
-      ],
-      "examples": [
-        "Generate recipe index",
-        "Create recipe catalog by category",
-        "List all recipes with their source paths"
-      ],
-      "output_description": "JSON and markdown files containing a categorized index of all recipes",
-      "aliases": ["recipe_catalog", "index"]
+      "name": "optimize_shopping_list",
+      "description": "Normalize and optimize an existing shopping list by merging duplicate ingredients, combining quantities where possible, grouping by supermarket section, and sorting within sections.",
+      "keywords": ["optimize grocery list", "shopping list", "aisle organization"],
+      "parameters": ["items"],
+      "examples": ["Merge duplicate onions and group my shopping list by section"],
+      "wrapper": "optimize_shopping_list.py",
+      "expected_json_output": { "sections": [{ "section": "Produce", "items": [] }] },
+      "output_description": "Optimized shopping list grouped by supermarket section.",
+      "aliases": ["shopping_list_optimizer", "shopping_optimizer", "aisle_plan"]
     },
     {
-      "name": "validate_recipe_structure",
-      "description": "Validate recipe markdown structure against defined schema",
-      "script": "validate_recipe_structure.py",
-      "keywords": ["validate recipes", "structure check", "recipe validation"],
-      "parameters": [
-        "--food-dir"
-      ],
-      "examples": [
-        "Verify all recipes follow standard structure",
-        "Validate recipe markdown files",
-        "Check recipe consistency"
-      ],
-      "output_description": "JSON validation report and human-readable summary of validation results",
-      "aliases": ["recipe_validation", "structure_check"]
+      "name": "batch_cooking_plan",
+      "description": "Generate an optimized cooking workflow for multiple recipes by grouping similar preparation tasks, minimizing cleaning, reusing equipment, and reducing total cooking time.",
+      "keywords": ["batch cooking", "prep schedule", "cooking workflow"],
+      "parameters": ["recipes"],
+      "examples": ["Create a batch cooking plan for chili, rice, and salsa chicken"],
+      "wrapper": "batch_cooking_plan.py",
+      "expected_json_output": { "recipes": [], "estimated_total_minutes": 0, "schedule": [] },
+      "output_description": "Step-by-step batch cooking schedule.",
+      "aliases": ["batch_preparation_scheduler", "batch_schedule", "prep_scheduler"]
     },
     {
-      "name": "nutrition_analytics",
-      "description": "Perform nutritional analysis on recipes or ingredient combinations",
-      "script": "nutrition_analytics.py",
-      "keywords": ["nutrition analysis", "dietary analysis", "nutritional insight"],
-      "parameters": [
-        "--recipes"
-      ],
-      "examples": [
-        "Analyze nutrition of meal plan",
-        "Calculate nutritional values for selected recipes",
-        "Nutrition dashboard for recipe category"
-      ],
-      "output_description": "JSON and markdown analytics showing nutritional information, dietary categories, and preparation statistics",
-      "aliases": ["nutrition_report", "dietary_insight"]
+      "name": "convert_servings",
+      "description": "Scale a recipe up or down, preserving units and rounding ingredient quantities sensibly without losing precision.",
+      "keywords": ["scale recipe", "convert servings", "double recipe", "halve recipe"],
+      "parameters": ["recipe", "target_servings", "current_servings"],
+      "examples": ["Scale turkey chili to 8 servings"],
+      "wrapper": "convert_servings.py",
+      "expected_json_output": { "recipe": {}, "current_servings": 1, "target_servings": 4, "scale_factor": 4, "ingredients": [] },
+      "output_description": "Recipe ingredients scaled to the requested servings.",
+      "aliases": ["scale_recipe", "serving_converter"]
     },
     {
-      "name": "batch_preparation_scheduler",
-      "description": "Calculate optimal batch cooking schedule based on freezer capacity and recipe requirements",
-      "script": "batch_preparation_scheduler.py",
-      "keywords": ["batch cooking", "schedule", "preparation timing"],
-      "parameters": [
-        "--recipes"
-      ],
-      "examples": [
-        "Schedule batch cooking for 10 recipes",
-        "Plan preparation time with freezer capacity constraints",
-        "Optimize cooking schedule for large prep session"
-      ],
-      "output_description": "JSON and markdown schedule with optimal batch preparation times and freezer usage recommendations",
-      "aliases": ["batch_schedule", "prep_scheduler"]
-    },
-    {
-      "name": "ingredient_substitution_finder",
-      "description": "Find suitable ingredient substitutions based on similar ingredients and recipes",
-      "script": "ingredient_substitution_finder.py",
+      "name": "ingredient_substitutions",
+      "description": "Suggest ingredient substitutions that preserve recipe intent where possible, explaining each suggestion and indicating when no suitable substitution exists.",
       "keywords": ["substitute ingredients", "ingredient alternative", "recipe flexibility"],
-      "parameters": [
-        "--ingredients"
-      ],
-      "examples": [
-        "Find substitute for chicken",
-        "What can I use instead of tofu?",
-        "Ingredient substitution for ground beef"
-      ],
-      "output_description": "JSON list of recommended substitutions with rationale and recipes that contain substituted ingredients",
-      "aliases": ["ingredient_substitute", "substitute_finder"]
-    },
-    {
-      "name": "shopping_list_optimizer",
-      "description": "Optimize shopping lists by grouping ingredients by store aisles",
-      "script": "shopping_list_optimizer.py",
-      "keywords": ["optimize grocery list", "aisle organization", "shopping optimization"],
-      "parameters": [
-        "--recipes-file"
-      ],
-      "examples": [
-        "Optimize shopping list by store aisle",
-        "Organize ingredients by grocery store section",
-        "Create efficient shopping plan with aisle grouping"
-      ],
-      "output_description": "JSON and markdown files containing optimized shopping lists organized by store aisles",
-      "aliases": ["shopping_optimizer", "aisle_plan"]
+      "parameters": ["ingredients", "recipe", "dietary_preferences"],
+      "examples": ["What can I use instead of tofu?", "Suggest dairy-free substitutions for cream"],
+      "wrapper": "ingredient_substitutions.py",
+      "expected_json_output": { "suggestions": [{ "ingredient": "cream", "substitutions": [] }], "recipe": null },
+      "output_description": "Substitution suggestions with rationale and suitability notes.",
+      "aliases": ["ingredient_substitution_finder", "ingredient_substitute", "substitute_finder"]
     }
   ]
 }

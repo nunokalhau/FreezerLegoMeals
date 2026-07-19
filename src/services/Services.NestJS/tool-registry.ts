@@ -4,9 +4,12 @@ export interface ToolDefinition {
   name: string;
   description: string;
   script?: string;
+  wrapper?: string;
   keywords?: string[];
   parameters?: string[];
   examples?: string[];
+  result_example?: unknown;
+  expected_json_output?: unknown;
   output_description?: string;
   aliases?: string[];
 }

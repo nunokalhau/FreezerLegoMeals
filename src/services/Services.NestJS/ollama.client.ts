@@ -26,7 +26,7 @@ export class OllamaClient implements OllamaClientInterface {
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
 
     try {
-      const response = await fetch(new URL('/api/chat', this.options.baseUrl), {
+      let response = await fetch(new URL('/api/chat', this.options.baseUrl), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,6 +42,25 @@ export class OllamaClient implements OllamaClientInterface {
         }),
         signal: controller.signal,
       });
+
+      if (!response.ok && response.status === 400 && tools.length > 0) {
+        response = await fetch(new URL('/api/chat', this.options.baseUrl), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: messages.map((message) => ({
+              role: this.toOllamaRole(message.role),
+              content: message.content,
+            })),
+            tools: [],
+            stream: false,
+          }),
+          signal: controller.signal,
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`Ollama chat request failed with status ${response.status}`);
@@ -78,7 +97,7 @@ export class OllamaClient implements OllamaClientInterface {
       type: 'function',
       function: {
         name: tool.name,
-        description: tool.description,
+        description: this.buildToolDescription(tool),
         parameters: {
           type: 'object',
           properties,
@@ -86,5 +105,13 @@ export class OllamaClient implements OllamaClientInterface {
         },
       },
     };
+  }
+
+  private buildToolDescription(tool: ToolDefinition): string {
+    return [
+      tool.description,
+      tool.output_description ? `Output: ${tool.output_description}` : undefined,
+      tool.result_example ? `Result example: ${JSON.stringify(tool.result_example)}` : undefined,
+    ].filter(Boolean).join('\n');
   }
 }

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { ToolExecutor, ToolHandler } from '../../../services/Services.NestJS/tool-executor';
+import { ToolExecutor } from '../../../services/Services.NestJS/tool-executor';
 import { ToolRegistry } from '../../../services/Services.NestJS/tool-registry';
 
 describe('NestJS ToolExecutor architecture', () => {
@@ -18,7 +18,7 @@ describe('NestJS ToolExecutor architecture', () => {
           {
             name: 'example_tool',
             description: 'Example tool',
-            script: 'example_tool.py',
+            wrapper: 'example_tool.py',
             aliases: ['example_alias'],
           },
         ],
@@ -38,34 +38,29 @@ describe('NestJS ToolExecutor architecture', () => {
   });
 
   it('delegates execution to a registered application service handler', async () => {
-    const handler: ToolHandler = {
-      toolName: 'example_tool',
-      execute: jest.fn().mockResolvedValue({ handled: true }),
-    };
-    const executor = new ToolExecutor(new ToolRegistry(registryPath), [handler]);
+    writeFileSync(
+      join(tmpRoot, 'example_tool.py'),
+      "import json, sys\nparameters = json.loads(sys.stdin.read() or '{}')\nprint(json.dumps({'handled': True, 'parameters': parameters}))\n"
+    );
+    const executor = new ToolExecutor(new ToolRegistry(registryPath), tmpRoot);
 
     const result = await executor.execute('example_alias', { message: 'hello' });
 
-    expect(result).toEqual({
-      success: true,
-      tool: 'example_tool',
-      output: { handled: true },
-    });
-    expect(handler.execute).toHaveBeenCalledWith({ message: 'hello' });
+    expect(result).toEqual({ success: true, tool: 'example_tool', output: { handled: true, parameters: { message: 'hello' } } });
   });
 
-  it('does not fall back to CLI scripts when no handler exists', async () => {
-    const executor = new ToolExecutor(new ToolRegistry(registryPath));
+  it('returns failure when the wrapper is missing', async () => {
+    const executor = new ToolExecutor(new ToolRegistry(registryPath), tmpRoot);
 
     const result = await executor.execute('example_tool');
 
     expect(result.success).toBe(false);
     expect(result.tool).toBe('example_tool');
-    expect(result.error).toContain('No application service handler');
+    expect(result.error).toContain('Tool wrapper not found');
   });
 
   it('throws for unknown tools', async () => {
-    const executor = new ToolExecutor(new ToolRegistry(registryPath));
+    const executor = new ToolExecutor(new ToolRegistry(registryPath), tmpRoot);
 
     await expect(executor.execute('missing_tool')).rejects.toThrow('Unknown tool: missing_tool');
   });

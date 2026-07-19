@@ -60,6 +60,33 @@ public class OllamaClientTests
     }
 
     [Fact]
+    public async Task ChatAsync_IncludesOutputDescriptionAndResultExampleInToolDescription()
+    {
+        var handler = new CapturingHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new { message = new { content = "ok" } })
+        });
+        var client = new OllamaClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://localhost:11434") },
+            Options.Create(new OllamaOptions { DefaultModel = "default-model" }));
+
+        await client.ChatAsync(null, [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], [
+            new ToolDefinition
+            {
+                Name = "search_recipes",
+                Description = "Primary recipe discovery tool.",
+                OutputDescription = "Recipe discovery cards.",
+                ResultExample = new { id = "chicken-teriyaki", name = "Chicken Teriyaki" }
+            }
+        ]);
+
+        using var document = JsonDocument.Parse(handler.RequestBody!);
+        var description = document.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("description").GetString();
+        Assert.Contains("Recipe discovery cards", description);
+        Assert.Contains("chicken-teriyaki", description);
+    }
+
+    [Fact]
     public async Task ChatAsync_UsesProvidedModelWhenPresent()
     {
         // Arrange
@@ -137,18 +164,49 @@ public class OllamaClientTests
         Assert.Equal("hello", result.ToolCalls[0].Arguments["message"]?.ToString());
     }
 
+    [Fact]
+    public async Task ChatAsync_RetriesWithoutToolsWhenOllamaRejectsToolPayload()
+    {
+        var handler = new CapturingHttpMessageHandler([
+            new HttpResponseMessage(HttpStatusCode.BadRequest),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "fallback ok" } })
+            }
+        ]);
+        var client = new OllamaClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://localhost:11434") },
+            Options.Create(new OllamaOptions { DefaultModel = "default-model" }));
+
+        var result = await client.ChatAsync(null, [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], [
+            new ToolDefinition { Name = "search_recipes", Description = "Search", Parameters = ["ingredients"] }
+        ]);
+
+        Assert.Equal("fallback ok", result.Content);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        using var fallbackDocument = JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.Empty(fallbackDocument.RootElement.GetProperty("tools").EnumerateArray());
+    }
+
     private sealed class CapturingHttpMessageHandler : HttpMessageHandler
     {
-        private readonly HttpResponseMessage _response;
+        private readonly Queue<HttpResponseMessage> _responses;
 
         public CapturingHttpMessageHandler(HttpResponseMessage response)
+            : this([response])
         {
-            _response = response;
+        }
+
+        public CapturingHttpMessageHandler(IEnumerable<HttpResponseMessage> responses)
+        {
+            _responses = new Queue<HttpResponseMessage>(responses);
         }
 
         public HttpRequestMessage? Request { get; private set; }
 
         public string? RequestBody { get; private set; }
+
+        public List<string> RequestBodies { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -156,8 +214,12 @@ public class OllamaClientTests
             RequestBody = request.Content == null
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
+            if (RequestBody is not null)
+            {
+                RequestBodies.Add(RequestBody);
+            }
 
-            return _response;
+            return _responses.Dequeue();
         }
     }
 }

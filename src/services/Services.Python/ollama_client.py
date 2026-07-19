@@ -57,7 +57,19 @@ class OllamaClient:
             with request.urlopen(chat_request, timeout=self.config.timeout) as response:
                 response_body = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
-            raise RuntimeError(f"Ollama chat request failed with status {error.code}") from error
+            if error.code != 400 or not tools:
+                raise RuntimeError(f"Ollama chat request failed with status {error.code}") from error
+
+            fallback_payload = dict(payload)
+            fallback_payload["tools"] = []
+            fallback_request = request.Request(
+                url=f"{self.config.base_url.rstrip('/')}/api/chat",
+                data=json.dumps(fallback_payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with request.urlopen(fallback_request, timeout=self.config.timeout) as response:
+                response_body = json.loads(response.read().decode("utf-8"))
 
         message = response_body.get("message") or {}
         tool_calls = []
@@ -97,7 +109,7 @@ class OllamaClient:
             "type": "function",
             "function": {
                 "name": tool.get("name"),
-                "description": tool.get("description", ""),
+                "description": self._tool_description(tool),
                 "parameters": {
                     "type": "object",
                     "properties": properties,
@@ -105,3 +117,11 @@ class OllamaClient:
                 },
             },
         }
+
+    def _tool_description(self, tool: dict[str, Any]) -> str:
+        parts = [tool.get("description", "")]
+        if tool.get("output_description"):
+            parts.append(f"Output: {tool.get('output_description')}")
+        if tool.get("result_example"):
+            parts.append(f"Result example: {json.dumps(tool.get('result_example'), ensure_ascii=False)}")
+        return "\n".join(part for part in parts if part)

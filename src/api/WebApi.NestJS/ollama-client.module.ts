@@ -9,6 +9,7 @@ import { ToolExecutor } from '../../services/Services.NestJS/tool-executor';
 import { ToolRegistry } from '../../services/Services.NestJS/tool-registry';
 
 @Module({
+  imports: [],
   providers: [
     AssistantService,
     InMemoryConversationStore,
@@ -30,7 +31,7 @@ import { ToolRegistry } from '../../services/Services.NestJS/tool-registry';
     },
     {
       provide: ToolExecutor,
-      useFactory: (toolRegistry: ToolRegistry) => new ToolExecutor(toolRegistry),
+      useFactory: (toolRegistry: ToolRegistry) => new ToolExecutor(toolRegistry, resolve(process.cwd(), '..', '..', 'tools')),
       inject: [ToolRegistry],
     },
     OllamaClient,

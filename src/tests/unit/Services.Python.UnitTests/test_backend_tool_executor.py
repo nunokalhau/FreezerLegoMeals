@@ -32,39 +32,37 @@ def test_tool_registry_loads_tools_and_aliases():
         assert tool["name"] == "example_tool"
 
 
-def test_tool_executor_delegates_to_registered_application_handler():
+def test_tool_executor_executes_registry_wrapper_and_parses_json():
     with tempfile.TemporaryDirectory() as tmp_dir:
         registry_path = create_registry(tmp_dir)
         registry = ToolRegistry(registry_path)
-        captured = {}
-
-        def handler(parameters):
-            captured["parameters"] = parameters
-            return {"handled": True}
-
-        executor = ToolExecutor(registry, {"example_tool": handler})
+        wrapper_path = Path(tmp_dir) / "example_tool.py"
+        wrapper_path.write_text(
+            "import json, sys\nparameters = json.loads(sys.stdin.read() or '{}')\nprint(json.dumps({'handled': True, 'parameters': parameters}))\n",
+            encoding="utf-8",
+        )
+        executor = ToolExecutor(registry, Path(tmp_dir))
 
         result = executor.execute("example_alias", {"message": "hello"})
 
         assert result == {
             "success": True,
             "tool": "example_tool",
-            "output": {"handled": True},
+            "output": {"handled": True, "parameters": {"message": "hello"}},
         }
-        assert captured["parameters"] == {"message": "hello"}
 
 
-def test_tool_executor_does_not_fall_back_to_cli_scripts():
+def test_tool_executor_returns_failure_when_wrapper_is_missing():
     with tempfile.TemporaryDirectory() as tmp_dir:
         registry_path = create_registry(tmp_dir)
         registry = ToolRegistry(registry_path)
-        executor = ToolExecutor(registry)
+        executor = ToolExecutor(registry, Path(tmp_dir))
 
         result = executor.execute("example_tool")
 
         assert result["success"] is False
         assert result["tool"] == "example_tool"
-        assert "No application service handler" in result["error"]
+        assert "Tool wrapper not found" in result["error"]
 
 
 def test_unknown_tool_raises_value_error():
@@ -86,7 +84,7 @@ def create_registry(tmp_dir):
                     {
                         "name": "example_tool",
                         "description": "Example tool",
-                        "script": "example_tool.py",
+                        "wrapper": "example_tool.py",
                         "aliases": ["example_alias"],
                     }
                 ]
