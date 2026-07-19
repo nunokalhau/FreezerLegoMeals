@@ -74,23 +74,32 @@ class Repository:
         """Search for recipes containing specified ingredients."""
         if not self.db_path.exists():
             return []
+
+        normalized_ingredients = [
+            ingredient.strip().lower()
+            for ingredient in ingredients or []
+            if ingredient and ingredient.strip()
+        ]
+
+        if not normalized_ingredients:
+            return []
             
         conn = sqlite3.connect(self.db_path)
         try:
             # Build the query with OR logic for ingredients
-            ingredient_placeholders = ", ".join(["?" for _ in ingredients])
+            ingredient_placeholders = ", ".join(["?" for _ in normalized_ingredients])
             query = f"""
                 SELECT DISTINCT r.id, r.name, r.source_path, 
                        GROUP_CONCAT(i.name) as matched_ingredients
                 FROM recipes r
                 JOIN recipe_ingredients ri ON r.id = ri.recipe_id
                 JOIN ingredients i ON ri.ingredient_id = i.id
-                WHERE i.name IN ({ingredient_placeholders})
+                WHERE LOWER(i.name) IN ({ingredient_placeholders})
                 GROUP BY r.id, r.name, r.source_path
                 ORDER BY r.name
             """
             
-            cursor = conn.execute(query, ingredients)
+            cursor = conn.execute(query, normalized_ingredients)
             recipes = []
             
             for row in cursor.fetchall():

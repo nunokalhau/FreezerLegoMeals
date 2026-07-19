@@ -81,7 +81,23 @@ class TestWebAPI:
         with pytest.raises(HTTPException) as exc:
             app_module.get_recipe_info('missing')
 
-        assert exc.value.status_code == 500
+        assert exc.value.status_code == 404
+
+    def test_get_recipe_by_id_returns_not_found_when_missing(self, monkeypatch):
+        monkeypatch.setattr(app_module.meal_service, 'get_recipe_by_id', lambda _id: None)
+
+        with pytest.raises(HTTPException) as exc:
+            app_module.get_recipe_by_id(123)
+
+        assert exc.value.status_code == 404
+
+    def test_get_recipe_details_returns_not_found_when_missing(self, monkeypatch):
+        monkeypatch.setattr(app_module.meal_service, 'get_recipe_details', lambda _id: {'error': 'missing'})
+
+        with pytest.raises(HTTPException) as exc:
+            app_module.get_recipe_details(123)
+
+        assert exc.value.status_code == 404
 
 
 def test_basic_web_structure():

@@ -1,97 +1,107 @@
 #!/usr/bin/env python3
-"""
-Structure tests for Freezer Lego Meals Python Web API.
-These tests verify the overall API structure and integration points.
-"""
 
-import sys
-import os
-import unittest.mock as mock
 from pathlib import Path
 import importlib.util
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
-MEAL_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'meal_service.py'
-SHOPPING_SERVICE_PATH = SRC_ROOT / 'services' / 'Services.Python' / 'shopping_service.py'
+APP_PATH = SRC_ROOT / 'api' / 'WebApi.Python' / 'app.py'
 
-meal_spec = importlib.util.spec_from_file_location('meal_service', MEAL_SERVICE_PATH)
-shopping_spec = importlib.util.spec_from_file_location('shopping_service', SHOPPING_SERVICE_PATH)
+app_spec = importlib.util.spec_from_file_location('webapi_python_app_structure', APP_PATH)
+if app_spec is None or app_spec.loader is None:
+    raise ImportError(f'Unable to load app module from {APP_PATH}')
 
-if meal_spec is None or meal_spec.loader is None:
-    raise ImportError(f'Unable to load meal_service from {MEAL_SERVICE_PATH}')
-if shopping_spec is None or shopping_spec.loader is None:
-    raise ImportError(f'Unable to load shopping_service from {SHOPPING_SERVICE_PATH}')
-
-meal_module = importlib.util.module_from_spec(meal_spec)
-meal_spec.loader.exec_module(meal_module)
-shopping_module = importlib.util.module_from_spec(shopping_spec)
-shopping_spec.loader.exec_module(shopping_module)
-
-sys.modules['meal_service'] = meal_module
-sys.modules['shopping_service'] = shopping_module
-
-import pytest
+app_module = importlib.util.module_from_spec(app_spec)
+app_spec.loader.exec_module(app_module)
 
 
-class TestAPIIntegration:
-    """Test API integration with core services."""
-    
-    def test_api_structure_exists(self):
-        """Verify that main API components exist in expected locations."""
-        # Check expected paths for Python Web API
-        expected_paths = [
-            "Api/FrezerLegoMeals.WebApi.Python/app.py",
-            "Api/FrezerLegoMeals.WebApi.Python/requirements.txt"
-        ]
-        
-        # Since we can't actually test file contents in this context,
-        # we'll just verify basic structure and that tests work
-        assert True  # Test passes by default
-    
-    def test_services_integration(self):
-        """Test that API can integrate with services layer."""
-        MealService = meal_module.MealService
-        ShoppingService = shopping_module.ShoppingService
+def test_root_handler_returns_success_payload():
+    payload = app_module.read_root()
 
-        meal_service = MealService()
-        shopping_service = ShoppingService()
-
-        assert meal_service is not None
-        assert shopping_service is not None
-    
-    def test_service_layer_integration(self):
-        """Test basic integration between API and service layers."""
-        MealService = meal_module.MealService
-        ShoppingService = shopping_module.ShoppingService
-
-        meal_service = MealService()
-        shopping_service = ShoppingService()
-
-        assert hasattr(meal_service, 'find_meals_with_ingredients')
-        assert hasattr(shopping_service, 'generate_shopping_list')
+    assert payload['status'] == 'success'
+    assert 'Welcome' in payload['message']
 
 
-def test_test_structure():
-    """Verify that the testing framework structure is sound."""
-    # This is a basic smoke test for our test infrastructure
-    assert True
+def test_get_recipe_by_id_returns_wrapped_recipe(monkeypatch):
+    monkeypatch.setattr(app_module.meal_service, 'get_recipe_by_id', lambda _id: {'id': 1, 'name': 'Chicken Rice'})
+
+    response = app_module.get_recipe_by_id(1)
+
+    assert response.recipe['id'] == 1
+    assert response.recipe['name'] == 'Chicken Rice'
 
 
-# Test that we can at least mock key components 
-class TestComponentMocking:
-    """Test that we can mock API components properly."""
-    
-    def test_mock_service_creation(self):
-        """Test that service mocking works in tests."""
-        with mock.patch('meal_service.Repository') as mock_repo:
-            # This should work even if there are no real imports
-            assert True
-            
-    def test_api_mocking_capability(self):
-        """Verify we can setup proper API mocking infrastructure."""
-        # Test that the structure supports mocking 
-        assert True
+def test_get_recipe_details_returns_wrapped_details(monkeypatch):
+    monkeypatch.setattr(
+        app_module.meal_service,
+        'get_recipe_details',
+        lambda _id: {'recipe': {'id': 1, 'name': 'Chicken Rice'}, 'message': 'Details for recipe: Chicken Rice'}
+    )
+
+    response = app_module.get_recipe_details(1)
+
+    assert response.recipe['name'] == 'Chicken Rice'
+    assert 'Details for recipe' in response.message
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+def test_get_recipe_ingredients_returns_found_response(monkeypatch):
+    monkeypatch.setattr(
+        app_module.shopping_service,
+        'get_recipe_ingredients',
+        lambda _identifier: [{'name': 'chicken', 'amount': 200, 'unit': 'g'}]
+    )
+
+    response = app_module.get_recipe_ingredients('Chicken Rice')
+
+    assert response.found is True
+    assert response.ingredients[0]['name'] == 'chicken'
+
+
+def test_get_multiple_recipe_ingredients_accepts_list_body(monkeypatch):
+    monkeypatch.setattr(
+        app_module.shopping_service,
+        'get_multiple_recipe_ingredients',
+        lambda identifiers: {identifier: [{'name': 'salt'}] for identifier in identifiers}
+    )
+
+    response = app_module.get_multiple_recipe_ingredients(['Recipe A', 'Recipe B'])
+
+    assert response.total_recipes == 2
+    assert response.recipe_ingredients['Recipe A'][0]['name'] == 'salt'
+
+
+def test_generate_shopping_list_returns_wrapped_payload(monkeypatch):
+    monkeypatch.setattr(
+        app_module.shopping_service,
+        'generate_shopping_list',
+        lambda identifiers, scale_factor, group_by_category: {
+            'recipes': identifiers,
+            'total_recipes': len(identifiers),
+            'scale_factor': scale_factor,
+            'ingredients': [{'name': 'chicken', 'amount': 200, 'unit': 'g'}],
+            'message': 'Generated shopping list'
+        }
+    )
+
+    response = app_module.generate_shopping_list(
+        app_module.GenerateShoppingListRequest(
+            recipe_identifiers=['Chicken Rice'],
+            scale_factor=2.0,
+            group_by_category=True,
+        )
+    )
+
+    assert response.scale_factor == 2.0
+    assert response.shopping_list['total_recipes'] == 1
+
+
+def test_get_recipe_info_returns_wrapped_info(monkeypatch):
+    monkeypatch.setattr(
+        app_module.shopping_service,
+        'get_recipe_info',
+        lambda _identifier: {'id': 1, 'name': 'Chicken Rice', 'servings': 2, 'time_to_prepare': 25}
+    )
+
+    response = app_module.get_recipe_info('Chicken Rice')
+
+    assert response.info['servings'] == 2
+    assert response.info['time_to_prepare'] == 25

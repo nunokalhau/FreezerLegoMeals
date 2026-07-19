@@ -65,15 +65,18 @@ class ShoppingService:
         Returns:
             List of ingredient dictionaries with name, amount, unit, and other details
         """
+        if not recipe_identifier or not recipe_identifier.strip():
+            return []
+
         # First get the recipe_id from either name or id
         try:
             recipe_id = int(recipe_identifier)
         except ValueError:
-            # Not a number, so search by name
-            recipes = self.repository.search_recipes_by_ingredients([recipe_identifier])
-            if not recipes:
+            # Not a number, so resolve by exact recipe name.
+            recipe_details = self.repository.get_recipe_details(recipe_identifier.strip())
+            if not recipe_details:
                 return []
-            recipe_id = recipes[0]["id"]
+            recipe_id = recipe_details[0]["id"]
             
         # Get ingredients using the repository
         return self.repository.get_recipe_ingredients(recipe_id)
@@ -246,18 +249,10 @@ class ShoppingService:
         Returns:
             Recipe information dictionary or None if not found
         """
-        # First get the recipe_id from either name or id
-        try:
-            recipe_id = int(recipe_identifier)
-        except ValueError:
-            # Not a number, so search by name  
-            recipes = self.repository.search_recipes_by_ingredients([recipe_identifier])
-            if not recipes:
-                return None
-            recipe_id = recipes[0]["id"]
-            
-        # Return recipe info
-        recipe_details = self.repository.get_recipe_details(str(recipe_id)) 
+        if not recipe_identifier or not recipe_identifier.strip():
+            return None
+
+        recipe_details = self.repository.get_recipe_details(recipe_identifier.strip())
         if recipe_details:
             # Extract the first one which should contain the basic info
             return {

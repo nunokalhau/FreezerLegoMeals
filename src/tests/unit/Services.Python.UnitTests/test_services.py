@@ -158,10 +158,12 @@ class TestShoppingService:
             {"name": "chicken breast", "amount": 500.0, "unit": "g"}
         ]
         mock_repo_instance.get_recipe_ingredients.return_value = expected_data
+        mock_repo_instance.get_recipe_details.return_value = [
+            {"id": 1, "name": "Chicken Curry"}
+        ]
         
         service = ShoppingService()
         service.repository = mock_repo_instance
-        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         result = service.get_recipe_ingredients("Chicken Curry")
         
         assert result == expected_data
@@ -175,10 +177,12 @@ class TestShoppingService:
             "Chicken Curry": [{"name": "chicken breast", "amount": 500.0, "unit": "g"}]
         }
         mock_repo_instance.get_recipe_ingredients.return_value = expected_data["Chicken Curry"]
+        mock_repo_instance.get_recipe_details.return_value = [
+            {"id": 1, "name": "Chicken Curry"}
+        ]
         
         service = ShoppingService()
         service.repository = mock_repo_instance
-        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         result = service.get_multiple_recipe_ingredients(["Chicken Curry"])
         
         assert "Chicken Curry" in result
@@ -192,13 +196,13 @@ class TestShoppingService:
             [{"name": "chicken breast", "amount": 500.0, "unit": "g"}],
             [{"name": "onion", "amount": 2.0, "unit": "pcs"}]
         ]
-        
-        service = ShoppingService()
-        service.repository = mock_repo_instance
-        mock_repo_instance.search_recipes_by_ingredients.side_effect = [
+        mock_repo_instance.get_recipe_details.side_effect = [
             [{"id": 1, "name": "Chicken Curry"}],
             [{"id": 2, "name": "Vegetable Soup"}],
         ]
+        
+        service = ShoppingService()
+        service.repository = mock_repo_instance
         result = service.generate_shopping_list(["Chicken Curry", "Vegetable Soup"], scale_factor=1.0)
         
         assert "recipes" in result
@@ -225,10 +229,12 @@ class TestShoppingService:
         mock_repo_instance.get_recipe_ingredients.return_value = [
             {"name": "chicken breast", "amount": 500.0, "unit": "g"}
         ]
+        mock_repo_instance.get_recipe_details.return_value = [
+            {"id": 1, "name": "Chicken Curry"}
+        ]
         
         service = ShoppingService()
         service.repository = mock_repo_instance
-        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         result = service.generate_shopping_list(["Chicken Curry"], scale_factor=2.0)
         
         assert result["scale_factor"] == 2.0
@@ -236,7 +242,6 @@ class TestShoppingService:
     def test_get_recipe_info_success(self):
         """Test get_recipe_info returns mapped recipe info."""
         mock_repo_instance = mock.Mock()
-        mock_repo_instance.search_recipes_by_ingredients.return_value = [{"id": 1, "name": "Chicken Curry"}]
         mock_repo_instance.get_recipe_details.return_value = [
             {
                 "id": 1,
@@ -258,7 +263,7 @@ class TestShoppingService:
     def test_get_recipe_info_not_found(self):
         """Test get_recipe_info returns None when recipe is not found."""
         mock_repo_instance = mock.Mock()
-        mock_repo_instance.search_recipes_by_ingredients.return_value = []
+        mock_repo_instance.get_recipe_details.return_value = []
 
         service = ShoppingService()
         service.repository = mock_repo_instance
@@ -266,6 +271,20 @@ class TestShoppingService:
         info = service.get_recipe_info("Missing Recipe")
 
         assert info is None
+
+    def test_get_recipe_ingredients_returns_empty_for_blank_identifier(self):
+        """Test get_recipe_ingredients returns empty for blank identifiers."""
+        service = ShoppingService()
+        service.repository = mock.Mock()
+
+        assert service.get_recipe_ingredients("   ") == []
+
+    def test_get_recipe_info_returns_none_for_blank_identifier(self):
+        """Test get_recipe_info returns None for blank identifiers."""
+        service = ShoppingService()
+        service.repository = mock.Mock()
+
+        assert service.get_recipe_info("   ") is None
         
     def test_categorize_ingredients(self):
         """Test _categorize_ingredients helper method."""

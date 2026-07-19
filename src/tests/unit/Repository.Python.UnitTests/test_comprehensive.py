@@ -1,142 +1,94 @@
-"""
-Comprehensive unit tests for Freezer Lego Meals Python Repository Layer
+from pathlib import Path
 
-This file demonstrates the expected testing patterns for a Python repository layer.
-Since the actual implementation details are not fully defined, these tests show 
-the structure and patterns that would be used with a concrete implementation.
-"""
+from repository_test_helper import create_repository_test_db, load_repository_module
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import sys
-import os
 
-# Test the actual repository module if it exists
-try:
-    import FreezerLegoMeals_Repository_Python as repository_module
-except ImportError:
-    # Fallback for when the real module isn't found
-    repository_module = None
+repo_module = load_repository_module()
+Repository = repo_module.Repository
 
-class TestPythonRepositoryStructure(unittest.TestCase):
-    """Test the structure and basic functionality of Python repository"""
-    
-    def test_module_import(self):
-        """Test that the Python module can be imported."""
-        if repository_module:
-            self.assertIsNotNone(repository_module)
-        else:
-            # If we can't import, it's still a valid test - shows the expected pattern
-            self.assertTrue(True)
-    
-    def test_module_attributes(self):
-        """Test basic module attributes."""
-        # Test that it has expected Python module characteristics
-        self.assertTrue(hasattr(__import__('sys'), 'version'))
-        
-    def test_repository_pattern(self):
-        """Test basic repository design patterns."""
-        # Repository should follow clean architecture patterns
-        self.assertTrue(True)  # Validation placeholder
 
-class TestRepositoryMethods(unittest.TestCase):
-    """Test methods that a typical Python repository would have"""
-    
-    def setUp(self):
-        """Set up test fixtures for repository tests."""
-        pass
-    
-    def test_method_skeletons_exist(self):
-        """Test basic skeleton method existence patterns."""
-        # These are conceptual tests showing what methods might be expected
-        
-        # Common repository methods that would typically exist:
-        # - get_all()
-        # - get_by_id()
-        # - find_by_ingredients()
-        # - create()
-        # - update()
-        # - delete()
-        
-        self.assertTrue(True)  # Validation placeholder
-    
-    def test_async_compatibility(self):
-        """Test async/await compatibility if used."""
-        # Python repositories might use async patterns based on implementation
-        self.assertTrue(True)  # Validation placeholder
-        
-    def test_data_access_patterns(self):
-        """Test data access pattern compliance."""
-        self.assertTrue(True)  # Validation placeholder
+def test_get_recipe_by_id_returns_full_recipe_fields(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
 
-class TestRepositoryIntegration(unittest.TestCase):
-    """Test repository integration with the application"""
-    
-    @patch('os.path')
-    def test_configuration_loading(self, mock_path):
-        """Test that configuration can be loaded."""
-        mock_path.exists.return_value = True
-        self.assertTrue(True)  # Placeholder validation
-    
-    def test_dependency_injection_pattern(self):
-        """Test dependency injection pattern support."""
-        self.assertTrue(True)  # Validation placeholder
-    
-    def test_error_handling(self):
-        """Test basic error handling patterns."""
-        self.assertTrue(True)  # Validation placeholder
+    recipe = repository.get_recipe_by_id(1)
 
-class TestRepositoryDesignPatterns(unittest.TestCase):
-    """Test repository design patterns compliance"""
-    
-    def test_interface_compliance(self):
-        """Test that the repository adheres to interface patterns."""
-        self.assertTrue(True)  # Validation placeholder
-    
-    def test_separation_of_concerns(self):
-        """Test clean separation between data access and business logic."""
-        self.assertTrue(True)  # Validation placeholder
-    
-    def test_testability(self):
-        """Test that repository is easily testable."""
-        self.assertTrue(True)  # Validation placeholder
+    assert recipe is not None
+    assert recipe['freezing_notes'] == 'freeze well'
+    assert recipe['reheat_notes'] == 'reheat gently'
+    assert recipe['notes'] == 'family meal'
 
-def create_sample_repository_tests():
-    """
-    This function represents what actual repository tests might look like
-    once concrete implementations are created.
-    """
-    
-    class SampleRepositoryTest(unittest.TestCase):
-        """Example test class for a sample repository implementation"""
-        
-        def setUp(self):
-            """Setup mock repository or actual instantiation."""
-            # Implementation would depend on actual repository structure
-            pass
-            
-        def test_get_recipes_method_exists(self):
-            """Test that get_recipes method exists and is callable."""
-            # This would be replaced with actual code once repository exists
-            self.assertTrue(True)
-            
-        def test_get_recipe_by_id(self):
-            """Test getting recipe by ID."""
-            self.assertTrue(True)  # Mock implementation
-            
-        def test_find_with_ingredients(self):
-            """Test finding recipes with ingredients."""
-            self.assertTrue(True)  # Mock implementation
-    
-    return SampleRepositoryTest
 
-if __name__ == '__main__':
-    # This would be run when tests are executed
-    print("Python Repository Unit Tests - Structure Ready")
-    print("Expected to test repository methods like:")
-    print("- get_recipes()")
-    print("- get_recipe_by_id()")
-    print("- find_with_ingredients()")
-    print("- get_combinations()")
-    print("- get_ingredients()")
-    unittest.main()
+def test_get_all_ingredients_returns_mapping(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    ingredients = repository.get_all_ingredients()
+
+    assert ingredients == {1: 'chicken', 3: 'onion', 2: 'rice'}
+
+
+def test_get_ingredients_returns_object_list(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    ingredients = repository.get_ingredients()
+
+    assert {'id': 1, 'name': 'chicken'} in ingredients
+    assert {'id': 2, 'name': 'rice'} in ingredients
+
+
+def test_get_recipe_combinations_returns_recipes_by_position(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    combinations = repository.get_recipe_combinations()
+
+    assert 1 in combinations
+    assert [recipe['name'] for recipe in combinations[1]['recipes']] == ['Chicken Rice', 'Vegetable Soup']
+
+
+def test_get_combinations_returns_list_shape(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    combinations = repository.get_combinations()
+
+    assert len(combinations) == 1
+    assert combinations[0]['name'] == 'Dinner Combo'
+    assert len(combinations[0]['recipes']) == 2
+
+
+def test_get_combination_by_id_returns_specific_combination(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    combination = repository.get_combination_by_id(1)
+
+    assert combination is not None
+    assert combination['description'] == 'Main plus soup'
+
+
+def test_get_combination_by_id_returns_none_for_invalid_id(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    assert repository.get_combination_by_id(0) is None
+    assert repository.get_combination_by_id(999) is None
+
+
+def test_get_ingredient_by_name_is_trimmed_and_case_insensitive(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    create_repository_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    ingredient = repository.get_ingredient_by_name('  ONION  ')
+
+    assert ingredient == {'id': 3, 'name': 'onion'}

@@ -87,6 +87,17 @@ def test_search_recipes_by_ingredients_returns_match(tmp_path: Path):
     assert 'chicken' in [item.lower() for item in recipes[0]['matched_ingredients']]
 
 
+def test_search_recipes_by_ingredients_is_case_insensitive_and_trims(tmp_path: Path):
+    db_path = tmp_path / 'recipes.db'
+    _create_test_db(db_path)
+    repository = Repository(db_path=db_path)
+
+    recipes = repository.search_recipes_by_ingredients(['  CHICKEN  '])
+
+    assert len(recipes) == 1
+    assert recipes[0]['name'] == 'Chicken Rice'
+
+
 def test_get_recipe_ingredients_returns_rows(tmp_path: Path):
     db_path = tmp_path / 'recipes.db'
     _create_test_db(db_path)

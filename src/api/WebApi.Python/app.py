@@ -150,6 +150,8 @@ def get_recipe_by_id(id: int):
         if not recipe:
             raise HTTPException(status_code=404, detail="Recipe not found")
         return GetRecipeByIdResponse(recipe=recipe)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving recipe: {str(e)}")
 
@@ -170,6 +172,8 @@ def find_meals_with_ingredients(request: FindMealsWithIngredientsRequest):
             recipes=result["recipes"],
             message=result["message"]
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error finding meals: {str(e)}")
 
@@ -187,6 +191,8 @@ def get_recipe_details(id: int):
             recipe=result.get("recipe"),
             message=result.get("message", "")
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving recipe details: {str(e)}")
 
@@ -204,6 +210,8 @@ def get_recipe_ingredients(identifier: str):
             recipe_name=identifier,
             found=len(ingredients) > 0
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving ingredients: {str(e)}")
 
@@ -230,6 +238,8 @@ def get_multiple_recipe_ingredients(request: Any = Body(...)):
             total_recipes=len(recipe_ingredients),
             found=len(recipe_ingredients) > 0
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving multiple ingredients: {str(e)}")
 
@@ -254,6 +264,8 @@ def generate_shopping_list(request: GenerateShoppingListRequest):
             scale_factor=request.scale_factor,
             group_by_category=request.group_by_category
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating shopping list: {str(e)}")
 
@@ -269,6 +281,8 @@ def get_recipe_info(identifier: str):
         if not info:
             raise HTTPException(status_code=404, detail="Recipe info not found")
         return GetRecipeInfoResponse(info=info)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving recipe info: {str(e)}")
 
