@@ -18,15 +18,13 @@
 
     "sourceMap": true,
 
+    "rootDir": "../..",
+
     "outDir": "./dist",
 
     "incremental": true,
 
     "skipLibCheck": true,
-
-    "moduleResolution": "node",
-
-    "baseUrl": ".",
 
     "types": [
       "node",

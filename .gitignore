@@ -55,6 +55,12 @@ Thumbs.db
 
 # Node
 **/node_modules/
+src/services/Services.NestJS/**/*.js
+src/services/Services.NestJS/**/*.js.map
+src/services/Services.NestJS/**/*.d.ts
+src/repositories/Repository.NestJS/**/*.js
+src/repositories/Repository.NestJS/**/*.js.map
+src/repositories/Repository.NestJS/**/*.d.ts
 
 # VS Code
 .vscode/
