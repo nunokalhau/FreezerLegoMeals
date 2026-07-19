@@ -34,6 +34,17 @@ git clone <repository-url>
 cd FreezerLegoMeals
 ```
 
+---
+
+# Clean Project
+
+```powershell
+Remove-Item -Recurse -Force node_modules
+Remove-Item -Force package-lock.json
+```
+
+---
+
 Install the dependencies:
 
 ```bash
