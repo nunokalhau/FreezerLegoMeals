@@ -1,0 +1,149 @@
+// src/pages/recipe-details.css
+
+.recipe-details {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.back-button {
+  padding: 0.5rem 1rem;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  transition: background-color 0.3s ease;
+}
+
+.back-button:hover {
+  background-color: #2980b9;
+}
+
+.recipe-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #bdc3c7;
+  padding-bottom: 1rem;
+}
+
+.recipe-header h1 {
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.recipe-tags {
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+.recipe-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.recipe-meta {
+  background-color: #ecf0f1;
+  padding: 1.5rem;
+  border-radius: 8px;
+}
+
+.recipe-meta p {
+  margin: 0.5rem 0;
+}
+
+.recipe-description,
+.recipe-ingredients,
+.recipe-steps,
+.recipe-notes {
+  background-color: #ecf0f1;
+  padding: 1.5rem;
+  border-radius: 8px;
+}
+
+.recipe-description h2,
+.recipe-ingredients h2,
+.recipe-steps h2,
+.recipe-notes h2 {
+  margin-top: 0;
+  color: #2c3e50;
+  border-bottom: 1px solid #bdc3c7;
+  padding-bottom: 0.5rem;
+}
+
+.recipe-ingredients ul {
+  list-style-type: disc;
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #7f8c8d;
+}
+
+.error {
+  text-align: center;
+  padding: 2rem;
+  color: #e74c3c;
+  background-color: #fadbd8;
+  border-radius: 4px;
+  margin-bottom: 2rem;
+}
+
+.recipe-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.primary-button,
+.secondary-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: opacity 0.3s ease;
+}
+
+.primary-button {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.primary-button:hover {
+  opacity: 0.9;
+}
+
+.secondary-button {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.secondary-button:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .recipe-details {
+    padding: 1rem;
+  }
+  
+  .recipe-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+    max-width: 300px;
+  }
+}
