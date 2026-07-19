@@ -16,21 +16,23 @@ public class AssistantControllerTests
         // Arrange
         var assistantService = new Mock<IAssistantService>();
         assistantService
-            .Setup(service => service.ChatAsync("Hello", It.IsAny<CancellationToken>()))
-            .ReturnsAsync("assistant response");
+            .Setup(service => service.ChatAsync("Hello", "conversation-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AssistantChatResult("conversation-1", "assistant response"));
         var controller = new AssistantController(assistantService.Object);
 
         // Act
         var result = await controller.Chat(new AssistantChatRequest
         {
-            Message = "Hello"
+            Message = "Hello",
+            ConversationId = "conversation-1"
         }, CancellationToken.None);
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<AssistantChatResponse>(okResult.Value);
+        Assert.Equal("conversation-1", response.ConversationId);
         Assert.Equal("assistant response", response.Response);
-        assistantService.Verify(service => service.ChatAsync("Hello", It.IsAny<CancellationToken>()), Times.Once);
+        assistantService.Verify(service => service.ChatAsync("Hello", "conversation-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

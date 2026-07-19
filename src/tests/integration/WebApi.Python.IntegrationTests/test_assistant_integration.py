@@ -72,14 +72,23 @@ def test_assistant_chat_returns_non_empty_message_from_local_ollama(monkeypatch)
     assert response.status_code in range(200, 300)
     payload = response.json()
     assert isinstance(payload, dict)
+    assert isinstance(payload.get("conversationId"), str)
+    assert payload["conversationId"].strip()
     assert isinstance(payload.get("response"), str)
     assert payload["response"].strip()
 
+    follow_up_response = asyncio.run(post_assistant_chat(app_module.app, payload["conversationId"]))
+    assert follow_up_response.status_code in range(200, 300)
+    follow_up_payload = follow_up_response.json()
+    assert follow_up_payload.get("conversationId") == payload["conversationId"]
+    assert isinstance(follow_up_payload.get("response"), str)
+    assert follow_up_payload["response"].strip()
 
-async def post_assistant_chat(app):
+
+async def post_assistant_chat(app, conversation_id: str | None = None):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         return await client.post(
             "/api/assistant/chat",
-            json={"message": "Reply with the single word: OK"},
+            json={"message": "Reply with the single word: OK", "conversationId": conversation_id},
         )

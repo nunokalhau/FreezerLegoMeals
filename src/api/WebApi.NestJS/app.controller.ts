@@ -102,8 +102,7 @@ export class AppController {
       throw new BadRequestException('Message is required');
     }
 
-    const response = await this.assistantService.chat(body.message);
-    return { response };
+    return await this.assistantService.chat(body.message, body.conversationId);
   }
 
   @Post('shopping/generate')

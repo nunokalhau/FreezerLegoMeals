@@ -79,11 +79,12 @@ describe('AppController functional behavior', () => {
   });
 
   it('chatWithAssistant delegates to AssistantService', async () => {
-    assistantService.chat.mockResolvedValue('assistant response');
+    assistantService.chat.mockResolvedValue({ conversationId: 'conversation-1', response: 'assistant response' });
 
-    const result = await controller.chatWithAssistant({ message: 'Hello' });
+    const result = await controller.chatWithAssistant({ message: 'Hello', conversationId: 'conversation-1' });
 
-    expect(assistantService.chat).toHaveBeenCalledWith('Hello');
+    expect(assistantService.chat).toHaveBeenCalledWith('Hello', 'conversation-1');
+    expect(result.conversationId).toBe('conversation-1');
     expect(result.response).toBe('assistant response');
   });
 

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { OllamaClientInterface } from './ollama-client.interface';
+import { ConversationMessage, ConversationRole } from './conversation-store';
 import { OLLAMA_OPTIONS, OllamaOptions } from './ollama-options';
 
 @Injectable()
@@ -9,9 +10,9 @@ export class OllamaClient implements OllamaClientInterface {
     private readonly options: OllamaOptions
   ) {}
 
-  async chat(model: string | undefined, userMessage: string): Promise<string> {
-    if (!userMessage || !userMessage.trim()) {
-      throw new Error('User message is required');
+  async chat(model: string | undefined, messages: ConversationMessage[]): Promise<string> {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      throw new Error('At least one chat message is required');
     }
 
     const selectedModel = model && model.trim() ? model : this.options.defaultModel;
@@ -30,12 +31,10 @@ export class OllamaClient implements OllamaClientInterface {
         },
         body: JSON.stringify({
           model: selectedModel,
-          messages: [
-            {
-              role: 'user',
-              content: userMessage,
-            },
-          ],
+          messages: messages.map((message) => ({
+            role: this.toOllamaRole(message.role),
+            content: message.content,
+          })),
           stream: false,
         }),
         signal: controller.signal,
@@ -50,5 +49,9 @@ export class OllamaClient implements OllamaClientInterface {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private toOllamaRole(role: ConversationRole): string {
+    return role.toLowerCase();
   }
 }

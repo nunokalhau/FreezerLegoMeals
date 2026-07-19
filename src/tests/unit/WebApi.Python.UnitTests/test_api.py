@@ -65,12 +65,21 @@ class TestWebAPI:
         assert response.recipes[0]['name'] == 'Chicken Rice'
 
     def test_chat_with_assistant_returns_wrapped_payload(self, monkeypatch):
-        monkeypatch.setattr(app_module.assistant_service, 'chat', lambda message: f'assistant:{message}')
-
-        response = app_module.chat_with_assistant(
-            app_module.AssistantChatRequest(message='Hello')
+        monkeypatch.setattr(
+            app_module.assistant_service,
+            'chat',
+            lambda message, conversation_id=None: type(
+                'AssistantResult',
+                (),
+                {'conversation_id': conversation_id or 'conversation-1', 'response': f'assistant:{message}'}
+            )()
         )
 
+        response = app_module.chat_with_assistant(
+            app_module.AssistantChatRequest(message='Hello', conversationId='conversation-1')
+        )
+
+        assert response.conversationId == 'conversation-1'
         assert response.response == 'assistant:Hello'
 
     def test_chat_with_assistant_rejects_empty_message(self):

@@ -37,7 +37,10 @@ public class OllamaClientTests
         var client = new OllamaClient(httpClient, options);
 
         // Act
-        var result = await client.ChatAsync(null, "Hello");
+        var result = await client.ChatAsync(null, [
+            new ConversationMessage(ConversationRole.System, "system prompt", DateTimeOffset.UtcNow),
+            new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)
+        ]);
 
         // Assert
         Assert.Equal("Hello from Ollama", result);
@@ -48,8 +51,10 @@ public class OllamaClientTests
         var root = document.RootElement;
         Assert.Equal("llama3.2", root.GetProperty("model").GetString());
         Assert.False(root.GetProperty("stream").GetBoolean());
-        Assert.Equal("user", root.GetProperty("messages")[0].GetProperty("role").GetString());
-        Assert.Equal("Hello", root.GetProperty("messages")[0].GetProperty("content").GetString());
+        Assert.Equal("system", root.GetProperty("messages")[0].GetProperty("role").GetString());
+        Assert.Equal("system prompt", root.GetProperty("messages")[0].GetProperty("content").GetString());
+        Assert.Equal("user", root.GetProperty("messages")[1].GetProperty("role").GetString());
+        Assert.Equal("Hello", root.GetProperty("messages")[1].GetProperty("content").GetString());
     }
 
     [Fact]
@@ -72,7 +77,7 @@ public class OllamaClientTests
             Options.Create(new OllamaOptions { DefaultModel = "default-model" }));
 
         // Act
-        await client.ChatAsync("custom-model", "Hello");
+        await client.ChatAsync("custom-model", [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)]);
 
         // Assert
         using var document = JsonDocument.Parse(handler.RequestBody!);
@@ -88,7 +93,7 @@ public class OllamaClientTests
             Options.Create(new OllamaOptions()));
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => client.ChatAsync("llama3.2", " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.ChatAsync("llama3.2", []));
     }
 
     private sealed class CapturingHttpMessageHandler : HttpMessageHandler

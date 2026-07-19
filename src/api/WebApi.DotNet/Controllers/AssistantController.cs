@@ -25,11 +25,13 @@ public class AssistantController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Message))
             return BadRequest("Message is required");
 
-        var response = await _assistantService.ChatAsync(request.Message, cancellationToken);
+        var response = await _assistantService.ChatAsync(request.Message, request.ConversationId, cancellationToken);
 
         return Ok(new AssistantChatResponse
         {
+            ConversationId = response.ConversationId,
             Response = response
+                .Response
         });
     }
 }

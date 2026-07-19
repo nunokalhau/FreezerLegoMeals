@@ -2,5 +2,5 @@ namespace Services.DotNet;
 
 public interface IAssistantService
 {
-    Task<string> ChatAsync(string message, CancellationToken cancellationToken = default);
+    Task<AssistantChatResult> ChatAsync(string message, string? conversationId = null, CancellationToken cancellationToken = default);
 }

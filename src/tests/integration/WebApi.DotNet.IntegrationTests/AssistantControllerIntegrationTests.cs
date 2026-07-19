@@ -17,7 +17,7 @@ public class AssistantControllerIntegrationTests
     private const string OllamaRequiredMessage = "Local Ollama instance is required at http://localhost:11434 with at least one available model.";
 
     [OllamaAvailableFact]
-    public async Task Chat_WithLocalOllama_ReturnsNonEmptyAssistantMessage()
+    public async Task Chat_WithLocalOllama_ReturnsConversationIdAndMaintainsConversation()
     {
         var availability = await GetOllamaAvailabilityAsync();
         if (!availability.IsAvailable)
@@ -62,7 +62,24 @@ public class AssistantControllerIntegrationTests
         });
 
         Assert.NotNull(responseObject);
+        Assert.False(string.IsNullOrWhiteSpace(responseObject.ConversationId));
         Assert.False(string.IsNullOrWhiteSpace(responseObject.Response));
+
+        var followUpResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            ConversationId = responseObject.ConversationId,
+            Message = "Reply with the single word: OK"
+        });
+
+        followUpResponse.EnsureSuccessStatusCode();
+        var followUpObject = await followUpResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(followUpObject);
+        Assert.Equal(responseObject.ConversationId, followUpObject.ConversationId);
+        Assert.False(string.IsNullOrWhiteSpace(followUpObject.Response));
     }
 
     internal static async Task<OllamaAvailability> GetOllamaAvailabilityAsync()

@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 from urllib import request
 from urllib.error import HTTPError
 
@@ -25,9 +25,9 @@ class OllamaClient:
     def __init__(self, config: Optional[OllamaClientConfig] = None):
         self.config = config or OllamaClientConfig.from_environment()
 
-    def chat(self, model: Optional[str], user_message: str) -> str:
-        if not user_message or not user_message.strip():
-            raise ValueError("User message is required")
+    def chat(self, model: Optional[str], messages: list[Any]) -> str:
+        if not messages:
+            raise ValueError("At least one chat message is required")
 
         selected_model = model.strip() if model and model.strip() else self.config.default_model
         if not selected_model:
@@ -35,12 +35,7 @@ class OllamaClient:
 
         payload = {
             "model": selected_model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": user_message,
-                }
-            ],
+            "messages": [self._to_ollama_message(message) for message in messages],
             "stream": False,
         }
 
@@ -58,3 +53,15 @@ class OllamaClient:
             raise RuntimeError(f"Ollama chat request failed with status {error.code}") from error
 
         return response_body.get("message", {}).get("content", "")
+
+    def _to_ollama_message(self, message: Any) -> dict[str, str]:
+        role = getattr(message, "role", None) if not isinstance(message, dict) else message.get("role")
+        content = getattr(message, "content", None) if not isinstance(message, dict) else message.get("content")
+
+        if not role or content is None:
+            raise ValueError("Conversation messages must include role and content")
+
+        return {
+            "role": str(role).lower(),
+            "content": str(content),
+        }

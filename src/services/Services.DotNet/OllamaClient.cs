@@ -14,10 +14,10 @@ public class OllamaClient : IOllamaClient
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
     }
 
-    public async Task<string> ChatAsync(string? model, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<string> ChatAsync(string? model, IReadOnlyList<ConversationMessage> messages, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(userMessage))
-            throw new ArgumentException("User message is required", nameof(userMessage));
+        if (messages == null || messages.Count == 0)
+            throw new ArgumentException("At least one chat message is required", nameof(messages));
 
         var selectedModel = string.IsNullOrWhiteSpace(model) ? _options.DefaultModel : model;
         if (string.IsNullOrWhiteSpace(selectedModel))
@@ -25,7 +25,7 @@ public class OllamaClient : IOllamaClient
 
         var request = new OllamaChatRequest(
             selectedModel,
-            [new OllamaChatMessage("user", userMessage)],
+            messages.Select(message => new OllamaChatMessage(ToOllamaRole(message.Role), message.Content)),
             Stream: false);
 
         using var response = await _httpClient.PostAsJsonAsync("api/chat", request, cancellationToken);
@@ -40,4 +40,15 @@ public class OllamaClient : IOllamaClient
     private sealed record OllamaChatMessage(string Role, string Content);
 
     private sealed record OllamaChatResponse(OllamaChatMessage? Message);
+
+    private static string ToOllamaRole(ConversationRole role)
+    {
+        return role switch
+        {
+            ConversationRole.System => "system",
+            ConversationRole.User => "user",
+            ConversationRole.Assistant => "assistant",
+            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+        };
+    }
 }

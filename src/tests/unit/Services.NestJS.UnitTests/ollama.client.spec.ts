@@ -21,7 +21,10 @@ describe('OllamaClient', () => {
       timeoutMs: 30000,
     });
 
-    const result = await client.chat(undefined, 'Hello');
+    const result = await client.chat(undefined, [
+      { role: 'System', content: 'system prompt', timestamp: new Date() },
+      { role: 'User', content: 'Hello', timestamp: new Date() },
+    ]);
 
     expect(result).toBe('Hello from Ollama');
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -31,6 +34,10 @@ describe('OllamaClient', () => {
     expect(JSON.parse(init?.body as string)).toEqual({
       model: 'llama3.2',
       messages: [
+        {
+          role: 'system',
+          content: 'system prompt',
+        },
         {
           role: 'user',
           content: 'Hello',
@@ -51,7 +58,7 @@ describe('OllamaClient', () => {
       timeoutMs: 30000,
     });
 
-    await client.chat('custom-model', 'Hello');
+    await client.chat('custom-model', [{ role: 'User', content: 'Hello', timestamp: new Date() }]);
 
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(init?.body as string).model).toBe('custom-model');
@@ -64,6 +71,6 @@ describe('OllamaClient', () => {
       timeoutMs: 30000,
     });
 
-    await expect(client.chat('llama3.2', ' ')).rejects.toThrow('User message is required');
+    await expect(client.chat('llama3.2', [])).rejects.toThrow('At least one chat message is required');
   });
 });

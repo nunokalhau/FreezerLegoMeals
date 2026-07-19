@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import json
+import sys
 from pathlib import Path
 
 # Load service modules from absolute paths so startup is independent of shell cwd.
@@ -12,11 +13,13 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 ASSISTANT_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "assistant_service.py"
 MEAL_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "meal_service.py"
 OLLAMA_CLIENT_PATH = SRC_ROOT / "services" / "Services.Python" / "ollama_client.py"
+CONVERSATION_STORE_PATH = SRC_ROOT / "services" / "Services.Python" / "conversation_store.py"
 SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
 
 assistant_spec = importlib.util.spec_from_file_location("services_python_assistant", ASSISTANT_SERVICE_PATH)
 meal_spec = importlib.util.spec_from_file_location("services_python_meal", MEAL_SERVICE_PATH)
 ollama_spec = importlib.util.spec_from_file_location("services_python_ollama", OLLAMA_CLIENT_PATH)
+conversation_store_spec = importlib.util.spec_from_file_location("services_python_conversation_store", CONVERSATION_STORE_PATH)
 shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
 
 if assistant_spec is None or assistant_spec.loader is None:
@@ -25,21 +28,31 @@ if meal_spec is None or meal_spec.loader is None:
     raise ImportError(f"Unable to load MealService module from {MEAL_SERVICE_PATH}")
 if ollama_spec is None or ollama_spec.loader is None:
     raise ImportError(f"Unable to load OllamaClient module from {OLLAMA_CLIENT_PATH}")
+if conversation_store_spec is None or conversation_store_spec.loader is None:
+    raise ImportError(f"Unable to load ConversationStore module from {CONVERSATION_STORE_PATH}")
 if shopping_spec is None or shopping_spec.loader is None:
     raise ImportError(f"Unable to load ShoppingService module from {SHOPPING_SERVICE_PATH}")
 
 assistant_module = importlib.util.module_from_spec(assistant_spec)
+sys.modules[assistant_spec.name] = assistant_module
 assistant_spec.loader.exec_module(assistant_module)
 meal_module = importlib.util.module_from_spec(meal_spec)
+sys.modules[meal_spec.name] = meal_module
 meal_spec.loader.exec_module(meal_module)
 ollama_module = importlib.util.module_from_spec(ollama_spec)
+sys.modules[ollama_spec.name] = ollama_module
 ollama_spec.loader.exec_module(ollama_module)
+conversation_store_module = importlib.util.module_from_spec(conversation_store_spec)
+sys.modules[conversation_store_spec.name] = conversation_store_module
+conversation_store_spec.loader.exec_module(conversation_store_module)
 shopping_module = importlib.util.module_from_spec(shopping_spec)
+sys.modules[shopping_spec.name] = shopping_module
 shopping_spec.loader.exec_module(shopping_module)
 
 AssistantService = assistant_module.AssistantService
 MealService = meal_module.MealService
 OllamaClient = ollama_module.OllamaClient
+InMemoryConversationStore = conversation_store_module.InMemoryConversationStore
 ShoppingService = shopping_module.ShoppingService
 
 app = FastAPI(
@@ -59,7 +72,8 @@ app.add_middleware(
 
 # Initialize the services as singletons
 ollama_client = OllamaClient()
-assistant_service = AssistantService(ollama_client)
+conversation_store = InMemoryConversationStore()
+assistant_service = AssistantService(ollama_client, conversation_store)
 meal_service = MealService()
 shopping_service = ShoppingService()
 
@@ -129,8 +143,10 @@ class GetRecipeInfoResponse(BaseModel):
 
 class AssistantChatRequest(BaseModel):
     message: str
+    conversationId: Optional[str] = None
 
 class AssistantChatResponse(BaseModel):
+    conversationId: str
     response: str
 
 @app.get("/")
@@ -206,8 +222,8 @@ def chat_with_assistant(request: AssistantChatRequest):
         raise HTTPException(status_code=400, detail="Message is required")
 
     try:
-        response = assistant_service.chat(request.message)
-        return AssistantChatResponse(response=response)
+        response = assistant_service.chat(request.message, request.conversationId)
+        return AssistantChatResponse(conversationId=response.conversation_id, response=response.response)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

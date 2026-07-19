@@ -1,3 +1,5 @@
+import { ConversationMessage } from './conversation-store';
+
 export interface OllamaClientInterface {
-  chat(model: string | undefined, userMessage: string): Promise<string>;
+  chat(model: string | undefined, messages: ConversationMessage[]): Promise<string>;
 }

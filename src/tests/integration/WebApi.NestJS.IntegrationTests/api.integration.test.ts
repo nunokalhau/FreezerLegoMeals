@@ -157,8 +157,8 @@ describe('AI Assistant Endpoint (End-to-End Integration)', () => {
   const availability = getOllamaAvailability();
   const assistantIntegrationIt = availability.isAvailable ? it : it.skip;
   const assistantIntegrationTestName = availability.isAvailable
-    ? 'POST /api/assistant/chat returns a non-empty assistant message from local Ollama'
-    : `POST /api/assistant/chat returns a non-empty assistant message from local Ollama (${availability.skipReason})`;
+    ? 'POST /api/assistant/chat returns a conversation id and maintains context with local Ollama'
+    : `POST /api/assistant/chat returns a conversation id and maintains context with local Ollama (${availability.skipReason})`;
 
   let app: INestApplication | undefined;
   let originalDefaultModel: string | undefined;
@@ -202,8 +202,20 @@ describe('AI Assistant Endpoint (End-to-End Integration)', () => {
       .expect(201);
 
     expect(response.body).toBeDefined();
+    expect(typeof response.body.conversationId).toBe('string');
+    expect(response.body.conversationId.trim().length).toBeGreaterThan(0);
     expect(typeof response.body.response).toBe('string');
     expect(response.body.response.trim().length).toBeGreaterThan(0);
+
+    const followUpResponse = await request(app.getHttpServer())
+      .post('/api/assistant/chat')
+      .send({ conversationId: response.body.conversationId, message: 'Reply with the single word: OK' })
+      .timeout({ response: 70000, deadline: ASSISTANT_INTEGRATION_TIMEOUT_MS })
+      .expect(201);
+
+    expect(followUpResponse.body.conversationId).toBe(response.body.conversationId);
+    expect(typeof followUpResponse.body.response).toBe('string');
+    expect(followUpResponse.body.response.trim().length).toBeGreaterThan(0);
   }, ASSISTANT_INTEGRATION_TIMEOUT_MS);
 });
 

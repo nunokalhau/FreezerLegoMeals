@@ -6,6 +6,7 @@ These are proper pytest-based unit tests with mocked repository dependencies.
 
 import sys
 import os
+import time
 import json
 import unittest.mock as mock
 from pathlib import Path
@@ -59,16 +60,25 @@ class TestAssistantService:
     def test_chat_delegates_to_ollama_client(self):
         ollama_client = mock.Mock()
         ollama_client.chat.return_value = 'assistant response'
-        service = AssistantService(ollama_client)
+        conversation_store = FakeConversationStore()
+        service = AssistantService(ollama_client, conversation_store, 'system prompt')
 
         result = service.chat('Hello')
 
-        assert result == 'assistant response'
-        ollama_client.chat.assert_called_once_with(None, 'Hello')
+        assert result.response == 'assistant response'
+        assert result.conversation_id == 'conversation-1'
+        messages = ollama_client.chat.call_args.args[1]
+        assert [message.role for message in messages] == ['System', 'User']
+        assert [message.content for message in messages] == ['system prompt', 'Hello']
+        assert [message.content for message in conversation_store.messages] == ['Hello', 'assistant response']
 
     def test_initialization_requires_ollama_client(self):
         with pytest.raises(ValueError):
-            AssistantService(None)
+            AssistantService(None, mock.Mock())
+
+    def test_initialization_requires_conversation_store(self):
+        with pytest.raises(ValueError):
+            AssistantService(mock.Mock(), None)
 
 
 class TestOllamaClient:
@@ -100,7 +110,10 @@ class TestOllamaClient:
             timeout=30.0,
         ))
 
-        result = client.chat(None, 'Hello')
+        result = client.chat(None, [
+            {'role': 'System', 'content': 'system prompt'},
+            {'role': 'User', 'content': 'Hello'},
+        ])
 
         assert result == 'Hello from Ollama'
         assert captured['url'] == 'http://localhost:11434/api/chat'
@@ -109,6 +122,10 @@ class TestOllamaClient:
         assert body == {
             'model': 'llama3.2',
             'messages': [
+                {
+                    'role': 'system',
+                    'content': 'system prompt',
+                },
                 {
                     'role': 'user',
                     'content': 'Hello',
@@ -137,7 +154,7 @@ class TestOllamaClient:
         monkeypatch.setattr(ollama_module.request, 'urlopen', fake_urlopen)
         client = OllamaClient(OllamaClientConfig(default_model='default-model'))
 
-        client.chat('custom-model', 'Hello')
+        client.chat('custom-model', [{'role': 'User', 'content': 'Hello'}])
 
         body = json.loads(captured['body'].decode('utf-8'))
         assert body['model'] == 'custom-model'
@@ -252,6 +269,23 @@ class TestMealService:
         result = service.get_recipe_details(999)
         
         assert "error" in result
+
+
+class FakeConversation:
+    def __init__(self, conversation_id, messages):
+        self.conversation_id = conversation_id
+        self.messages = messages
+
+
+class FakeConversationStore:
+    def __init__(self):
+        self.messages = []
+
+    def get_or_create_conversation(self, conversation_id=None):
+        return FakeConversation(conversation_id or 'conversation-1', list(self.messages))
+
+    def append_messages(self, conversation_id, messages):
+        self.messages.extend(messages)
 
 
 class TestShoppingService:
