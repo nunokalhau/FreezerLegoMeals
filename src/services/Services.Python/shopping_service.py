@@ -10,9 +10,17 @@ from dataclasses import dataclass
 
 # Import Repository from the repository module
 import importlib.util
-spec = importlib.util.spec_from_file_location("Repository", "src/repository/Repository.Python")
-Repository = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(Repository)
+
+SRC_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_MODULE_PATH = SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py"
+
+repo_spec = importlib.util.spec_from_file_location("repository_python", REPOSITORY_MODULE_PATH)
+if repo_spec is None or repo_spec.loader is None:
+    raise ImportError(f"Unable to load Repository module from {REPOSITORY_MODULE_PATH}")
+
+repo_module = importlib.util.module_from_spec(repo_spec)
+repo_spec.loader.exec_module(repo_module)
+Repository = repo_module.Repository
 
 @dataclass
 class Ingredient:
@@ -83,9 +91,7 @@ class ShoppingService:
         all_ingredients = {}
         for identifier in recipe_identifiers:
             ingredients = self.get_recipe_ingredients(identifier)
-            # Use the first recipe name from our list as key
             if ingredients:
-                first_ingredient = ingredients[0]
                 # Extract recipe name from first ingredient's source or from identifier
                 recipe_key = identifier
                 all_ingredients[recipe_key] = ingredients
@@ -134,7 +140,7 @@ class ShoppingService:
                 name = ingredient['name']
                 amount = ingredient['amount'] or 0.0
                 unit = ingredient['unit'] or ''
-                notes = ingredient['notes']
+                notes = ingredient.get('notes')
                 
                 # Apply scaling factor
                 scaled_amount = amount * scale_factor

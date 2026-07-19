@@ -12,10 +12,15 @@ The following software is required:
 
 | Software | Version |
 |----------|---------|
-| Python | 3.10+ (3.11 recommended) |
+| Python | 3.10 or 3.11 (recommended) |
 | pip | 23+ |
 | FastAPI | 0.104.x |
 | Uvicorn | 0.24.x |
+
+Important compatibility note:
+
+- The pinned dependencies in `requirements.txt` are not currently compatible with Python 3.13.
+- Use Python 3.10 or 3.11 to run this API.
 
 Supported operating systems:
 
@@ -39,14 +44,14 @@ Create and activate a virtual environment:
 Windows (PowerShell):
 
 ```powershell
-python -m venv .venv
+py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
 Linux/macOS:
 
 ```bash
-python -m venv .venv
+python3.10 -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -56,11 +61,24 @@ Install dependencies:
 pip install -r src/api/WebApi.Python/requirements.txt
 ```
 
+Verify the environment (optional):
+
+```bash
+python --version
+pip --version
+```
+
 ---
 
 # Run
 
-From the `src/api/WebApi.Python` folder:
+From the project root:
+
+```bash
+py -3.10 src/api/WebApi.Python/app.py
+```
+
+Or from the `src/api/WebApi.Python` folder:
 
 ```bash
 python app.py
@@ -69,13 +87,19 @@ python app.py
 Alternatively, with auto-reload:
 
 ```bash
-uvicorn app:app --reload --host 0.0.0.0 --port 5000
+uvicorn app:app --reload --host 0.0.0.0 --port 3000
 ```
 
 The API will be available at:
 
 ```
-http://localhost:5000
+http://localhost:3000
+```
+
+Health check:
+
+```
+http://localhost:3000/health
 ```
 
 ---
@@ -85,13 +109,13 @@ http://localhost:5000
 API docs are available at:
 
 ```
-http://localhost:5000/docs
+http://localhost:3000/docs
 ```
 
 ReDoc is also available at:
 
 ```
-http://localhost:5000/redoc
+http://localhost:3000/redoc
 ```
 
 ---
@@ -105,6 +129,23 @@ If you add pytest-based tests, a common command is:
 ```bash
 pytest
 ```
+
+---
+
+# Troubleshooting
+
+If you get `ModuleNotFoundError: No module named 'fastapi'`:
+
+- Make sure the virtual environment is activated.
+- Reinstall dependencies with:
+
+```bash
+pip install -r src/api/WebApi.Python/requirements.txt
+```
+
+If you are on Python 3.13 and dependency installation fails:
+
+- Switch to Python 3.10 or 3.11 and recreate the virtual environment.
 
 ---
 

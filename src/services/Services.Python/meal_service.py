@@ -9,9 +9,17 @@ from dataclasses import dataclass
 
 # Import Repository from the repository module
 import importlib.util
-spec = importlib.util.spec_from_file_location("Repository", "src/repository/Repository.Python")
-Repository = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(Repository)
+
+SRC_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_MODULE_PATH = SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py"
+
+repo_spec = importlib.util.spec_from_file_location("repository_python", REPOSITORY_MODULE_PATH)
+if repo_spec is None or repo_spec.loader is None:
+    raise ImportError(f"Unable to load Repository module from {REPOSITORY_MODULE_PATH}")
+
+repo_module = importlib.util.module_from_spec(repo_spec)
+repo_spec.loader.exec_module(repo_module)
+Repository = repo_module.Repository
 
 @dataclass
 class Recipe:

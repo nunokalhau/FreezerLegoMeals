@@ -3,15 +3,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import json
+from pathlib import Path
 
-# Import our architecture layers correctly
+# Load service modules from absolute paths so startup is independent of shell cwd.
 import importlib.util
-spec = importlib.util.spec_from_file_location("MealService", "src/services/Services.Python")
-spec2 = importlib.util.spec_from_file_location("ShoppingService", "src/services/Services.Python")
-MealService = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(MealService)
-ShoppingService = importlib.util.module_from_spec(spec2)
-spec2.loader.exec_module(ShoppingService)
+
+SRC_ROOT = Path(__file__).resolve().parents[2]
+MEAL_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "meal_service.py"
+SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
+
+meal_spec = importlib.util.spec_from_file_location("services_python_meal", MEAL_SERVICE_PATH)
+shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
+
+if meal_spec is None or meal_spec.loader is None:
+    raise ImportError(f"Unable to load MealService module from {MEAL_SERVICE_PATH}")
+if shopping_spec is None or shopping_spec.loader is None:
+    raise ImportError(f"Unable to load ShoppingService module from {SHOPPING_SERVICE_PATH}")
+
+meal_module = importlib.util.module_from_spec(meal_spec)
+meal_spec.loader.exec_module(meal_module)
+shopping_module = importlib.util.module_from_spec(shopping_spec)
+shopping_spec.loader.exec_module(shopping_module)
+
+MealService = meal_module.MealService
+ShoppingService = shopping_module.ShoppingService
 
 app = FastAPI(
     title="Freezer Lego Meals Python API",
@@ -115,7 +130,7 @@ def search_recipes(request: RecipeSearchRequest):
         raise HTTPException(status_code=400, detail="Ingredients list cannot be empty")
     
     # Delegate to the service
-    result = meal_service.search_recipes_by_ingredients(" ".join(request.ingredients))
+    result = meal_service.search_recipes_by_ingredients(request.ingredients)
     return result
 
 @app.get("/api/recipes/{id}", response_model=GetRecipeByIdResponse)
@@ -255,4 +270,4 @@ def generate_shopping_list_old(request: ShoppingListRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=3000)
