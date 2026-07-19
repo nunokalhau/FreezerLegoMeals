@@ -42,7 +42,7 @@ class AssistantOptions:
 
 
 class AssistantService:
-    def __init__(self, ollama_client, conversation_store, tool_executor, options: AssistantOptions | None = None):
+    def __init__(self, ollama_client, conversation_store, tool_executor, options: AssistantOptions | None = None, retrieval_service=None, prompt_builder=None):
         if ollama_client is None:
             raise ValueError("Ollama client is required")
         if conversation_store is None:
@@ -54,6 +54,8 @@ class AssistantService:
         self.conversation_store = conversation_store
         self.tool_executor = tool_executor
         self.options = options or AssistantOptions()
+        self.retrieval_service = retrieval_service
+        self.prompt_builder = prompt_builder
         self.logger = logging.getLogger(__name__)
 
     def chat(self, message: str, conversation_id: str | None = None) -> AssistantChatResult:
@@ -76,11 +78,15 @@ class AssistantService:
 
             assistant_result = self.ollama_client.chat(None, messages, tools)
             if not assistant_result.tool_calls:
-                final_message = ConversationMessage("Assistant", assistant_result.content, datetime.now(timezone.utc))
+                content = assistant_result.content
+                if self._requires_repository_knowledge(message) and self.retrieval_service is not None and self.prompt_builder is not None:
+                    content = self._answer_with_retrieval(message)
+
+                final_message = ConversationMessage("Assistant", content, datetime.now(timezone.utc))
                 messages_to_persist.append(final_message)
                 self.conversation_store.append_messages(conversation.conversation_id, messages_to_persist)
                 self.logger.info("Assistant request completed with %s tool calls", total_tool_calls)
-                return AssistantChatResult(conversation.conversation_id, assistant_result.content)
+                return AssistantChatResult(conversation.conversation_id, content)
 
             if assistant_result.content.strip():
                 assistant_message = ConversationMessage("Assistant", assistant_result.content, datetime.now(timezone.utc))
@@ -131,3 +137,37 @@ class AssistantService:
         self.conversation_store.append_messages(conversation_id, messages_to_persist)
         self.logger.warning("Assistant request failed gracefully: %s", error)
         return AssistantChatResult(conversation_id, error)
+
+    def _requires_repository_knowledge(self, message: str) -> bool:
+        normalized = message.lower()
+        knowledge_terms = [
+            "recipe", "recipes", "meal", "meals", "cook", "cooking", "dinner", "lunch", "freezer",
+            "ingredient", "ingredients", "prep", "preparation", "what can i", "what should i", "recommend",
+        ]
+        return any(term in normalized for term in knowledge_terms)
+
+    def _answer_with_retrieval(self, question: str) -> str:
+        retrieval = self.retrieval_service.retrieve(question)
+        if not retrieval.recipes:
+            return "The repository does not contain enough information to answer that question.\n\nSources: none"
+
+        prompt = self.prompt_builder.build(question, retrieval.recipes)
+        now = datetime.now(timezone.utc)
+        rag_messages = [
+            ConversationMessage("System", self.options.system_prompt, now),
+            ConversationMessage("User", prompt, now),
+        ]
+        response = self.ollama_client.chat(None, rag_messages, []).content.strip()
+        if not response:
+            response = "The repository does not contain enough information to answer that question."
+
+        return f"{response}\n\n{self._format_sources(retrieval.sources)}"
+
+    def _format_sources(self, sources) -> str:
+        if not sources:
+            return "Sources: none"
+
+        lines = ["Sources:"]
+        for source in sources:
+            lines.append(f"- {source.recipeId}: {source.title} (similarityScore: {source.similarityScore:.6f})")
+        return "\n".join(lines)

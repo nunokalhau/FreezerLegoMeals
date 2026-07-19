@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { resolve } from 'path';
+import { PromptBuilder } from '../../ai/RAG/NestJS/prompt-builder';
+import { RetrievalService } from '../../ai/RAG/NestJS/retrieval.service';
+import { ISemanticRecipeMetadataProvider, SemanticSearchService } from '../../ai/SemanticSearch/NestJS/semantic-search.service';
 import { AssistantService } from '../../services/Services.NestJS/assistant.service';
 import { ASSISTANT_OPTIONS, createAssistantOptions } from '../../services/Services.NestJS/assistant-options';
 import { CONVERSATION_STORE_OPTIONS, ConversationStore, createConversationStoreOptions, InMemoryConversationStore } from '../../services/Services.NestJS/conversation-store';
@@ -7,9 +10,10 @@ import { OllamaClient } from '../../services/Services.NestJS/ollama.client';
 import { createOllamaOptions, OLLAMA_OPTIONS } from '../../services/Services.NestJS/ollama-options';
 import { ToolExecutor } from '../../services/Services.NestJS/tool-executor';
 import { ToolRegistry } from '../../services/Services.NestJS/tool-registry';
+import { SemanticSearchModule } from './semantic-search.module';
 
 @Module({
-  imports: [],
+  imports: [SemanticSearchModule],
   providers: [
     AssistantService,
     InMemoryConversationStore,
@@ -33,6 +37,16 @@ import { ToolRegistry } from '../../services/Services.NestJS/tool-registry';
       provide: ToolExecutor,
       useFactory: (toolRegistry: ToolRegistry) => new ToolExecutor(toolRegistry, resolve(process.cwd(), '..', '..', 'tools')),
       inject: [ToolRegistry],
+    },
+    {
+      provide: RetrievalService,
+      useFactory: (semanticSearchService: SemanticSearchService, metadataProvider: ISemanticRecipeMetadataProvider) =>
+        new RetrievalService(semanticSearchService, metadataProvider),
+      inject: [SemanticSearchService, ISemanticRecipeMetadataProvider],
+    },
+    {
+      provide: PromptBuilder,
+      useFactory: () => PromptBuilder.fromFile(resolve(process.cwd(), '..', '..', 'ai', 'RAG', 'prompts', 'rag_prompt.txt')),
     },
     OllamaClient,
     {

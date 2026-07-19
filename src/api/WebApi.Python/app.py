@@ -16,6 +16,8 @@ OLLAMA_CLIENT_PATH = SRC_ROOT / "services" / "Services.Python" / "ollama_client.
 EMBEDDING_SERVICE_PATH = SRC_ROOT / "ai" / "Embedding.Python" / "embedding_service.py"
 VECTOR_STORE_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_store.py"
 SEMANTIC_SEARCH_PATH = SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py"
+RAG_RETRIEVAL_PATH = SRC_ROOT / "ai" / "RAG" / "Python" / "retrieval_service.py"
+RAG_PROMPT_BUILDER_PATH = SRC_ROOT / "ai" / "RAG" / "Python" / "prompt_builder.py"
 CONVERSATION_STORE_PATH = SRC_ROOT / "services" / "Services.Python" / "conversation_store.py"
 SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_service.py"
 TOOL_EXECUTOR_PATH = SRC_ROOT / "services" / "Services.Python" / "tool_executor.py"
@@ -29,6 +31,8 @@ ollama_spec = importlib.util.spec_from_file_location("services_python_ollama", O
 embedding_spec = importlib.util.spec_from_file_location("embedding_python_service", EMBEDDING_SERVICE_PATH)
 vector_store_spec = importlib.util.spec_from_file_location("vector_store_python", VECTOR_STORE_PATH)
 semantic_search_spec = importlib.util.spec_from_file_location("semantic_search_python", SEMANTIC_SEARCH_PATH)
+rag_retrieval_spec = importlib.util.spec_from_file_location("rag_python_retrieval", RAG_RETRIEVAL_PATH)
+rag_prompt_builder_spec = importlib.util.spec_from_file_location("rag_python_prompt_builder", RAG_PROMPT_BUILDER_PATH)
 conversation_store_spec = importlib.util.spec_from_file_location("services_python_conversation_store", CONVERSATION_STORE_PATH)
 shopping_spec = importlib.util.spec_from_file_location("services_python_shopping", SHOPPING_SERVICE_PATH)
 tool_executor_spec = importlib.util.spec_from_file_location("services_python_tool_executor", TOOL_EXECUTOR_PATH)
@@ -46,6 +50,10 @@ if vector_store_spec is None or vector_store_spec.loader is None:
     raise ImportError(f"Unable to load VectorStore module from {VECTOR_STORE_PATH}")
 if semantic_search_spec is None or semantic_search_spec.loader is None:
     raise ImportError(f"Unable to load SemanticSearch module from {SEMANTIC_SEARCH_PATH}")
+if rag_retrieval_spec is None or rag_retrieval_spec.loader is None:
+    raise ImportError(f"Unable to load RAG Retrieval module from {RAG_RETRIEVAL_PATH}")
+if rag_prompt_builder_spec is None or rag_prompt_builder_spec.loader is None:
+    raise ImportError(f"Unable to load RAG PromptBuilder module from {RAG_PROMPT_BUILDER_PATH}")
 if conversation_store_spec is None or conversation_store_spec.loader is None:
     raise ImportError(f"Unable to load ConversationStore module from {CONVERSATION_STORE_PATH}")
 if shopping_spec is None or shopping_spec.loader is None:
@@ -73,6 +81,12 @@ vector_store_spec.loader.exec_module(vector_store_module)
 semantic_search_module = importlib.util.module_from_spec(semantic_search_spec)
 sys.modules[semantic_search_spec.name] = semantic_search_module
 semantic_search_spec.loader.exec_module(semantic_search_module)
+rag_retrieval_module = importlib.util.module_from_spec(rag_retrieval_spec)
+sys.modules[rag_retrieval_spec.name] = rag_retrieval_module
+rag_retrieval_spec.loader.exec_module(rag_retrieval_module)
+rag_prompt_builder_module = importlib.util.module_from_spec(rag_prompt_builder_spec)
+sys.modules[rag_prompt_builder_spec.name] = rag_prompt_builder_module
+rag_prompt_builder_spec.loader.exec_module(rag_prompt_builder_module)
 conversation_store_module = importlib.util.module_from_spec(conversation_store_spec)
 sys.modules[conversation_store_spec.name] = conversation_store_module
 conversation_store_spec.loader.exec_module(conversation_store_module)
@@ -93,6 +107,8 @@ OllamaEmbeddingService = embedding_module.OllamaEmbeddingService
 LocalVectorStore = vector_store_module.LocalVectorStore
 SemanticSearchService = semantic_search_module.SemanticSearchService
 RecipeMetadataProvider = semantic_search_module.RecipeMetadataProvider
+RetrievalService = rag_retrieval_module.RetrievalService
+PromptBuilder = rag_prompt_builder_module.PromptBuilder
 InMemoryConversationStore = conversation_store_module.InMemoryConversationStore
 ShoppingService = shopping_module.ShoppingService
 ToolRegistry = tool_executor_module.ToolRegistry
@@ -117,15 +133,19 @@ app.add_middleware(
 # Initialize the services as singletons
 ollama_client = OllamaClient()
 embedding_service = OllamaEmbeddingService()
+recipe_repository = Repository()
+semantic_metadata_provider = RecipeMetadataProvider(recipe_repository)
 semantic_search_service = SemanticSearchService(
     embedding_service,
     LocalVectorStore(EMBEDDINGS_DIR),
-    RecipeMetadataProvider(Repository()),
+    semantic_metadata_provider,
 )
+retrieval_service = RetrievalService(semantic_search_service, semantic_metadata_provider)
+prompt_builder = PromptBuilder()
 conversation_store = InMemoryConversationStore()
 tool_registry = ToolRegistry(TOOL_REGISTRY_PATH)
 tool_executor = ToolExecutor(tool_registry)
-assistant_service = AssistantService(ollama_client, conversation_store, tool_executor)
+assistant_service = AssistantService(ollama_client, conversation_store, tool_executor, retrieval_service=retrieval_service, prompt_builder=prompt_builder)
 meal_service = MealService()
 shopping_service = ShoppingService()
 

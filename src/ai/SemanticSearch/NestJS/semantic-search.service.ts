@@ -14,6 +14,11 @@ export type RecipeMetadata = {
   recipeId: string;
   title: string;
   matchedText: string;
+  description?: string;
+  tags?: string;
+  ingredients?: string[];
+  preparationSteps?: string;
+  cookingTime?: string;
 };
 
 export abstract class ISemanticRecipeMetadataProvider {

@@ -7,9 +7,12 @@ const config: Config = {
 
       rootDir: '../..',
 
-      preset: 'ts-jest',
-
       testEnvironment: 'node',
+
+      moduleDirectories: [
+        'node_modules',
+        '<rootDir>/api/WebApi.NestJS/node_modules'
+      ],
 
       testMatch: [
         '<rootDir>/tests/unit/**/*.spec.ts',
@@ -20,7 +23,7 @@ const config: Config = {
 
       transform: {
         '^.+\\.(t|j)s$': [
-          'ts-jest',
+          '<rootDir>/api/WebApi.NestJS/node_modules/ts-jest',
           {
             tsconfig: '<rootDir>/api/WebApi.NestJS/tsconfig.json'
           }
@@ -41,9 +44,12 @@ const config: Config = {
 
       rootDir: '../..',
 
-      preset: 'ts-jest',
-
       testEnvironment: 'node',
+
+      moduleDirectories: [
+        'node_modules',
+        '<rootDir>/api/WebApi.NestJS/node_modules'
+      ],
 
       testMatch: [
         '<rootDir>/tests/integration/**/*.spec.ts',
@@ -54,7 +60,7 @@ const config: Config = {
 
       transform: {
         '^.+\\.(t|j)s$': [
-          'ts-jest',
+          '<rootDir>/api/WebApi.NestJS/node_modules/ts-jest',
           {
             tsconfig: '<rootDir>/api/WebApi.NestJS/tsconfig.json'
           }

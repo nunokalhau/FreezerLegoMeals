@@ -28,6 +28,6 @@ import { RepositorySemanticMetadataProvider } from './repository-semantic-metada
       inject: [IEmbeddingService, IVectorStore, ISemanticRecipeMetadataProvider],
     },
   ],
-  exports: [SemanticSearchService],
+  exports: [SemanticSearchService, ISemanticRecipeMetadataProvider],
 })
 export class SemanticSearchModule {}

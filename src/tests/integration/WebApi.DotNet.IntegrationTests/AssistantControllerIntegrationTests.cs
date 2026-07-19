@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using RAG.DotNet;
+using Services.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
 using Xunit;
@@ -82,6 +84,45 @@ public class AssistantControllerIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(followUpObject.Response));
     }
 
+    [Fact]
+    public async Task Chat_WithRepositoryQuestion_UsesRagAndKeepsPublicContract()
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantRagIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IRetrievalService>();
+                services.RemoveAll<IPromptBuilder>();
+                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IRetrievalService, StubRetrievalService>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "What spicy chicken meal can I cook?"
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.False(string.IsNullOrWhiteSpace(payload.ConversationId));
+        Assert.Contains("Use the spicy chicken recipe.", payload.Response);
+        Assert.Contains("Sources:", payload.Response);
+        Assert.Contains("1: Spicy Chicken", payload.Response);
+    }
+
     internal static async Task<OllamaAvailability> GetOllamaAvailabilityAsync()
     {
         using var httpClient = new HttpClient
@@ -120,6 +161,33 @@ public class AssistantControllerIntegrationTests
     private sealed record OllamaTagsResponse(IEnumerable<OllamaModel>? Models);
 
     private sealed record OllamaModel(string Name, IEnumerable<string>? Capabilities);
+
+    private sealed class StubOllamaClient : IOllamaClient
+    {
+        private int _calls;
+
+        public Task<OllamaChatResult> ChatAsync(string? model, IReadOnlyList<ConversationMessage> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+        {
+            _calls++;
+            return Task.FromResult(_calls == 1
+                ? new OllamaChatResult("direct draft", [])
+                : new OllamaChatResult("Use the spicy chicken recipe.", []));
+        }
+    }
+
+    private sealed class StubRetrievalService : IRetrievalService
+    {
+        public Task<RetrievalResult> RetrieveAsync(string question, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new RetrievalResult(
+                question,
+                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
+                [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
+    }
+
+    private sealed class StubPromptBuilder : IPromptBuilder
+    {
+        public string Build(string question, IReadOnlyList<RetrievalRecipe> recipes) => "rag prompt";
+    }
 }
 
 public sealed class OllamaAvailableFactAttribute : FactAttribute

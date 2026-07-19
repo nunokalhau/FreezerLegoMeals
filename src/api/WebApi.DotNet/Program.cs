@@ -3,6 +3,7 @@ using Repository.DotNet;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 using Embedding.DotNet;
+using RAG.DotNet;
 using SemanticSearch.DotNet;
 using VectorStores.DotNet;
 using WebApi.DotNet.Services;
@@ -31,6 +32,9 @@ builder.Services.AddSingleton<IVectorStore>(_ => new LocalVectorStore(
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "..", "data", "embeddings"))));
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
 builder.Services.AddScoped<SemanticSearchService>();
+builder.Services.AddScoped<IRetrievalService, RetrievalService>();
+builder.Services.AddSingleton<IPromptBuilder>(_ => PromptBuilder.FromFile(
+    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "ai", "RAG", "prompts", "rag_prompt.txt"))));
 builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("Assistant"));
 builder.Services.Configure<ConversationStoreOptions>(builder.Configuration.GetSection("ConversationStore"));
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection("Ollama"));

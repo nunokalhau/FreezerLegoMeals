@@ -4,6 +4,8 @@ import { ASSISTANT_OPTIONS, AssistantOptions, createAssistantOptions } from './a
 import { ConversationMessage, ConversationStore } from './conversation-store';
 import { OllamaClient } from './ollama.client';
 import { ToolExecutor } from './tool-executor';
+import { PromptBuilder } from '../../ai/RAG/NestJS/prompt-builder';
+import { RetrievalService, SourceAttribution } from '../../ai/RAG/NestJS/retrieval.service';
 
 @Injectable()
 export class AssistantService implements AssistantServiceInterface {
@@ -16,7 +18,11 @@ export class AssistantService implements AssistantServiceInterface {
     private readonly toolExecutor: ToolExecutor,
     @Optional()
     @Inject(ASSISTANT_OPTIONS)
-    private readonly options: AssistantOptions = createAssistantOptions()
+    private readonly options: AssistantOptions = createAssistantOptions(),
+    @Optional()
+    private readonly retrievalService?: RetrievalService,
+    @Optional()
+    private readonly promptBuilder?: PromptBuilder
   ) {}
 
   async chat(message: string, conversationId?: string): Promise<AssistantChatResult> {
@@ -54,9 +60,12 @@ export class AssistantService implements AssistantServiceInterface {
 
       const assistantResult = await this.ollamaClient.chat(undefined, messages, tools);
       if (assistantResult.toolCalls.length === 0) {
+        const content = this.requiresRepositoryKnowledge(message) && this.retrievalService && this.promptBuilder
+          ? await this.answerWithRetrieval(message)
+          : assistantResult.content;
         const finalMessage: ConversationMessage = {
           role: 'Assistant',
-          content: assistantResult.content,
+          content,
           timestamp: new Date(),
         };
         messagesToPersist.push(finalMessage);
@@ -65,7 +74,7 @@ export class AssistantService implements AssistantServiceInterface {
 
         return {
           conversationId: conversation.conversationId,
-          response: assistantResult.content,
+          response: content,
         };
       }
 
@@ -147,5 +156,36 @@ export class AssistantService implements AssistantServiceInterface {
       conversationId,
       response: error,
     };
+  }
+
+  private requiresRepositoryKnowledge(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return [
+      'recipe', 'recipes', 'meal', 'meals', 'cook', 'cooking', 'dinner', 'lunch', 'freezer',
+      'ingredient', 'ingredients', 'prep', 'preparation', 'what can i', 'what should i', 'recommend',
+    ].some((term) => normalized.includes(term));
+  }
+
+  private async answerWithRetrieval(question: string): Promise<string> {
+    const retrieval = await this.retrievalService.retrieve(question);
+    if (retrieval.recipes.length === 0) {
+      return 'The repository does not contain enough information to answer that question.\n\nSources: none';
+    }
+
+    const prompt = this.promptBuilder.build(question, retrieval.recipes);
+    const response = await this.ollamaClient.chat(undefined, [
+      { role: 'System', content: this.options.systemPrompt, timestamp: new Date() },
+      { role: 'User', content: prompt, timestamp: new Date() },
+    ], []);
+    const content = response.content?.trim() || 'The repository does not contain enough information to answer that question.';
+    return `${content}\n\n${this.formatSources(retrieval.sources)}`;
+  }
+
+  private formatSources(sources: SourceAttribution[]): string {
+    if (sources.length === 0) {
+      return 'Sources: none';
+    }
+
+    return ['Sources:', ...sources.map((source) => `- ${source.recipeId}: ${source.title} (similarityScore: ${source.similarityScore.toFixed(6)})`)].join('\n');
   }
 }

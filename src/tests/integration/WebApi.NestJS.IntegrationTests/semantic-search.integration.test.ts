@@ -27,7 +27,8 @@ describe('Semantic Search Endpoint (Integration)', () => {
   it('POST /api/semantic-search returns ranked semantic matches', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/semantic-search')
-      .send({ query: 'spicy', topK: 1 })
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ query: 'spicy', topK: 1 }))
       .expect(201);
 
     expect(response.body).toHaveLength(1);

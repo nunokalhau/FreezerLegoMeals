@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\ai\RAG\DotNet\RAG.DotNet.csproj" />
     <ProjectReference Include="..\..\domain\Domain.DotNet\Domain.DotNet.csproj" />
     <ProjectReference Include="..\..\repositories\Repository.DotNet\Repository.DotNet.csproj" />
   </ItemGroup>

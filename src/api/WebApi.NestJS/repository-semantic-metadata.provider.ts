@@ -13,17 +13,25 @@ export class RepositorySemanticMetadataProvider implements ISemanticRecipeMetada
       const recipes = await this.recipeRepository.getRecipes();
       this.cache = new Map(recipes.map((recipe) => [
         String(recipe.id),
-        {
-          recipeId: String(recipe.id),
-          title: recipe.name,
-          matchedText: [
-            recipe.name,
-            recipe.notes,
-            recipe.tags,
-            recipe.prepping,
-            (recipe.recipeIngredients || []).map((ingredient) => ingredient.ingredient?.name).filter(Boolean).join(', '),
-          ].filter(Boolean).join(' | '),
-        },
+        (() => {
+          const ingredients = (recipe.recipeIngredients || []).map((ingredient) => ingredient.ingredient?.name).filter(Boolean);
+          return {
+            recipeId: String(recipe.id),
+            title: recipe.name,
+            matchedText: [
+              recipe.name,
+              recipe.notes,
+              recipe.tags,
+              recipe.prepping,
+              ingredients.join(', '),
+            ].filter(Boolean).join(' | '),
+            description: recipe.notes || '',
+            tags: recipe.tags || '',
+            ingredients,
+            preparationSteps: recipe.prepping || '',
+            cookingTime: recipe.timeToPrepare ? String(recipe.timeToPrepare) : '',
+          };
+        })(),
       ]));
     }
 

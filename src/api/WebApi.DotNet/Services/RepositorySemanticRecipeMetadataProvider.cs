@@ -30,7 +30,12 @@ public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMe
                         recipe.Tags,
                         recipe.Prepping,
                         string.Join(", ", recipe.RecipeIngredients.Select(ingredient => ingredient.Ingredient?.Name).Where(name => !string.IsNullOrWhiteSpace(name)))
-                    }.Where(value => !string.IsNullOrWhiteSpace(value)))));
+                    }.Where(value => !string.IsNullOrWhiteSpace(value))),
+                    recipe.Notes ?? string.Empty,
+                    recipe.Tags ?? string.Empty,
+                    recipe.RecipeIngredients.Select(ingredient => ingredient.Ingredient?.Name).Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name!).ToList(),
+                    recipe.Prepping ?? string.Empty,
+                    recipe.TimeToPrepare?.ToString() ?? string.Empty));
         }
 
         return _cache.TryGetValue(recipeId, out var metadata)

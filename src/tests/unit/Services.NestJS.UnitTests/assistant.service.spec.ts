@@ -2,6 +2,8 @@ import { AssistantService } from '../../../services/Services.NestJS/assistant.se
 import { ConversationStore } from '../../../services/Services.NestJS/conversation-store';
 import { OllamaClient } from '../../../services/Services.NestJS/ollama.client';
 import { ToolExecutor } from '../../../services/Services.NestJS/tool-executor';
+import { PromptBuilder } from '../../../ai/RAG/NestJS/prompt-builder';
+import { RetrievalService } from '../../../ai/RAG/NestJS/retrieval.service';
 
 describe('AssistantService', () => {
   it('creates a conversation and persists messages', async () => {
@@ -58,6 +60,62 @@ describe('AssistantService', () => {
     expect(result.response).toBe('done');
     expect(toolExecutor.execute).toHaveBeenCalledWith('example_tool', { message: 'hello' });
     expect(conversationStore.messages.some((message) => message.role === 'Tool')).toBe(true);
+  });
+
+  it('uses RAG for repository questions after no tool call and includes sources', async () => {
+    const ollamaClient = {
+      chat: jest.fn()
+        .mockResolvedValueOnce({ content: 'direct draft', toolCalls: [] })
+        .mockResolvedValueOnce({ content: 'Use the spicy chicken recipe.', toolCalls: [] }),
+    } as unknown as jest.Mocked<OllamaClient>;
+    const retrievalService = {
+      retrieve: jest.fn().mockResolvedValue({
+        question: 'What spicy chicken meal can I cook?',
+        recipes: [{ recipeId: '1', title: 'Spicy Chicken', description: 'Dinner', tags: 'spicy', ingredients: ['chicken'], preparationSteps: 'Slice', cookingTime: '45', similarityScore: 0.91 }],
+        sources: [{ recipeId: '1', title: 'Spicy Chicken', similarityScore: 0.91 }],
+      }),
+    } as unknown as jest.Mocked<RetrievalService>;
+    const promptBuilder = {
+      build: jest.fn().mockReturnValue('rag prompt'),
+    } as unknown as jest.Mocked<PromptBuilder>;
+    const service = new AssistantService(
+      ollamaClient,
+      new FakeConversationStore(),
+      createToolExecutor(),
+      createOptions(),
+      retrievalService,
+      promptBuilder
+    );
+
+    const result = await service.chat('What spicy chicken meal can I cook?');
+
+    expect(result.response).toContain('Use the spicy chicken recipe.');
+    expect(result.response).toContain('Sources:');
+    expect(result.response).toContain('1: Spicy Chicken');
+    expect(ollamaClient.chat).toHaveBeenCalledTimes(2);
+    expect(ollamaClient.chat.mock.calls[1][2]).toEqual([]);
+  });
+
+  it('returns a no-repository-information message for empty retrieval', async () => {
+    const ollamaClient = {
+      chat: jest.fn().mockResolvedValue({ content: 'direct draft', toolCalls: [] }),
+    } as unknown as jest.Mocked<OllamaClient>;
+    const retrievalService = {
+      retrieve: jest.fn().mockResolvedValue({ question: 'unknown', recipes: [], sources: [] }),
+    } as unknown as jest.Mocked<RetrievalService>;
+    const service = new AssistantService(
+      ollamaClient,
+      new FakeConversationStore(),
+      createToolExecutor(),
+      createOptions(),
+      retrievalService,
+      { build: jest.fn() } as unknown as PromptBuilder
+    );
+
+    const result = await service.chat('What freezer meal uses moon dust?');
+
+    expect(result.response).toContain('repository does not contain enough information');
+    expect(result.response).toContain('Sources: none');
   });
 
   it('executes multiple sequential tool calls', async () => {
