@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { RecipeRepository } from '../../../src/repositories/Repository.NestJS/recipe.repository';
-import { RecipeRepositoryInterface } from '../../../src/repositories/Repository.NestJS/recipe.repository';
+import { RecipeRepository } from '../../../repositories/Repository.NestJS/recipe.repository';
+import { RecipeRepositoryInterface } from '../../../repositories/Repository.NestJS/recipe.repository';
 
 describe('RecipeRepository', () => {
   let repository: RecipeRepository;

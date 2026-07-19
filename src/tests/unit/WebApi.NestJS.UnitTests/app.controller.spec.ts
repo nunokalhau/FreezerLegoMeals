@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AppController } from '../../../src/api/WebApi.NestJS/app.controller';
-import { AppService } from '../../../src/api/WebApi.NestJS/app.service';
-import { MealService } from '../../../src/services/Services.NestJS/meal.service';
-import { ShoppingService } from '../../../src/services/Services.NestJS/shopping.service';
+import { AppController } from '../../../api/WebApi.NestJS/app.controller';
+import { AppService } from '../../../api/WebApi.NestJS/app.service';
+import { MealService } from '../../../services/Services.NestJS/meal.service';
+import { ShoppingService } from '../../../services/Services.NestJS/shopping.service';
 
 const mealServiceMock = {
   getRecipes: jest.fn(),

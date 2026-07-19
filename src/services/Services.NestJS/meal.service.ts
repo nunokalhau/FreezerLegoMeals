@@ -3,7 +3,6 @@ import { IMealService } from './meal.service.interface';
 import { RecipeRepositoryInterface } from '../../repositories/Repository.NestJS/recipe.repository';
 import { IngredientSearchResponse } from './models/ingredient-search-response.dto';
 import { RecipeDetailsResponse } from './models/recipe-details-response.dto';
-import { RecipeInfoResponse } from './models/recipe-info-response.dto';
 import { Recipe } from './models/recipe.dto';
 import { plainToInstance } from 'class-transformer';
 
@@ -18,11 +17,11 @@ export class MealService implements IMealService {
     return await this.recipeRepository.getRecipes();
   }
 
-  async searchRecipesByIngredients(ingredients: string[]): Promise<any[]> {
+  async searchRecipesByIngredients(ingredients: string[]): Promise<Recipe[]> {
     return await this.recipeRepository.findRecipesWithIngredients(ingredients);
   }
 
-  async getRecipeById(recipeId: number): Promise<any | null> {
+  async getRecipeById(recipeId: number): Promise<Recipe | null> {
     return await this.recipeRepository.getRecipeById(recipeId);
   }
 
@@ -54,7 +53,7 @@ export class MealService implements IMealService {
       }
     }
 
-    let recipes: any[] = [];
+    let recipes: Recipe[] = [];
     if (foundIngredients.length > 0) {
       recipes = await this.recipeRepository.findRecipesWithIngredients(foundIngredients);
     }

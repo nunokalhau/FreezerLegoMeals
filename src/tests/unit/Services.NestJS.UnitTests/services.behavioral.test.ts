@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { MealService } from '../../../src/services/Services.NestJS/meal.service';
-import { ShoppingService } from '../../../src/services/Services.NestJS/shopping.service';
-import type { RecipeRepositoryInterface } from '../../../src/repositories/Repository.NestJS/recipe.repository';
+import { MealService } from '../../../services/Services.NestJS/meal.service';
+import { ShoppingService } from '../../../services/Services.NestJS/shopping.service';
+import type { RecipeRepositoryInterface } from '../../../repositories/Repository.NestJS/recipe.repository';
 
 // Mock repository for unit testing
 class MockRecipeRepository implements RecipeRepositoryInterface {
@@ -194,7 +194,8 @@ describe('ShoppingService', () => {
     it('should return ingredients for valid recipe ID', async () => {
       const result = await service.getRecipeIngredients('1');
       expect(result).toHaveLength(3);
-      expect(result).toContain('chicken');
+      expect(result[0]).toHaveProperty('ingredient.name');
+      expect(result.map((item) => item.ingredient.name)).toContain('chicken');
     });
 
     it('should return empty array for invalid recipe ID', async () => {

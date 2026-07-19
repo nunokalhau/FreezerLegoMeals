@@ -4,7 +4,7 @@ import { RecipeRepositoryInterface } from '../../repositories/Repository.NestJS/
 import { ShoppingListResponse } from './models/shopping-list-response.dto';
 import { RecipeInfoResponse } from './models/recipe-info-response.dto';
 import { ShoppingListItem } from './models/shopping-list-item.dto';
-import { Recipe } from './models/recipe.dto';
+import { Recipe, RecipeIngredient } from './models/recipe.dto';
 import { plainToInstance } from 'class-transformer';
 
 @Injectable()
@@ -14,25 +14,30 @@ export class ShoppingService implements IShoppingService {
     private readonly recipeRepository: RecipeRepositoryInterface
   ) {}
 
-  async getRecipeIngredients(recipeIdentifier: string): Promise<any[]> {
+  async getRecipeIngredients(recipeIdentifier: string): Promise<RecipeIngredient[]> {
+    if (!recipeIdentifier || !recipeIdentifier.trim()) {
+      return [];
+    }
+
     const parsedId = parseInt(recipeIdentifier, 10);
-    let recipe;
+    let recipe: Recipe | null = null;
     
     if (!isNaN(parsedId)) {
       recipe = await this.recipeRepository.getRecipeById(parsedId);
     } else {
-      return [];
+      const recipes = await this.recipeRepository.findRecipesWithIngredients([recipeIdentifier]);
+      recipe = recipes.length > 0 ? recipes[0] : null;
     }
 
     if (!recipe) {
       return [];
     }
     
-    return recipe.ingredients || [];
+    return recipe.recipeIngredients || [];
   }
 
-  async getMultipleRecipeIngredients(recipeIdentifiers: string[]): Promise<Record<string, any[]>> {
-    const result: Record<string, any[]> = {};
+  async getMultipleRecipeIngredients(recipeIdentifiers: string[]): Promise<Record<string, RecipeIngredient[]>> {
+    const result: Record<string, RecipeIngredient[]> = {};
     
     for (const identifier of recipeIdentifiers) {
       result[identifier] = await this.getRecipeIngredients(identifier);
@@ -46,6 +51,16 @@ export class ShoppingService implements IShoppingService {
     scaleFactor: number = 1.0, 
     groupByCategory: boolean = true
   ): Promise<ShoppingListResponse> {
+    if (scaleFactor <= 0) {
+      return plainToInstance(ShoppingListResponse, {
+        recipes: recipeIdentifiers || [],
+        totalRecipes: recipeIdentifiers?.length || 0,
+        scaleFactor,
+        ingredients: [],
+        message: 'Scale factor must be greater than 0'
+      });
+    }
+
     if (!recipeIdentifiers || recipeIdentifiers.length === 0) {
       return plainToInstance(ShoppingListResponse, {
         recipes: recipeIdentifiers,
@@ -57,31 +72,29 @@ export class ShoppingService implements IShoppingService {
     }
 
     try {
-      // Get all recipes to extract ingredients
-      const allRecipes: Recipe[] = [];
+      // Get all recipe ingredients to build an aggregate shopping list.
+      const allIngredientsByRecipe = await this.getMultipleRecipeIngredients(recipeIdentifiers);
       for (const identifier of recipeIdentifiers) {
-        const parsedId = parseInt(identifier, 10);
-        if (!isNaN(parsedId)) {
-          const recipe = await this.recipeRepository.getRecipeById(parsedId);
-          if (recipe) {
-            allRecipes.push(recipe);
-          }
+        if (!allIngredientsByRecipe[identifier]) {
+          allIngredientsByRecipe[identifier] = [];
         }
       }
 
       const ingredientMap: Record<string, ShoppingListItem> = {};
       
-      for (const recipe of allRecipes) {
-        if (recipe && recipe.recipeIngredients && Array.isArray(recipe.recipeIngredients)) {
-          for (const recipeIngredient of recipe.recipeIngredients) {
-            const ingredientKey = `${recipeIngredient.ingredient.name}-${recipeIngredient.ingredient.category}`;
+      for (const ingredients of Object.values(allIngredientsByRecipe)) {
+        if (Array.isArray(ingredients)) {
+          for (const recipeIngredient of ingredients) {
+            const ingredientName = recipeIngredient.ingredient?.name || 'Unknown ingredient';
+            const ingredientCategory = recipeIngredient.ingredient?.category || 'other';
+            const ingredientKey = `${ingredientName}-${ingredientCategory}`;
             
             if (!ingredientMap[ingredientKey]) {
               ingredientMap[ingredientKey] = {
-                name: recipeIngredient.ingredient.name,
+                name: ingredientName,
                 quantity: 0,
-                unit: 'units', // Defaulting to 'units' instead of trying to access .unit
-                category: recipeIngredient.ingredient.category
+                unit: recipeIngredient.unit || 'units',
+                category: ingredientCategory
               };
             }
             
@@ -120,13 +133,18 @@ export class ShoppingService implements IShoppingService {
   }
 
   async getRecipeInfo(recipeIdentifier: string): Promise<RecipeInfoResponse | null> {
+    if (!recipeIdentifier || !recipeIdentifier.trim()) {
+      return null;
+    }
+
     const parsedId = parseInt(recipeIdentifier, 10);
-    let recipe;
+    let recipe: Recipe | null = null;
     
     if (!isNaN(parsedId)) {
       recipe = await this.recipeRepository.getRecipeById(parsedId);
     } else {
-      recipe = null; 
+      const recipes = await this.recipeRepository.findRecipesWithIngredients([recipeIdentifier]);
+      recipe = recipes.length > 0 ? recipes[0] : null;
     }
     
     if (recipe) {

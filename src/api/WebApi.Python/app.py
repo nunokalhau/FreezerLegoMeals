@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
@@ -31,7 +31,8 @@ ShoppingService = shopping_module.ShoppingService
 app = FastAPI(
     title="Freezer Lego Meals Python API",
     description="API for Freezer Lego Meals project with modular meal prep capabilities.",
-    version="1.0.0"
+    version="1.0.0",
+    redoc_url=None
 )
 
 app.add_middleware(
@@ -53,9 +54,9 @@ class HealthResponse(BaseModel):
 class RecipeSearchRequest(BaseModel):
     ingredients: list[str]
 
-class ShoppingListRequest(BaseModel):
-    recipe_names: list[str]
-    scale_factor: float = 1.0
+class SearchRecipesResponse(BaseModel):
+    recipes: List[Dict[str, Any]]
+    total_recipes_found: int
 
 class GetRecipeByIdRequest(BaseModel):
     id: int
@@ -83,6 +84,7 @@ class GetRecipeIngredientsRequest(BaseModel):
 class GetRecipeIngredientsResponse(BaseModel):
     ingredients: List[Dict[str, Any]]
     recipe_name: str
+    found: bool
 
 class GetMultipleRecipeIngredientsRequest(BaseModel):
     recipe_identifiers: List[str]
@@ -130,8 +132,11 @@ def search_recipes(request: RecipeSearchRequest):
         raise HTTPException(status_code=400, detail="Ingredients list cannot be empty")
     
     # Delegate to the service
-    result = meal_service.search_recipes_by_ingredients(request.ingredients)
-    return result
+    recipes = meal_service.search_recipes_by_ingredients(request.ingredients)
+    return SearchRecipesResponse(
+        recipes=recipes,
+        total_recipes_found=len(recipes)
+    )
 
 @app.get("/api/recipes/{id}", response_model=GetRecipeByIdResponse)
 def get_recipe_by_id(id: int):
@@ -196,21 +201,30 @@ def get_recipe_ingredients(identifier: str):
         ingredients = shopping_service.get_recipe_ingredients(identifier)
         return GetRecipeIngredientsResponse(
             ingredients=ingredients,
-            recipe_name=identifier
+            recipe_name=identifier,
+            found=len(ingredients) > 0
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving ingredients: {str(e)}")
 
 @app.post("/api/shopping/ingredients", response_model=GetMultipleRecipeIngredientsResponse)
-def get_multiple_recipe_ingredients(request: GetMultipleRecipeIngredientsRequest):
+def get_multiple_recipe_ingredients(request: Any = Body(...)):
     """Get ingredients for multiple recipes."""
     # Validate request body is not null (Pydantic handles this via BaseModel)
     # Validate recipe identifiers list is not empty
-    if not request.recipe_identifiers or len(request.recipe_identifiers) == 0:
+    recipe_identifiers: List[str]
+    if isinstance(request, list):
+        recipe_identifiers = request
+    elif isinstance(request, dict):
+        recipe_identifiers = request.get("recipe_identifiers") or request.get("recipeIdentifiers") or []
+    else:
+        recipe_identifiers = []
+
+    if not recipe_identifiers or len(recipe_identifiers) == 0:
         raise HTTPException(status_code=400, detail="Recipe identifiers list cannot be empty")
     
     try:
-        recipe_ingredients = shopping_service.get_multiple_recipe_ingredients(request.recipe_identifiers)
+        recipe_ingredients = shopping_service.get_multiple_recipe_ingredients(recipe_identifiers)
         return GetMultipleRecipeIngredientsResponse(
             recipe_ingredients=recipe_ingredients,
             total_recipes=len(recipe_ingredients),
@@ -257,16 +271,6 @@ def get_recipe_info(identifier: str):
         return GetRecipeInfoResponse(info=info)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving recipe info: {str(e)}")
-
-@app.post("/shopping-list/generate")
-def generate_shopping_list_old(request: ShoppingListRequest):
-    """Generate a shopping list from recipe names."""
-    # Delegate to the service
-    result = shopping_service.generate_shopping_list(
-        request.recipe_names,
-        scale_factor=request.scale_factor
-    )
-    return result
 
 if __name__ == "__main__":
     import uvicorn

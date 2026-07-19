@@ -91,10 +91,8 @@ class ShoppingService:
         all_ingredients = {}
         for identifier in recipe_identifiers:
             ingredients = self.get_recipe_ingredients(identifier)
-            if ingredients:
-                # Extract recipe name from first ingredient's source or from identifier
-                recipe_key = identifier
-                all_ingredients[recipe_key] = ingredients
+            recipe_key = identifier
+            all_ingredients[recipe_key] = ingredients
         return all_ingredients
     
     def generate_shopping_list(self, 
@@ -259,7 +257,7 @@ class ShoppingService:
             recipe_id = recipes[0]["id"]
             
         # Return recipe info
-        recipe_details = self.repository.get_recipe_details(recipe_identifier) 
+        recipe_details = self.repository.get_recipe_details(str(recipe_id)) 
         if recipe_details:
             # Extract the first one which should contain the basic info
             return {

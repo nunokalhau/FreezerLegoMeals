@@ -66,6 +66,10 @@ class Repository:
         finally:
             conn.close()
 
+    def get_recipes(self) -> List[Dict[str, Any]]:
+        """Get all recipes with details (DotNet parity method name)."""
+        return self.get_all_recipes_with_details()
+
     def search_recipes_by_ingredients(self, ingredients: List[str]) -> List[Dict[str, Any]]:
         """Search for recipes containing specified ingredients."""
         if not self.db_path.exists():
@@ -176,6 +180,11 @@ class Repository:
         finally:
             conn.close()
 
+    def get_ingredients(self) -> List[Dict[str, Any]]:
+        """Get all ingredients as objects (DotNet parity method name)."""
+        ingredients = self.get_all_ingredients()
+        return [{"id": ingredient_id, "name": name} for ingredient_id, name in ingredients.items()]
+
     def get_recipe_combinations(self) -> Dict[int, Dict[str, Any]]:
         """Get recipe combinations data."""
         if not self.db_path.exists():
@@ -195,10 +204,10 @@ class Repository:
             
             # Get combination items
             cursor = conn.execute("""
-                SELECT rc.id, rc.recipe_id, r.name, rc.position 
-                FROM recipe_combination_items rc
-                JOIN recipes r ON rc.recipe_id = r.id
-                ORDER BY rc.combination_id, rc.position
+                SELECT rci.combination_id, rci.recipe_id, r.name, rci.position
+                FROM recipe_combination_items rci
+                JOIN recipes r ON rci.recipe_id = r.id
+                ORDER BY rci.combination_id, rci.position
             """)
             
             for row in cursor.fetchall():
@@ -211,6 +220,58 @@ class Repository:
                     })
             
             return combinations_map
+        finally:
+            conn.close()
+
+    def get_combinations(self) -> List[Dict[str, Any]]:
+        """Get all combinations as a list (DotNet parity method name)."""
+        combinations_map = self.get_recipe_combinations()
+        return [
+            {
+                "id": combination_id,
+                "name": data.get("name", ""),
+                "description": data.get("description", ""),
+                "recipes": data.get("recipes", [])
+            }
+            for combination_id, data in combinations_map.items()
+        ]
+
+    def get_combination_by_id(self, combination_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific combination by ID (DotNet parity method name)."""
+        if combination_id <= 0:
+            return None
+
+        combinations_map = self.get_recipe_combinations()
+        if combination_id not in combinations_map:
+            return None
+
+        data = combinations_map[combination_id]
+        return {
+            "id": combination_id,
+            "name": data.get("name", ""),
+            "description": data.get("description", ""),
+            "recipes": data.get("recipes", [])
+        }
+
+    def get_ingredient_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific ingredient by name (DotNet parity method name)."""
+        if not self.db_path.exists() or not name or not name.strip():
+            return None
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.execute(
+                "SELECT id, name FROM ingredients WHERE lower(name) = lower(?) LIMIT 1",
+                (name.strip(),)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            return {
+                "id": row[0],
+                "name": row[1]
+            }
         finally:
             conn.close()
 

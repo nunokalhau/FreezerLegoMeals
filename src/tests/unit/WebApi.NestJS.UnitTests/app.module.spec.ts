@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AppModule } from '../../../src/api/WebApi.NestJS/app.module';
+import { AppModule } from '../../../api/WebApi.NestJS/app.module';
 
 describe('AppModule Structure', () => {
   let module: TestingModule;

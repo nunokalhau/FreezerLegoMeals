@@ -1,10 +1,9 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, BadRequestException, NotFoundException } from '@nestjs/common';
 import { AppService } from './app.service';
 import { MealService } from '../../services/Services.NestJS/meal.service';
 import { ShoppingService } from '../../services/Services.NestJS/shopping.service';
 import { ApiTags, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { ShoppingIngredientsRequest } from '../../services/Services.NestJS/models/shopping-ingredients-request.dto';
-import { ValidateDtoPipe } from '../../pipes/validation.pipe';
 
 @ApiTags('meals')
 @Controller('api')
@@ -39,63 +38,150 @@ export class AppController {
     return await this.mealService.getRecipes();
   }
 
-  @Get('recipes/search')
+  @Post('recipes/search')
   @ApiOperation({ summary: 'Search recipes by ingredients' })
   @ApiResponse({ status: 200, description: 'Returns matching recipes' })
-  async searchRecipesByIngredients(@Body() ingredients: string[]) {
-    return await this.mealService.searchRecipesByIngredients(ingredients);
+  async searchRecipesByIngredients(@Body() body: { ingredients: string[] }) {
+    if (!body || !Array.isArray(body.ingredients) || body.ingredients.length === 0) {
+      throw new BadRequestException('At least one ingredient is required');
+    }
+
+    const recipes = await this.mealService.searchRecipesByIngredients(body.ingredients);
+    return {
+      recipes,
+      totalRecipesFound: recipes.length
+    };
   }
 
   @Get('recipes/:id')
   @ApiOperation({ summary: 'Get a recipe by ID' })
   @ApiResponse({ status: 200, description: 'Returns the recipe details' })
-  async getRecipeById(@Param('id') id: number) {
-    return await this.mealService.getRecipeById(id);
+  async getRecipeById(@Param('id', ParseIntPipe) id: number) {
+    const recipe = await this.mealService.getRecipeById(id);
+    if (!recipe) {
+      throw new NotFoundException('Recipe not found');
+    }
+
+    return { recipe };
   }
 
   @Get('recipes/:id/details')
   @ApiOperation({ summary: 'Get detailed recipe information by ID' })
   @ApiResponse({ status: 200, description: 'Returns the recipe details' })
-  async getRecipeDetails(@Param('id') id: number) {
-    return await this.mealService.getRecipeDetails(id);
+  async getRecipeDetails(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.mealService.getRecipeDetails(id);
+    if (result.error || !result.recipe) {
+      throw new NotFoundException(result.error || 'Recipe details not found');
+    }
+
+    return {
+      recipe: result.recipe,
+      message: result.message || ''
+    };
   }
 
   @Post('recipes/find-by-ingredients')
   @ApiOperation({ summary: 'Find meals with given ingredients' })
   @ApiResponse({ status: 200, description: 'Returns matching meals' })
   async findMealsWithIngredients(@Body() query: { query: string }) {
+    if (!query || !query.query || !query.query.trim()) {
+      throw new BadRequestException('Query is required');
+    }
+
     return await this.mealService.findMealsWithIngredients(query.query);
   }
 
   @Post('shopping/generate')
   @ApiOperation({ summary: 'Generate a shopping list from recipe names' })
   @ApiResponse({ status: 200, description: 'Returns generated shopping list' })
-  async generateShoppingList(@Body() recipeNames: { recipe_names: string[]; scale_factor?: number }) {
-    const { recipe_names, scale_factor = 1.0 } = recipeNames;
-    return await this.shoppingService.generateShoppingList(recipe_names, scale_factor);
+  async generateShoppingList(
+    @Body()
+    body: {
+      recipeIdentifiers?: string[];
+      scaleFactor?: number;
+      groupByCategory?: boolean;
+      recipe_identifiers?: string[];
+      scale_factor?: number;
+      group_by_category?: boolean;
+    }
+  ) {
+    const recipeIdentifiers = body?.recipeIdentifiers ?? body?.recipe_identifiers ?? [];
+    const scaleFactor = body?.scaleFactor ?? body?.scale_factor ?? 1.0;
+    const groupByCategory = body?.groupByCategory ?? body?.group_by_category ?? true;
+
+    if (!Array.isArray(recipeIdentifiers) || recipeIdentifiers.length === 0) {
+      throw new BadRequestException('At least one recipe identifier is required');
+    }
+
+    const shoppingList = await this.shoppingService.generateShoppingList(
+      recipeIdentifiers,
+      scaleFactor,
+      groupByCategory
+    );
+
+    return {
+      shoppingList,
+      message: shoppingList.message || 'Shopping list generated successfully',
+      scaleFactor,
+      groupByCategory
+    };
   }
 
-  @Get('shopping/:recipeName')
+  @Get('shopping/ingredients/:identifier')
   @ApiOperation({ summary: 'Get ingredients for a specific recipe' })
   @ApiResponse({ status: 200, description: 'Returns recipe ingredients' })
-  async getRecipeIngredients(@Param('recipeName') recipeName: string) {
-    return await this.shoppingService.getRecipeIngredients(recipeName);
+  async getRecipeIngredients(@Param('identifier') identifier: string) {
+    if (!identifier || !identifier.trim()) {
+      throw new BadRequestException('Recipe identifier is required');
+    }
+
+    const ingredients = await this.shoppingService.getRecipeIngredients(identifier);
+    return {
+      ingredients,
+      recipeName: identifier,
+      found: ingredients.length > 0
+    };
   }
 
   @Post('shopping/ingredients')
   @ApiOperation({ summary: 'Get ingredients for multiple recipes' })
   @ApiResponse({ status: 200, description: 'Returns ingredients for multiple recipes' })
   async getMultipleRecipeIngredients(
-    @Body() 
-    request: ShoppingIngredientsRequest
+    @Body()
+    request: ShoppingIngredientsRequest | string[]
   ) {
-    return await this.shoppingService.getMultipleRecipeIngredients(request.recipeIdentifiers);
+    const recipeIdentifiers = Array.isArray(request)
+      ? request
+      : request?.recipeIdentifiers;
+
+    if (!Array.isArray(recipeIdentifiers) || recipeIdentifiers.length === 0) {
+      throw new BadRequestException('Request body is required');
+    }
+
+    const recipeIngredients = await this.shoppingService.getMultipleRecipeIngredients(recipeIdentifiers);
+    const totalRecipes = Object.keys(recipeIngredients).length;
+    return {
+      recipeIngredients,
+      totalRecipes,
+      found: totalRecipes > 0
+    };
   }
 
   @Get('shopping/:identifier/info')
   @ApiOperation({ summary: 'Get basic information for a specific recipe' })
   @ApiResponse({ status: 200, description: 'Returns recipe information' })
   async getRecipeInfo(@Param('identifier') identifier: string) {
-    return await this.shoppingService.getRecipeInfo(identifier);
+    if (!identifier || !identifier.trim()) {
+      throw new BadRequestException('Recipe identifier is required');
+    }
+
+    const info = await this.shoppingService.getRecipeInfo(identifier);
+    if (!info) {
+      throw new NotFoundException('Recipe info not found');
+    }
+
+    return {
+      info
+    };
   }
 }

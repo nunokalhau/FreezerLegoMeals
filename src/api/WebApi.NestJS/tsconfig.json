@@ -42,7 +42,7 @@
 
   "include": [
     "src/**/*.ts",
-    "tests/**/*.ts"
+    "src/tests/**/*.ts"
   ],
 
   "exclude": [

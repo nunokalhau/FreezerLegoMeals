@@ -112,12 +112,6 @@ API docs are available at:
 http://localhost:3000/docs
 ```
 
-ReDoc is also available at:
-
-```
-http://localhost:3000/redoc
-```
-
 ---
 
 # Running Tests
