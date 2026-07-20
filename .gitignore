@@ -12,6 +12,12 @@ src/food/recipe_index.md
 *.sqlite
 *.sqlite3
 
+# Local Docker service data
+data/chromadb/*
+!data/chromadb/.gitkeep
+data/redis/*
+!data/redis/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]
