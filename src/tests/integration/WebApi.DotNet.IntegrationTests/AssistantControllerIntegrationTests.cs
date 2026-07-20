@@ -1,11 +1,14 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using AI.Memory.DotNet;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Orchestration.DotNet;
 using RAG.DotNet;
 using Services.DotNet;
+using StackExchange.Redis;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
 using Xunit;
@@ -17,6 +20,8 @@ public class AssistantControllerIntegrationTests
 {
     private const string OllamaBaseUrl = "http://localhost:11434";
     private const string OllamaRequiredMessage = "Local Ollama instance is required at http://localhost:11434 with at least one available model.";
+    private const string RedisConnectionString = "localhost:6379,abortConnect=false,connectTimeout=2000,syncTimeout=2000";
+    private const string RedisRequiredMessage = "Local Redis is required at localhost:6379 for Redis-backed assistant integration tests.";
 
     [OllamaAvailableFact]
     public async Task Chat_WithLocalOllama_ReturnsConversationIdAndMaintainsConversation()
@@ -123,6 +128,68 @@ public class AssistantControllerIntegrationTests
         Assert.Contains("1: Spicy Chicken", payload.Response);
     }
 
+    [RedisAvailableFact]
+    public async Task Chat_WithFollowUpAcrossFactories_PersistsConversationThroughRedisMemoryProvider()
+    {
+        string? conversationId = null;
+
+        try
+        {
+            using (var firstFactory = CreateRedisAssistantFactory())
+            {
+                using var scope = firstFactory.Services.CreateScope();
+                Assert.IsType<RedisMemoryProvider>(scope.ServiceProvider.GetRequiredService<IConversationStore>());
+
+                using var firstClient = firstFactory.CreateClient();
+                var firstResponse = await firstClient.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+                {
+                    Message = "first message"
+                });
+
+                firstResponse.EnsureSuccessStatusCode();
+                var firstPayload = await firstResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+
+                Assert.NotNull(firstPayload);
+                conversationId = firstPayload.ConversationId;
+                Assert.False(string.IsNullOrWhiteSpace(conversationId));
+                Assert.Equal("history:1", firstPayload.Response);
+            }
+
+            using (var secondFactory = CreateRedisAssistantFactory())
+            {
+                using var scope = secondFactory.Services.CreateScope();
+                Assert.IsType<RedisMemoryProvider>(scope.ServiceProvider.GetRequiredService<IConversationStore>());
+
+                using var secondClient = secondFactory.CreateClient();
+                var secondResponse = await secondClient.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+                {
+                    ConversationId = conversationId,
+                    Message = "second message"
+                });
+
+                secondResponse.EnsureSuccessStatusCode();
+                var secondPayload = await secondResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+
+                Assert.NotNull(secondPayload);
+                Assert.Equal(conversationId, secondPayload.ConversationId);
+                Assert.Equal("history:3", secondPayload.Response);
+            }
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(conversationId))
+            {
+                await DeleteConversationAsync(conversationId);
+            }
+        }
+    }
+
     internal static async Task<OllamaAvailability> GetOllamaAvailabilityAsync()
     {
         using var httpClient = new HttpClient
@@ -151,11 +218,62 @@ public class AssistantControllerIntegrationTests
         }
     }
 
+    internal static async Task<RedisAvailability> GetRedisAvailabilityAsync()
+    {
+        try
+        {
+            await using var redis = await ConnectionMultiplexer.ConnectAsync(RedisConnectionString);
+            await redis.GetDatabase().PingAsync();
+            return RedisAvailability.Available();
+        }
+        catch (Exception ex)
+        {
+            return RedisAvailability.Unavailable($"{RedisRequiredMessage} Connection failed: {ex.Message}");
+        }
+    }
+
     internal sealed record OllamaAvailability(bool IsAvailable, string? Model, string? SkipReason)
     {
         public static OllamaAvailability Available(string model) => new(true, model, null);
 
         public static OllamaAvailability Unavailable(string skipReason) => new(false, null, skipReason);
+    }
+
+    internal sealed record RedisAvailability(bool IsAvailable, string? SkipReason)
+    {
+        public static RedisAvailability Available() => new(true, null);
+
+        public static RedisAvailability Unavailable(string skipReason) => new(false, skipReason);
+    }
+
+    private static WebApplicationFactory<Program> CreateRedisAssistantFactory()
+    {
+        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+            {
+                configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConversationStore:RedisConnectionString"] = RedisConnectionString
+                });
+            });
+
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase($"AssistantRedisIntegrationTestDatabase-{Guid.NewGuid():N}"));
+                services.RemoveAll<IAssistantOrchestrator>();
+                services.AddSingleton<IAssistantOrchestrator, ConversationCountingOrchestrator>();
+            });
+        });
+    }
+
+    private static async Task DeleteConversationAsync(string conversationId)
+    {
+        await using var redis = await ConnectionMultiplexer.ConnectAsync(RedisConnectionString);
+        await redis.GetDatabase().KeyDeleteAsync($"conversation:{conversationId}");
     }
 
     private sealed record OllamaTagsResponse(IEnumerable<OllamaModel>? Models);
@@ -188,6 +306,26 @@ public class AssistantControllerIntegrationTests
     {
         public string Build(string question, IReadOnlyList<RetrievalRecipe> recipes) => "rag prompt";
     }
+
+    private sealed class ConversationCountingOrchestrator : IAssistantOrchestrator
+    {
+        public Task<OrchestratorResult> ExecuteAsync(OrchestratorContext context, CancellationToken cancellationToken = default)
+        {
+            var response = $"history:{context.Messages.Count(message => message.Role != ConversationRole.System)}";
+            var assistantMessage = new ConversationMessage(ConversationRole.Assistant, response, DateTimeOffset.UtcNow);
+            var messagesToPersist = context.MessagesToPersist.Concat([assistantMessage]).ToList();
+
+            return Task.FromResult(new OrchestratorResult(
+                response,
+                "ConversationCountingOrchestrator",
+                [],
+                [],
+                ["Assistant", "ConversationCountingOrchestrator"],
+                TimeSpan.Zero,
+                [],
+                messagesToPersist));
+        }
+    }
 }
 
 public sealed class OllamaAvailableFactAttribute : FactAttribute
@@ -195,6 +333,18 @@ public sealed class OllamaAvailableFactAttribute : FactAttribute
     public OllamaAvailableFactAttribute()
     {
         var availability = AssistantControllerIntegrationTests.GetOllamaAvailabilityAsync().GetAwaiter().GetResult();
+        if (!availability.IsAvailable)
+        {
+            Skip = availability.SkipReason;
+        }
+    }
+}
+
+public sealed class RedisAvailableFactAttribute : FactAttribute
+{
+    public RedisAvailableFactAttribute()
+    {
+        var availability = AssistantControllerIntegrationTests.GetRedisAvailabilityAsync().GetAwaiter().GetResult();
         if (!availability.IsAvailable)
         {
             Skip = availability.SkipReason;

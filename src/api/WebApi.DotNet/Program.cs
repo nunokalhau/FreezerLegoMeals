@@ -8,6 +8,7 @@ using RAG.DotNet;
 using SemanticSearch.DotNet;
 using VectorStores.DotNet;
 using WebApi.DotNet.Services;
+using AI.Memory.DotNet;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,7 +24,9 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IAssistantService, AssistantService>();
 builder.Services.AddScoped<IAgent, MealPlanningAgent>();
 builder.Services.AddScoped<IAssistantOrchestrator, AssistantOrchestrator>();
-builder.Services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+builder.Services.AddSingleton<RedisMemoryProvider>();
+builder.Services.AddSingleton<IConversationStore>(serviceProvider => serviceProvider.GetRequiredService<RedisMemoryProvider>());
+builder.Services.AddSingleton<IMemoryProvider>(serviceProvider => serviceProvider.GetRequiredService<RedisMemoryProvider>());
 builder.Services.AddSingleton<IToolRegistry>(_ => new ToolRegistry(
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools", "tool_registry.json"))));
 builder.Services.AddScoped<IToolExecutor>(serviceProvider => new PythonToolExecutor(
