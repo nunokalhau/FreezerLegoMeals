@@ -6,22 +6,6 @@ The project combines meal preparation, clean software architecture, multiple bac
 
 ---
 
-# What this project is
-
-Freezer Lego Meals started as a modular freezer meal repository.
-
-It has evolved into a complete AI-assisted Food Operating System designed to help users:
-
-- discover recipes
-- plan weekly meals
-- generate shopping lists
-- organize batch cooking
-- interact with recipes using natural language
-
-The repository also serves as a software engineering portfolio demonstrating modern backend development, AI integration and clean architecture across multiple technology stacks.
-
----
-
 # Current Features
 
 ## Meal Planning
@@ -43,6 +27,7 @@ The repository also serves as a software engineering portfolio demonstrating mod
 - Embeddings
 - Local Vector Store
 - Retrieval-Augmented Generation (RAG)
+- Redis-backed memory
 
 ## APIs
 
@@ -139,54 +124,6 @@ Ollama
 Answer
 ```
 
-Current capabilities include:
-
-- Semantic Search
-- Tool Calling
-- RAG
-- Local LLM execution
-
-Planned capabilities include:
-
-- Conversation Memory
-- Redis-backed memory
-- MCP
-- Multiple specialized agents
-
----
-
-# Technologies
-
-Backend
-
-- .NET
-- C#
-- ASP.NET Core
-
-- NestJS
-- TypeScript
-
-- Python
-- FastAPI
-
-AI
-
-- Ollama
-- Embeddings
-- Semantic Search
-- RAG
-- Tool Calling
-
-Frontend
-
-- React
-- TypeScript
-
-Testing
-
-- Unit Tests
-- Integration Tests
-
 ---
 
 # Current AI Workflow
@@ -227,20 +164,6 @@ Final Response
 
 ---
 
-# Goals
-
-The project aims to:
-
-- simplify weekly meal planning
-- reduce food waste
-- reduce decision fatigue
-- automate repetitive cooking tasks
-- demonstrate modern software engineering
-- demonstrate practical AI integration
-- serve as a long-term portfolio project
-
----
-
 # Roadmap
 
 Completed
@@ -254,13 +177,13 @@ Completed
 - Semantic Search
 - RAG
 - React frontend
+- Redis
+- Orchestration layer
 
 Next
 
-- Orchestration layer
 - Specialized AI agents
 - Conversation memory
-- Redis
 - MCP
 - ChromaDB
 - User accounts
