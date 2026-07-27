@@ -1,5 +1,8 @@
 using Embedding.DotNet;
+using Microsoft.Extensions.Options;
 using SemanticSearch.DotNet;
+using System.Net;
+using System.Text;
 using VectorStores.DotNet;
 using Xunit;
 
@@ -16,40 +19,124 @@ public class SemanticSearchServiceTests
     }
 
     [Fact]
-    public async Task LocalVectorStore_RanksTopKAndCachesEmbeddings()
+    public async Task ChromaVectorStore_RanksTopKAndReusesCollection()
     {
-        var directory = CreateTempDirectory();
-        try
+        var createCalls = 0;
+        var queryCalls = 0;
+        var queryResponses = new Queue<string>(new[]
         {
-            await File.WriteAllTextAsync(Path.Combine(directory, "1.json"), "{\"recipeId\":\"1\",\"embedding\":[1,0]}");
-            await File.WriteAllTextAsync(Path.Combine(directory, "2.json"), "{\"recipeId\":\"2\",\"embedding\":[0,1]}");
-            var store = new LocalVectorStore(directory);
+            """
+            {
+              "ids": [["1"]],
+              "embeddings": [[[1, 0]]],
+              "distances": [[0]],
+              "include": ["embeddings", "distances"]
+            }
+            """,
+            """
+            {
+              "ids": [["1", "2"]],
+              "embeddings": [[[1, 0], [0, 1]]],
+              "distances": [[0, 1]],
+              "include": ["embeddings", "distances"]
+            }
+            """
+        });
 
-            var matches = await store.SearchAsync([1, 0], 1);
-            File.Delete(Path.Combine(directory, "1.json"));
-            var cachedMatches = await store.SearchAsync([1, 0], 2);
-
-            Assert.Equal("1", matches.Single().RecipeId);
-            Assert.Equal(new[] { "1", "2" }, cachedMatches.Select(match => match.RecipeId));
-        }
-        finally
+        var handler = new StubHttpMessageHandler(async request =>
         {
-            Directory.Delete(directory, recursive: true);
-        }
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                createCalls++;
+                var body = await request.Content!.ReadAsStringAsync();
+                Assert.Contains("\"name\":\"recipe_embeddings\"", body);
+                Assert.Contains("\"get_or_create\":true", body);
+
+                return Json(HttpStatusCode.OK, """
+                {
+                  "id": "collection-1",
+                  "name": "recipe_embeddings",
+                  "configuration_json": {},
+                  "tenant": "default_tenant",
+                  "database": "default_database",
+                  "log_position": 0,
+                  "version": 1
+                }
+                """);
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/query", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                queryCalls++;
+                var body = await request.Content!.ReadAsStringAsync();
+                Assert.Contains("\"query_embeddings\":[[1,0]]", body);
+                Assert.Contains("\"n_results\":", body);
+
+                return Json(HttpStatusCode.OK, queryResponses.Dequeue());
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions { CollectionName = "recipe_embeddings" }));
+
+        var matches = await store.SearchAsync([1, 0], 1);
+        var cachedMatches = await store.SearchAsync([1, 0], 2);
+
+        Assert.Equal("1", matches.Single().RecipeId);
+        Assert.Equal(new[] { "1", "2" }, cachedMatches.Select(match => match.RecipeId));
+        Assert.Equal(1, createCalls);
+        Assert.Equal(2, queryCalls);
     }
 
     [Fact]
-    public async Task LocalVectorStore_ReturnsEmptyForEmptyIndex()
+    public async Task ChromaVectorStore_ReturnsEmptyForEmptyIndex()
     {
-        var directory = CreateTempDirectory();
-        try
+        var handler = new StubHttpMessageHandler(request =>
         {
-            Assert.Empty(await new LocalVectorStore(directory).SearchAsync([1, 0], 5));
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "id": "collection-1",
+                  "name": "recipe_embeddings",
+                  "configuration_json": {},
+                  "tenant": "default_tenant",
+                  "database": "default_database",
+                  "log_position": 0,
+                  "version": 1
+                }
+                """));
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/query", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "ids": [[]],
+                  "embeddings": [[]],
+                  "distances": [[]],
+                  "include": ["embeddings", "distances"]
+                }
+                """));
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        Assert.Empty(await store.SearchAsync([1, 0], 5));
     }
 
     [Fact]
@@ -79,17 +166,33 @@ public class SemanticSearchServiceTests
         Assert.Empty(await service.SearchAsync("anything", 0));
     }
 
-    private static string CreateTempDirectory()
-    {
-        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        return directory;
-    }
-
     private sealed class StubEmbeddingService : IEmbeddingService
     {
         public Task<EmbeddingResponse> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbeddingResponse("test", 2, new[] { 1f, 0f }));
+    }
+
+    private static HttpResponseMessage Json(HttpStatusCode statusCode, string payload)
+    {
+        return new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+    }
+
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler)
+        {
+            _handler = handler;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return _handler(request);
+        }
     }
 
     private sealed class StubVectorStore : IVectorStore

@@ -34,8 +34,6 @@ builder.Services.AddScoped<IToolExecutor>(serviceProvider => new PythonToolExecu
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools"))));
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
-builder.Services.AddSingleton<IVectorStore>(_ => new LocalVectorStore(
-    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "..", "data", "embeddings"))));
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
 builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.AddScoped<IRetrievalService, RetrievalService>();
@@ -45,6 +43,16 @@ builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("A
 builder.Services.Configure<ConversationStoreOptions>(builder.Configuration.GetSection("ConversationStore"));
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection("Ollama"));
 builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embeddings"));
+builder.Services.Configure<ChromaVectorStoreOptions>(builder.Configuration.GetSection("ChromaVectorStore"));
+builder.Services.AddHttpClient(ChromaVectorStore.HttpClientName, (serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ChromaVectorStoreOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = options.Timeout;
+});
+builder.Services.AddSingleton<IVectorStore>(serviceProvider => new ChromaVectorStore(
+    serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(ChromaVectorStore.HttpClientName),
+    serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ChromaVectorStoreOptions>>()));
 builder.Services.AddHttpClient<IOllamaClient, OllamaClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OllamaOptions>>().Value;
