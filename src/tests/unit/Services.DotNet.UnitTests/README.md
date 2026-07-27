@@ -49,6 +49,25 @@ dotnet test
 # (If configured)
 ```
 
+## AI Evaluation
+
+The .NET unit tests now include a deterministic AI evaluation framework used to automatically validate assistant behavior.
+
+Covered dimensions:
+
+- routing decisions
+- retrieval relevance
+- semantic search quality
+- tool selection
+- tool execution
+- memory retrieval
+- grounded responses
+- overall answer quality
+
+Implementation and extension guide:
+
+- `AI_EVALUATION.md`
+
 ## Test Framework
 
 The tests use:

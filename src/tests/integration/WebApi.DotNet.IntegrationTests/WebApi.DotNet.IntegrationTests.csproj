@@ -26,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\ai\Evaluation\DotNet\Evaluation.DotNet.csproj" />
     <ProjectReference Include="..\..\..\ai\Embedding.DotNet\Embedding.DotNet.csproj" />
     <ProjectReference Include="..\..\..\ai\RAG\DotNet\RAG.DotNet.csproj" />
     <ProjectReference Include="..\..\..\ai\SemanticSearch\DotNet\SemanticSearch.DotNet.csproj" />

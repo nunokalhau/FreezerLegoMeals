@@ -21,6 +21,7 @@ The API will be available at `http://localhost:5001`
 - ASP.NET Core web API framework
 - Swagger documentation
 - Health check endpoint
+- Production AI evaluation framework (DI-integrated) for deterministic and real pipeline validation
 
 ## Testing
 
