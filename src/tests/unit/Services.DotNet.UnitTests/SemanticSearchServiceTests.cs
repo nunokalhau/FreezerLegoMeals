@@ -140,6 +140,93 @@ public class SemanticSearchServiceTests
     }
 
     [Fact]
+    public void ChromaVectorStore_WithMissingCollectionName_ThrowsInvalidOperationException()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK))));
+
+        Assert.Throws<InvalidOperationException>(() => new ChromaVectorStore(
+            httpClient,
+            Options.Create(new ChromaVectorStoreOptions { CollectionName = " " })));
+    }
+
+    [Fact]
+    public async Task ChromaVectorStore_WhenCollectionCreateDoesNotReturnId_ThrowsInvalidOperationException()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "name": "recipe_embeddings"
+                }
+                """));
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.SearchAsync([1, 0], 1));
+    }
+
+    [Fact]
+    public async Task ChromaVectorStore_WhenEmbeddingsMissing_UsesDistanceFallbackForScore()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "id": "collection-1",
+                  "name": "recipe_embeddings",
+                  "configuration_json": {},
+                  "tenant": "default_tenant",
+                  "database": "default_database",
+                  "log_position": 0,
+                  "version": 1
+                }
+                """));
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/query", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "ids": [["2", "1"]],
+                  "embeddings": null,
+                  "distances": [[0.6, 0.1]],
+                  "include": ["distances"]
+                }
+                """));
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        var matches = await store.SearchAsync([1, 0], 2);
+
+        Assert.Equal(new[] { "1", "2" }, matches.Select(match => match.RecipeId).ToArray());
+        Assert.Equal(0.9, matches[0].Score, 5);
+        Assert.Equal(0.4, matches[1].Score, 5);
+    }
+
+    [Fact]
     public async Task SemanticSearchService_ReturnsRichRankedResults()
     {
         var service = new SemanticSearchService(

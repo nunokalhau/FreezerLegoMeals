@@ -11,6 +11,19 @@ namespace WebApi.DotNet.UnitTests;
 public class SemanticSearchControllerTests
 {
     [Fact]
+    public async Task Search_WithNullRequestReturnsBadRequest()
+    {
+        var controller = new SemanticSearchController(new SemanticSearchService(
+            new StubEmbeddingService(),
+            new StubVectorStore(),
+            new StubMetadataProvider()));
+
+        var result = await controller.Search(null!, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
     public async Task Search_WithValidRequestReturnsResults()
     {
         var controller = new SemanticSearchController(new SemanticSearchService(

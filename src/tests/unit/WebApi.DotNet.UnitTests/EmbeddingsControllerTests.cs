@@ -10,6 +10,16 @@ namespace WebApi.DotNet.UnitTests;
 public class EmbeddingsControllerTests
 {
     [Fact]
+    public async Task GenerateEmbedding_WithNullRequestReturnsBadRequest()
+    {
+        var controller = new EmbeddingsController(Mock.Of<IEmbeddingService>());
+
+        var result = await controller.GenerateEmbedding(null!, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
     public async Task GenerateEmbedding_WithValidRequestReturnsEmbeddingPayload()
     {
         var service = new Mock<IEmbeddingService>();

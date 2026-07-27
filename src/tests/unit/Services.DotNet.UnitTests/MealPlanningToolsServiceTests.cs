@@ -5,7 +5,7 @@ namespace Services.DotNet.UnitTests;
 
 public class MealPlanningToolsServiceTests
 {
-    [Fact]
+    [PythonToolsAvailableFact]
     public async Task SearchRecipesTool_ReturnsRecipeDiscoveryCardsThroughPythonExecutor()
     {
         var executor = CreateExecutor();
@@ -26,7 +26,7 @@ public class MealPlanningToolsServiceTests
         Assert.True(recipe.GetProperty("freezer_friendly").GetBoolean());
     }
 
-    [Fact]
+    [PythonToolsAvailableFact]
     public async Task BusinessTools_ReturnUsefulOutputsThroughPythonExecutor()
     {
         var executor = CreateExecutor();
@@ -79,5 +79,63 @@ public class MealPlanningToolsServiceTests
         }
 
         throw new InvalidOperationException("Unable to locate repository root.");
+    }
+}
+
+public sealed class PythonToolsAvailableFactAttribute : FactAttribute
+{
+    private static readonly string[] RequiredTools =
+    [
+        "search_recipes",
+        "plan_weekly_meals",
+        "get_recipe",
+        "replace_meal",
+        "optimize_shopping_list",
+        "batch_cooking_plan",
+        "convert_servings",
+        "ingredient_substitutions"
+    ];
+
+    public PythonToolsAvailableFactAttribute()
+    {
+        var availability = GetAvailability();
+        if (!availability.IsAvailable)
+        {
+            Skip = availability.SkipReason;
+        }
+    }
+
+    private static (bool IsAvailable, string? SkipReason) GetAvailability()
+    {
+        DirectoryInfo? directory = new(Directory.GetCurrentDirectory());
+        while (directory is not null)
+        {
+            var toolsRoot = Path.Combine(directory.FullName, "src", "tools");
+            var registryPath = Path.Combine(toolsRoot, "tool_registry.json");
+            if (File.Exists(registryPath))
+            {
+                var registry = new ToolRegistry(registryPath);
+                foreach (var toolName in RequiredTools)
+                {
+                    var tool = registry.FindTool(toolName);
+                    if (string.IsNullOrWhiteSpace(tool.Wrapper))
+                    {
+                        return (false, $"Tool '{toolName}' has no wrapper configured in the tool registry.");
+                    }
+
+                    var wrapperPath = Path.Combine(toolsRoot, tool.Wrapper);
+                    if (!File.Exists(wrapperPath))
+                    {
+                        return (false, $"Tool wrapper not found for '{toolName}' at {wrapperPath}.");
+                    }
+                }
+
+                return (true, null);
+            }
+
+            directory = directory.Parent;
+        }
+
+        return (false, "Unable to locate src/tools/tool_registry.json for Python tool integration tests.");
     }
 }

@@ -92,3 +92,20 @@ async def post_assistant_chat(app, conversation_id: str | None = None):
             "/api/assistant/chat",
             json={"message": "Reply with the single word: OK", "conversationId": conversation_id},
         )
+
+
+def test_assistant_chat_with_blank_message_returns_bad_request():
+    app_module = load_app_module()
+
+    response = asyncio.run(post_assistant_chat_with_message(app_module.app, " "))
+
+    assert response.status_code == 400
+
+
+async def post_assistant_chat_with_message(app, message: str, conversation_id: str | None = None):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        return await client.post(
+            "/api/assistant/chat",
+            json={"message": message, "conversationId": conversation_id},
+        )

@@ -128,6 +128,29 @@ public class AssistantControllerIntegrationTests
         Assert.Contains("1: Spicy Chicken", payload.Response);
     }
 
+    [Fact]
+    public async Task Chat_WithBlankMessage_ReturnsBadRequest()
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase($"AssistantValidationIntegrationTestDatabase-{Guid.NewGuid():N}"));
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = " "
+        });
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [RedisAvailableFact]
     public async Task Chat_WithFollowUpAcrossFactories_PersistsConversationThroughRedisMemoryProvider()
     {
@@ -190,6 +213,148 @@ public class AssistantControllerIntegrationTests
         }
     }
 
+    [RedisAvailableFact]
+    public async Task Chat_WithRedisConversation_CreatesRetrievesAndUpdatesThroughApi()
+    {
+        string? conversationId = null;
+
+        try
+        {
+            using var factory = CreateRedisAssistantFactory();
+            using var scope = factory.Services.CreateScope();
+            Assert.IsType<RedisMemoryProvider>(scope.ServiceProvider.GetRequiredService<IConversationStore>());
+
+            using var client = factory.CreateClient();
+
+            var firstResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+            {
+                Message = "first message"
+            });
+            firstResponse.EnsureSuccessStatusCode();
+
+            var firstPayload = await firstResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            Assert.NotNull(firstPayload);
+            conversationId = firstPayload.ConversationId;
+            Assert.False(string.IsNullOrWhiteSpace(conversationId));
+            Assert.Equal("history:1", firstPayload.Response);
+
+            var secondResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+            {
+                ConversationId = conversationId,
+                Message = "second message"
+            });
+            secondResponse.EnsureSuccessStatusCode();
+
+            var secondPayload = await secondResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            Assert.NotNull(secondPayload);
+            Assert.Equal(conversationId, secondPayload.ConversationId);
+            Assert.Equal("history:3", secondPayload.Response);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(conversationId))
+            {
+                await DeleteConversationAsync(conversationId);
+            }
+        }
+    }
+
+    [RedisAvailableFact]
+    public async Task Chat_WithRedisConversation_ExpiresByConfiguredTimeout()
+    {
+        string? conversationId = null;
+
+        try
+        {
+            using var factory = CreateRedisAssistantFactory(expirationTimeout: TimeSpan.FromSeconds(1));
+            using var client = factory.CreateClient();
+
+            var firstResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+            {
+                Message = "first message"
+            });
+            firstResponse.EnsureSuccessStatusCode();
+
+            var firstPayload = await firstResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            Assert.NotNull(firstPayload);
+            conversationId = firstPayload.ConversationId;
+
+            await Task.Delay(TimeSpan.FromSeconds(2));
+
+            var secondResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+            {
+                ConversationId = conversationId,
+                Message = "after expiration"
+            });
+            secondResponse.EnsureSuccessStatusCode();
+
+            var secondPayload = await secondResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            Assert.NotNull(secondPayload);
+            Assert.Equal(conversationId, secondPayload.ConversationId);
+            Assert.Equal("history:1", secondPayload.Response);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(conversationId))
+            {
+                await DeleteConversationAsync(conversationId);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Chat_WithInvalidRedisConnection_FallsBackAndStillHandlesConversation()
+    {
+        using var factory = CreateRedisAssistantFactory(redisConnectionString: "localhost:6399,abortConnect=false,connectTimeout=500,syncTimeout=500");
+        using var client = factory.CreateClient();
+
+        var firstResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "first message"
+        });
+        firstResponse.EnsureSuccessStatusCode();
+
+        var firstPayload = await firstResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(firstPayload);
+        Assert.Equal("history:1", firstPayload.Response);
+
+        var secondResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            ConversationId = firstPayload.ConversationId,
+            Message = "second message"
+        });
+        secondResponse.EnsureSuccessStatusCode();
+
+        var secondPayload = await secondResponse.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(secondPayload);
+        Assert.Equal(firstPayload.ConversationId, secondPayload.ConversationId);
+        Assert.Equal("history:3", secondPayload.Response);
+    }
+
     internal static async Task<OllamaAvailability> GetOllamaAvailabilityAsync()
     {
         using var httpClient = new HttpClient
@@ -246,7 +411,9 @@ public class AssistantControllerIntegrationTests
         public static RedisAvailability Unavailable(string skipReason) => new(false, skipReason);
     }
 
-    private static WebApplicationFactory<Program> CreateRedisAssistantFactory()
+    private static WebApplicationFactory<Program> CreateRedisAssistantFactory(
+        string? redisConnectionString = null,
+        TimeSpan? expirationTimeout = null)
     {
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -254,7 +421,8 @@ public class AssistantControllerIntegrationTests
             {
                 configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["ConversationStore:RedisConnectionString"] = RedisConnectionString
+                    ["ConversationStore:RedisConnectionString"] = redisConnectionString ?? RedisConnectionString,
+                    ["ConversationStore:ExpirationTimeout"] = (expirationTimeout ?? TimeSpan.FromHours(1)).ToString("c")
                 });
             });
 
