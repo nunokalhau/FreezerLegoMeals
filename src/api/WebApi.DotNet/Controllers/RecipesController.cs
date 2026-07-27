@@ -35,10 +35,11 @@ public class RecipesController : ControllerBase
         if (request == null)
             return BadRequest("Request body is required");
 
-        if (!request.Ingredients?.Any() ?? true)
+        var ingredients = request.Ingredients;
+        if (ingredients is null || !ingredients.Any())
             return BadRequest("At least one ingredient is required");
 
-        var recipes = await _mealService.SearchRecipesByIngredientsAsync(request.Ingredients);
+        var recipes = await _mealService.SearchRecipesByIngredientsAsync(ingredients);
         
         var response = new SearchRecipesResponse
         {

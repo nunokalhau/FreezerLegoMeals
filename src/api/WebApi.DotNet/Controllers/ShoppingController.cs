@@ -83,11 +83,12 @@ public class ShoppingController : ControllerBase
         if (request == null)
             return BadRequest("Request body is required");
 
-        if (!request.RecipeIdentifiers?.Any() ?? true)
+        var recipeIdentifiers = request.RecipeIdentifiers;
+        if (recipeIdentifiers is null || !recipeIdentifiers.Any())
             return BadRequest("At least one recipe identifier is required");
 
         var result = await _shoppingService.GenerateShoppingListAsync(
-            request.RecipeIdentifiers, 
+            recipeIdentifiers,
             request.ScaleFactor, 
             request.GroupByCategory);
         

@@ -23,6 +23,8 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 
 builder.Services.AddScoped<IAssistantService, AssistantService>();
 builder.Services.AddSingleton<IRoutingPolicy, DefaultRoutingPolicy>();
+builder.Services.Configure<ExternalDependencyResilienceOptions>(builder.Configuration.GetSection("Resilience"));
+builder.Services.AddSingleton<IExternalDependencyResiliencePolicyProvider, PollyExternalDependencyResiliencePolicyProvider>();
 builder.Services.AddScoped<IAgent, MealPlanningAgent>();
 builder.Services.AddScoped<IAssistantOrchestrator, AssistantOrchestrator>();
 builder.Services.AddSingleton<RedisMemoryProvider>();
@@ -33,7 +35,8 @@ builder.Services.AddSingleton<IToolRegistry>(_ => new ToolRegistry(
 builder.Services.AddScoped<IToolExecutor>(serviceProvider => new PythonToolExecutor(
     serviceProvider.GetRequiredService<IToolRegistry>(),
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools")),
-    logger: serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PythonToolExecutor>>()));
+    logger: serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PythonToolExecutor>>(),
+    resiliencePolicyProvider: serviceProvider.GetRequiredService<IExternalDependencyResiliencePolicyProvider>()));
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
@@ -51,6 +54,10 @@ builder.Services.AddHttpClient(ChromaVectorStore.HttpClientName, (serviceProvide
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ChromaVectorStoreOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
     client.Timeout = options.Timeout;
+}).AddPolicyHandler((serviceProvider, _) =>
+{
+    var resilienceProvider = serviceProvider.GetRequiredService<IExternalDependencyResiliencePolicyProvider>();
+    return resilienceProvider.GetHttpPolicy(ExternalDependency.ChromaDb);
 });
 builder.Services.AddSingleton<IVectorStore>(serviceProvider => new ChromaVectorStore(
     serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(ChromaVectorStore.HttpClientName),
@@ -61,12 +68,20 @@ builder.Services.AddHttpClient<IOllamaClient, OllamaClient>((serviceProvider, cl
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OllamaOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
     client.Timeout = options.Timeout;
+}).AddPolicyHandler((serviceProvider, _) =>
+{
+    var resilienceProvider = serviceProvider.GetRequiredService<IExternalDependencyResiliencePolicyProvider>();
+    return resilienceProvider.GetHttpPolicy(ExternalDependency.Ollama);
 });
 builder.Services.AddHttpClient<IEmbeddingService, OllamaEmbeddingService>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<EmbeddingOptions>>().Value;
     client.BaseAddress = new Uri(options.OllamaBaseUrl);
     client.Timeout = options.Timeout;
+}).AddPolicyHandler((serviceProvider, _) =>
+{
+    var resilienceProvider = serviceProvider.GetRequiredService<IExternalDependencyResiliencePolicyProvider>();
+    return resilienceProvider.GetHttpPolicy(ExternalDependency.Ollama);
 });
 
 builder.Services.AddDbContext<FreezerLegoMealsContext>(options =>

@@ -14,13 +14,20 @@ public sealed class PythonToolExecutor : IToolExecutor
     private readonly IToolRegistry _toolRegistry;
     private readonly string _toolsRoot;
     private readonly string _pythonExecutable;
+    private readonly IExternalDependencyResiliencePolicyProvider _resiliencePolicyProvider;
     private readonly ILogger<PythonToolExecutor> _logger;
 
-    public PythonToolExecutor(IToolRegistry toolRegistry, string toolsRoot, string pythonExecutable = "python", ILogger<PythonToolExecutor>? logger = null)
+    public PythonToolExecutor(
+        IToolRegistry toolRegistry,
+        string toolsRoot,
+        string pythonExecutable = "python",
+        ILogger<PythonToolExecutor>? logger = null,
+        IExternalDependencyResiliencePolicyProvider? resiliencePolicyProvider = null)
     {
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _toolsRoot = string.IsNullOrWhiteSpace(toolsRoot) ? throw new ArgumentException("Tools root is required", nameof(toolsRoot)) : toolsRoot;
         _pythonExecutable = string.IsNullOrWhiteSpace(pythonExecutable) ? "python" : pythonExecutable;
+        _resiliencePolicyProvider = resiliencePolicyProvider ?? NoOpExternalDependencyResiliencePolicyProvider.Instance;
         _logger = logger ?? NullLogger<PythonToolExecutor>.Instance;
     }
 
@@ -68,6 +75,42 @@ public sealed class PythonToolExecutor : IToolExecutor
             tool.Name,
             wrapper,
             parameters?.Count ?? 0);
+
+        try
+        {
+            return await _resiliencePolicyProvider.ExecuteAsync(
+                ExternalDependency.PythonToolExecution,
+                token => ExecuteToolProcessAsync(tool, wrapper, payload, startedAt, activity, token),
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            startedAt.Stop();
+            _logger.LogWarning(
+                exception,
+                "Tool execution resilience failure tool={ToolName} latencyMs={LatencyMs}",
+                tool.Name,
+                startedAt.Elapsed.TotalMilliseconds);
+            activity?.SetTag("tool.success", false);
+            activity?.SetTag("tool.failure_stage", "resilience-policy");
+            activity?.SetTag("tool.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+            return new ToolExecutionResult
+            {
+                Success = false,
+                Tool = tool.Name,
+                Error = exception.Message
+            };
+        }
+    }
+
+    private async Task<ToolExecutionResult> ExecuteToolProcessAsync(
+        ToolDefinition tool,
+        string wrapper,
+        string payload,
+        Stopwatch startedAt,
+        Activity? activity,
+        CancellationToken cancellationToken)
+    {
 
         var startInfo = new ProcessStartInfo
         {

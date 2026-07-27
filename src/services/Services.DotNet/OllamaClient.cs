@@ -6,6 +6,8 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace Services.DotNet;
 
@@ -44,33 +46,51 @@ public class OllamaClient : IOllamaClient
 
         var startedAt = Stopwatch.StartNew();
 
-        using var response = await SendChatAsync(selectedModel, messages, tools, cancellationToken);
-        activity?.SetTag("llm.http_status_code", (int)response.StatusCode);
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            using var response = await SendChatAsync(selectedModel, messages, tools, cancellationToken);
+            activity?.SetTag("llm.http_status_code", (int)response.StatusCode);
+            response.EnsureSuccessStatusCode();
 
-        var chatResponse = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
-        var toolCalls = chatResponse?.Message?.ToolCalls?
-            .Where(toolCall => !string.IsNullOrWhiteSpace(toolCall.Function?.Name))
-            .Select(toolCall => AssistantToolCall.FromJsonArguments(toolCall.Function!.Name, toolCall.Function.Arguments))
-            .ToList() ?? [];
+            var chatResponse = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
+            var toolCalls = chatResponse?.Message?.ToolCalls?
+                .Where(toolCall => !string.IsNullOrWhiteSpace(toolCall.Function?.Name))
+                .Select(toolCall => AssistantToolCall.FromJsonArguments(toolCall.Function!.Name, toolCall.Function.Arguments))
+                .ToList() ?? [];
 
-        startedAt.Stop();
-        var contentLength = chatResponse?.Message?.Content?.Length ?? 0;
-        _logger.LogInformation(
-            "LLM chat completed provider={Provider} model={Model} messageCount={MessageCount} toolCount={ToolCount} toolCallCount={ToolCallCount} contentLength={ContentLength} statusCode={StatusCode} latencyMs={LatencyMs}",
-            "ollama",
-            selectedModel,
-            messages.Count,
-            tools.Count,
-            toolCalls.Count,
-            contentLength,
-            (int)response.StatusCode,
-            startedAt.Elapsed.TotalMilliseconds);
-        activity?.SetTag("llm.tool_call_count", toolCalls.Count);
-        activity?.SetTag("llm.content_length", contentLength);
-        activity?.SetTag("llm.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+            startedAt.Stop();
+            var contentLength = chatResponse?.Message?.Content?.Length ?? 0;
+            _logger.LogInformation(
+                "LLM chat completed provider={Provider} model={Model} messageCount={MessageCount} toolCount={ToolCount} toolCallCount={ToolCallCount} contentLength={ContentLength} statusCode={StatusCode} latencyMs={LatencyMs}",
+                "ollama",
+                selectedModel,
+                messages.Count,
+                tools.Count,
+                toolCalls.Count,
+                contentLength,
+                (int)response.StatusCode,
+                startedAt.Elapsed.TotalMilliseconds);
+            activity?.SetTag("llm.tool_call_count", toolCalls.Count);
+            activity?.SetTag("llm.content_length", contentLength);
+            activity?.SetTag("llm.latency_ms", startedAt.Elapsed.TotalMilliseconds);
 
-        return new OllamaChatResult(chatResponse?.Message?.Content ?? string.Empty, toolCalls);
+            return new OllamaChatResult(chatResponse?.Message?.Content ?? string.Empty, toolCalls);
+        }
+        catch (Exception exception) when (exception is BrokenCircuitException || exception is TimeoutRejectedException || exception is HttpRequestException || exception is TaskCanceledException)
+        {
+            startedAt.Stop();
+            _logger.LogWarning(
+                exception,
+                "LLM dependency failure provider={Provider} model={Model} messageCount={MessageCount} toolCount={ToolCount} latencyMs={LatencyMs}",
+                "ollama",
+                selectedModel,
+                messages.Count,
+                tools.Count,
+                startedAt.Elapsed.TotalMilliseconds);
+            activity?.SetTag("llm.failure", exception.GetType().Name);
+            activity?.SetTag("llm.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+            throw;
+        }
     }
 
     private async Task<HttpResponseMessage> SendChatAsync(

@@ -58,83 +58,100 @@ public sealed class ChromaVectorStore : IVectorStore
             return [];
         }
 
-        var collectionId = await EnsureCollectionIdAsync(cancellationToken);
-        var payload = new QueryRequestPayload([queryEmbedding], topK, ["embeddings", "distances"]);
-        using var response = await _httpClient.PostAsJsonAsync(
-            BuildCollectionQueryPath(collectionId),
-            payload,
-            JsonOptions,
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var queryResponse = await response.Content.ReadFromJsonAsync<QueryResponse>(JsonOptions, cancellationToken);
-        if (queryResponse?.Ids is null || queryResponse.Ids.Count == 0)
+        try
         {
-            startedAt.Stop();
-            LogQueryDiagnostics(collectionId, topK, 0, 0, 0, startedAt.Elapsed.TotalMilliseconds, "no-ids-array");
-            activity?.SetTag("vector_store.result_count", 0);
-            activity?.SetTag("vector_store.decision_reason", "no-ids-array");
-            activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
-            return [];
-        }
+            var collectionId = await EnsureCollectionIdAsync(cancellationToken);
+            var payload = new QueryRequestPayload([queryEmbedding], topK, ["embeddings", "distances"]);
+            using var response = await _httpClient.PostAsJsonAsync(
+                BuildCollectionQueryPath(collectionId),
+                payload,
+                JsonOptions,
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
 
-        var ids = queryResponse.Ids[0];
-        if (ids.Count == 0)
-        {
-            startedAt.Stop();
-            LogQueryDiagnostics(collectionId, topK, 0, 0, 0, startedAt.Elapsed.TotalMilliseconds, "empty-id-list");
-            activity?.SetTag("vector_store.result_count", 0);
-            activity?.SetTag("vector_store.decision_reason", "empty-id-list");
-            activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
-            return [];
-        }
-
-        var embeddings = queryResponse.Embeddings is { Count: > 0 } ? queryResponse.Embeddings[0] : null;
-        var distances = queryResponse.Distances is { Count: > 0 } ? queryResponse.Distances[0] : null;
-        var usedEmbeddingScoreCount = 0;
-        var usedDistanceFallbackCount = 0;
-
-        var matches = new List<VectorMatch>(ids.Count);
-        for (var index = 0; index < ids.Count; index++)
-        {
-            var score = 0d;
-
-            // Preserve previous LocalVectorStore behavior by using cosine similarity when vectors are available.
-            if (embeddings is not null && index < embeddings.Count && embeddings[index] is { Count: > 0 } embedding)
+            var queryResponse = await response.Content.ReadFromJsonAsync<QueryResponse>(JsonOptions, cancellationToken);
+            if (queryResponse?.Ids is null || queryResponse.Ids.Count == 0)
             {
-                score = CosineSimilarity.Calculate(queryEmbedding, embedding);
-                usedEmbeddingScoreCount++;
-            }
-            else if (distances is not null && index < distances.Count && distances[index] is double distance)
-            {
-                score = 1 - distance;
-                usedDistanceFallbackCount++;
+                startedAt.Stop();
+                LogQueryDiagnostics(collectionId, topK, 0, 0, 0, startedAt.Elapsed.TotalMilliseconds, "no-ids-array");
+                activity?.SetTag("vector_store.result_count", 0);
+                activity?.SetTag("vector_store.decision_reason", "no-ids-array");
+                activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+                return [];
             }
 
-            matches.Add(new VectorMatch(ids[index], score));
+            var ids = queryResponse.Ids[0];
+            if (ids.Count == 0)
+            {
+                startedAt.Stop();
+                LogQueryDiagnostics(collectionId, topK, 0, 0, 0, startedAt.Elapsed.TotalMilliseconds, "empty-id-list");
+                activity?.SetTag("vector_store.result_count", 0);
+                activity?.SetTag("vector_store.decision_reason", "empty-id-list");
+                activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+                return [];
+            }
+
+            var embeddings = queryResponse.Embeddings is { Count: > 0 } ? queryResponse.Embeddings[0] : null;
+            var distances = queryResponse.Distances is { Count: > 0 } ? queryResponse.Distances[0] : null;
+            var usedEmbeddingScoreCount = 0;
+            var usedDistanceFallbackCount = 0;
+
+            var matches = new List<VectorMatch>(ids.Count);
+            for (var index = 0; index < ids.Count; index++)
+            {
+                var score = 0d;
+
+                // Preserve previous LocalVectorStore behavior by using cosine similarity when vectors are available.
+                if (embeddings is not null && index < embeddings.Count && embeddings[index] is { Count: > 0 } embedding)
+                {
+                    score = CosineSimilarity.Calculate(queryEmbedding, embedding);
+                    usedEmbeddingScoreCount++;
+                }
+                else if (distances is not null && index < distances.Count && distances[index] is double distance)
+                {
+                    score = 1 - distance;
+                    usedDistanceFallbackCount++;
+                }
+
+                matches.Add(new VectorMatch(ids[index], score));
+            }
+
+            var ranked = matches
+                .OrderByDescending(match => match.Score)
+                .Take(topK)
+                .ToList();
+
+            startedAt.Stop();
+            LogQueryDiagnostics(
+                collectionId,
+                topK,
+                ids.Count,
+                usedEmbeddingScoreCount,
+                usedDistanceFallbackCount,
+                startedAt.Elapsed.TotalMilliseconds,
+                "ranked");
+            activity?.SetTag("vector_store.raw_match_count", ids.Count);
+            activity?.SetTag("vector_store.result_count", ranked.Count);
+            activity?.SetTag("vector_store.embedding_score_count", usedEmbeddingScoreCount);
+            activity?.SetTag("vector_store.distance_fallback_count", usedDistanceFallbackCount);
+            activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+
+            return ranked;
         }
-
-        var ranked = matches
-            .OrderByDescending(match => match.Score)
-            .Take(topK)
-            .ToList();
-
-        startedAt.Stop();
-        LogQueryDiagnostics(
-            collectionId,
-            topK,
-            ids.Count,
-            usedEmbeddingScoreCount,
-            usedDistanceFallbackCount,
-            startedAt.Elapsed.TotalMilliseconds,
-            "ranked");
-        activity?.SetTag("vector_store.raw_match_count", ids.Count);
-        activity?.SetTag("vector_store.result_count", ranked.Count);
-        activity?.SetTag("vector_store.embedding_score_count", usedEmbeddingScoreCount);
-        activity?.SetTag("vector_store.distance_fallback_count", usedDistanceFallbackCount);
-        activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
-
-        return ranked;
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            startedAt.Stop();
+            _logger.LogWarning(
+                exception,
+                "Vector store dependency failure backend={Backend} collection={CollectionName} topK={TopK} latencyMs={LatencyMs}",
+                "chroma",
+                _options.CollectionName,
+                topK,
+                startedAt.Elapsed.TotalMilliseconds);
+            activity?.SetTag("vector_store.failure", exception.GetType().Name);
+            activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+            throw;
+        }
     }
 
     private async Task<string> EnsureCollectionIdAsync(CancellationToken cancellationToken)

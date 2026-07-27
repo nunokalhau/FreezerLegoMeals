@@ -20,23 +20,33 @@ public sealed class RedisMemoryProvider : IMemoryProvider, IConversationStore, I
     private readonly ConversationStoreOptions _options;
     private readonly IDatabase? _database;
     private readonly InMemoryMemoryProvider _fallbackProvider;
+    private readonly IExternalDependencyResiliencePolicyProvider _resiliencePolicyProvider;
     private readonly ILogger<RedisMemoryProvider> _logger;
     private const string ConversationPrefix = "conversation:";
 
-    public RedisMemoryProvider(IOptions<ConversationStoreOptions> options, ILogger<RedisMemoryProvider>? logger = null)
+    public RedisMemoryProvider(
+        IOptions<ConversationStoreOptions> options,
+        ILogger<RedisMemoryProvider>? logger = null,
+        IExternalDependencyResiliencePolicyProvider? resiliencePolicyProvider = null)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? NullLogger<RedisMemoryProvider>.Instance;
+        _resiliencePolicyProvider = resiliencePolicyProvider ?? NoOpExternalDependencyResiliencePolicyProvider.Instance;
         _fallbackProvider = new InMemoryMemoryProvider(options);
         
         try
         {
             // Attempt to connect to Redis
-            _redisConnection = ConnectionMultiplexer.Connect(_options.RedisConnectionString);
-            _database = _redisConnection.GetDatabase();
-            
-            // Test the connection by executing a simple command
-            _database.Ping();
+            _redisConnection = _resiliencePolicyProvider.Execute(
+                ExternalDependency.Redis,
+                () => ConnectionMultiplexer.Connect(_options.RedisConnectionString));
+            _database = _resiliencePolicyProvider.Execute(ExternalDependency.Redis, () =>
+            {
+                var database = _redisConnection.GetDatabase();
+                // Test the connection by executing a simple command
+                database.Ping();
+                return database;
+            });
             _logger.LogInformation("Redis memory provider connected successfully.");
         }
         catch (Exception exception)
@@ -69,7 +79,7 @@ public sealed class RedisMemoryProvider : IMemoryProvider, IConversationStore, I
 
             // Try to get existing conversation from Redis
             var redisKey = $"{ConversationPrefix}{resolvedConversationId}";
-            var json = database.StringGet(redisKey);
+            var json = _resiliencePolicyProvider.Execute(ExternalDependency.Redis, () => database.StringGet(redisKey));
             
             if (json.HasValue)
             {
@@ -122,7 +132,7 @@ public sealed class RedisMemoryProvider : IMemoryProvider, IConversationStore, I
 
             var redisKey = $"{ConversationPrefix}{conversationId}";
             
-            var json = database.StringGet(redisKey);
+            var json = _resiliencePolicyProvider.Execute(ExternalDependency.Redis, () => database.StringGet(redisKey));
             ConversationHistory history;
             
             if (json.HasValue)
@@ -173,7 +183,7 @@ public sealed class RedisMemoryProvider : IMemoryProvider, IConversationStore, I
             var redisKey = $"{ConversationPrefix}{history.ConversationId}";
             var json = JsonSerializer.Serialize(history, SerializerOptions);
             
-            database.StringSet(redisKey, json);
+            _resiliencePolicyProvider.Execute(ExternalDependency.Redis, () => database.StringSet(redisKey, json));
             UpdateRedisExpiry(redisKey);
         }
         catch (Exception)
@@ -194,7 +204,7 @@ public sealed class RedisMemoryProvider : IMemoryProvider, IConversationStore, I
         {
             if (_options.ExpirationTimeout > TimeSpan.Zero)
             {
-                database.KeyExpire(redisKey, _options.ExpirationTimeout);
+                _resiliencePolicyProvider.Execute(ExternalDependency.Redis, () => database.KeyExpire(redisKey, _options.ExpirationTimeout));
             }
         }
         catch (Exception)
