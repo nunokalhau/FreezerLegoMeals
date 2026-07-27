@@ -24,15 +24,8 @@ export class RedisMemoryProvider {
         },
         // Set connection timeout for graceful fallback
         connectTimeout: 1000,
-      });
-
-      // Listen for Redis connection events
-      this.redis.on('connect', () => {
-        console.log('Redis client connected');
-      });
-      
-      this.redis.on('error', (err) => {
-        console.error('Redis client error:', err);
+        // Avoid background connection attempts until a command is issued.
+        lazyConnect: true,
       });
 
       // Set in-memory fallback when Redis is not accessible
