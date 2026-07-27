@@ -7,11 +7,16 @@ public sealed class AssistantOrchestrator : IAssistantOrchestrator
 {
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly IReadOnlyList<IAgent> _agents;
+    private readonly IRoutingPolicy _routingPolicy;
     private readonly ILogger<AssistantOrchestrator> _logger;
 
-    public AssistantOrchestrator(IEnumerable<IAgent> agents, ILogger<AssistantOrchestrator> logger)
+    public AssistantOrchestrator(
+        IEnumerable<IAgent> agents,
+        IRoutingPolicy routingPolicy,
+        ILogger<AssistantOrchestrator> logger)
     {
         _agents = agents?.ToList() ?? throw new ArgumentNullException(nameof(agents));
+        _routingPolicy = routingPolicy ?? throw new ArgumentNullException(nameof(routingPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -21,7 +26,31 @@ public sealed class AssistantOrchestrator : IAssistantOrchestrator
         activity?.SetTag("orchestration.correlation_id", context.CorrelationId);
         activity?.SetTag("orchestration.agent_count", _agents.Count);
         _logger.LogInformation("AssistantOrchestrator started for correlation {CorrelationId}", context.CorrelationId);
-        var agent = _agents.FirstOrDefault(candidate => candidate.CanHandle(context));
+
+        var registeredAgentNames = _agents.Select(agent => agent.Name).ToList();
+        var delegatedAgentName = _routingPolicy.DetermineDelegatedAgent(context, registeredAgentNames);
+        IAgent? agent = null;
+        if (!string.IsNullOrWhiteSpace(delegatedAgentName))
+        {
+            agent = _agents.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, delegatedAgentName, StringComparison.OrdinalIgnoreCase) && candidate.CanHandle(context));
+            if (agent is not null)
+            {
+                _logger.LogInformation(
+                    "Routing policy delegated correlation {CorrelationId} to agent {AgentName}",
+                    context.CorrelationId,
+                    agent.Name);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Routing policy requested agent {RequestedAgentName} but it was not available/eligible; falling back to default selection for correlation {CorrelationId}",
+                    delegatedAgentName,
+                    context.CorrelationId);
+            }
+        }
+
+        agent ??= _agents.FirstOrDefault(candidate => candidate.CanHandle(context));
         if (agent is null)
         {
             _logger.LogWarning("No orchestration agent could handle correlation {CorrelationId}", context.CorrelationId);

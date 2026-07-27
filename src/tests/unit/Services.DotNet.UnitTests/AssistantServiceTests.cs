@@ -254,10 +254,11 @@ public class AssistantServiceTests
         var agent = new MealPlanningAgent(
             ollamaClient,
             toolExecutor,
+            new DefaultRoutingPolicy(),
             NullLogger<MealPlanningAgent>.Instance,
             retrievalService,
             promptBuilder);
-        var orchestrator = new AssistantOrchestrator([agent], NullLogger<AssistantOrchestrator>.Instance);
+        var orchestrator = new AssistantOrchestrator([agent], new DefaultRoutingPolicy(), NullLogger<AssistantOrchestrator>.Instance);
         return new AssistantService(
             conversationStore,
             orchestrator,

@@ -22,6 +22,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 
 builder.Services.AddScoped<IAssistantService, AssistantService>();
+builder.Services.AddSingleton<IRoutingPolicy, DefaultRoutingPolicy>();
 builder.Services.AddScoped<IAgent, MealPlanningAgent>();
 builder.Services.AddScoped<IAssistantOrchestrator, AssistantOrchestrator>();
 builder.Services.AddSingleton<RedisMemoryProvider>();

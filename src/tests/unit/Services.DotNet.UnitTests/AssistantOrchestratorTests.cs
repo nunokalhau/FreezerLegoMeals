@@ -13,7 +13,7 @@ public class AssistantOrchestratorTests
         var context = CreateContext();
         var skippedAgent = new StubAgent("SkippedAgent", false, "skipped");
         var selectedAgent = new StubAgent("SelectedAgent", true, "selected response");
-        var orchestrator = new AssistantOrchestrator([skippedAgent, selectedAgent], NullLogger<AssistantOrchestrator>.Instance);
+        var orchestrator = new AssistantOrchestrator([skippedAgent, selectedAgent], new DefaultRoutingPolicy(), NullLogger<AssistantOrchestrator>.Instance);
 
         var result = await orchestrator.ExecuteAsync(context);
 
@@ -26,7 +26,7 @@ public class AssistantOrchestratorTests
     [Fact]
     public async Task ExecuteAsync_WhenNoAgentCanHandle_ReturnsObservableError()
     {
-        var orchestrator = new AssistantOrchestrator([new StubAgent("InactiveAgent", false, "unused")], NullLogger<AssistantOrchestrator>.Instance);
+        var orchestrator = new AssistantOrchestrator([new StubAgent("InactiveAgent", false, "unused")], new DefaultRoutingPolicy(), NullLogger<AssistantOrchestrator>.Instance);
 
         var result = await orchestrator.ExecuteAsync(CreateContext());
 
@@ -34,6 +34,40 @@ public class AssistantOrchestratorTests
         Assert.Contains("No assistant agent", result.FinalResponse);
         Assert.NotEmpty(result.Errors);
         Assert.Contains("NoAgent", result.ExecutionSteps);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenRoutingPolicyDelegates_UsesDelegatedAgent()
+    {
+        var delegatedAgent = new StubAgent("DelegatedAgent", true, "delegated response");
+        var fallbackAgent = new StubAgent("FallbackAgent", true, "fallback response");
+        var orchestrator = new AssistantOrchestrator(
+            [fallbackAgent, delegatedAgent],
+            new StubRoutingPolicy("DelegatedAgent"),
+            NullLogger<AssistantOrchestrator>.Instance);
+
+        var result = await orchestrator.ExecuteAsync(CreateContext());
+
+        Assert.Equal("delegated response", result.FinalResponse);
+        Assert.Equal("DelegatedAgent", result.SelectedAgent);
+        Assert.True(delegatedAgent.WasExecuted);
+        Assert.False(fallbackAgent.WasExecuted);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDelegatedAgentUnavailable_FallsBackToDefaultSelection()
+    {
+        var selectedAgent = new StubAgent("SelectedAgent", true, "selected response");
+        var orchestrator = new AssistantOrchestrator(
+            [selectedAgent],
+            new StubRoutingPolicy("MissingAgent"),
+            NullLogger<AssistantOrchestrator>.Instance);
+
+        var result = await orchestrator.ExecuteAsync(CreateContext());
+
+        Assert.Equal("selected response", result.FinalResponse);
+        Assert.Equal("SelectedAgent", result.SelectedAgent);
+        Assert.True(selectedAgent.WasExecuted);
     }
 
     private static OrchestratorContext CreateContext() => new(
@@ -69,5 +103,19 @@ public class AssistantOrchestratorTests
             WasExecuted = true;
             return Task.FromResult(new OrchestratorResult(_response, Name, [], [], ["Assistant", "AssistantOrchestrator", Name], TimeSpan.FromMilliseconds(1), [], context.MessagesToPersist));
         }
+    }
+
+    private sealed class StubRoutingPolicy : IRoutingPolicy
+    {
+        private readonly string? _delegatedAgent;
+
+        public StubRoutingPolicy(string? delegatedAgent)
+        {
+            _delegatedAgent = delegatedAgent;
+        }
+
+        public string? DetermineDelegatedAgent(OrchestratorContext context, IReadOnlyList<string> registeredAgents) => _delegatedAgent;
+
+        public AssistantRoute DetermineAssistantRoute(OrchestratorContext context, OllamaChatResult assistantResult, bool retrievalAvailable) => AssistantRoute.DirectAnswer;
     }
 }

@@ -12,6 +12,7 @@ public sealed class MealPlanningAgent : IAgent
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly IOllamaClient _ollamaClient;
     private readonly IToolExecutor _toolExecutor;
+    private readonly IRoutingPolicy _routingPolicy;
     private readonly ILogger<MealPlanningAgent> _logger;
     private readonly IRetrievalService? _retrievalService;
     private readonly IPromptBuilder? _promptBuilder;
@@ -19,12 +20,14 @@ public sealed class MealPlanningAgent : IAgent
     public MealPlanningAgent(
         IOllamaClient ollamaClient,
         IToolExecutor toolExecutor,
+        IRoutingPolicy routingPolicy,
         ILogger<MealPlanningAgent> logger,
         IRetrievalService? retrievalService = null,
         IPromptBuilder? promptBuilder = null)
     {
         _ollamaClient = ollamaClient ?? throw new ArgumentNullException(nameof(ollamaClient));
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
+        _routingPolicy = routingPolicy ?? throw new ArgumentNullException(nameof(routingPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _retrievalService = retrievalService;
         _promptBuilder = promptBuilder;
@@ -62,10 +65,21 @@ public sealed class MealPlanningAgent : IAgent
             steps.Add("Ollama");
             _logger.LogInformation("{AgentName} invoking Ollama for correlation {CorrelationId}", Name, context.CorrelationId);
             var assistantResult = await _ollamaClient.ChatAsync(null, messages, tools, cancellationToken);
-            if (!assistantResult.HasToolCalls)
+
+            var retrievalAvailable = _retrievalService is not null && _promptBuilder is not null;
+            var route = _routingPolicy.DetermineAssistantRoute(context, assistantResult, retrievalAvailable);
+            _logger.LogInformation(
+                "{AgentName} routing decision correlation={CorrelationId} route={Route} hasToolCalls={HasToolCalls} retrievalAvailable={RetrievalAvailable}",
+                Name,
+                context.CorrelationId,
+                route,
+                assistantResult.HasToolCalls,
+                retrievalAvailable);
+
+            if (route != AssistantRoute.InvokeTools)
             {
                 var content = assistantResult.Content;
-                if (RequiresRepositoryKnowledge(context.UserRequest) && _retrievalService is not null && _promptBuilder is not null)
+                if (route == AssistantRoute.UseRag && _retrievalService is not null && _promptBuilder is not null)
                 {
                     steps.Add("Semantic Search");
                     steps.Add("Retrieval");
@@ -163,13 +177,6 @@ public sealed class MealPlanningAgent : IAgent
 
         error = string.Empty;
         return false;
-    }
-
-    private static bool RequiresRepositoryKnowledge(string message)
-    {
-        var normalized = message.ToLowerInvariant();
-        string[] knowledgeTerms = ["recipe", "recipes", "meal", "meals", "cook", "cooking", "dinner", "lunch", "freezer", "ingredient", "ingredients", "prep", "preparation", "what can i", "what should i", "recommend"];
-        return knowledgeTerms.Any(normalized.Contains);
     }
 
     private async Task<(string Response, IReadOnlyList<RetrievedRecipeInfo> RetrievedRecipes)> AnswerWithRetrievalAsync(OrchestratorContext context, CancellationToken cancellationToken)
