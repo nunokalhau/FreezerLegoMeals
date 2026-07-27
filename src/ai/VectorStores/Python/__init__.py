@@ -1,3 +1,9 @@
-from .local_vector_store import IVectorStore, LocalVectorStore, VectorMatch, cosine_similarity
+from .chroma_vector_store import ChromaVectorStore, ChromaVectorStoreOptions, IVectorStore, VectorMatch, cosine_similarity
 
-__all__ = ["IVectorStore", "LocalVectorStore", "VectorMatch", "cosine_similarity"]
+__all__ = [
+	"ChromaVectorStore",
+	"ChromaVectorStoreOptions",
+	"IVectorStore",
+	"VectorMatch",
+	"cosine_similarity",
+]

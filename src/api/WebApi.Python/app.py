@@ -14,7 +14,7 @@ ASSISTANT_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "assistant_
 MEAL_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "meal_service.py"
 OLLAMA_CLIENT_PATH = SRC_ROOT / "services" / "Services.Python" / "ollama_client.py"
 EMBEDDING_SERVICE_PATH = SRC_ROOT / "ai" / "Embedding.Python" / "embedding_service.py"
-VECTOR_STORE_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_store.py"
+VECTOR_STORE_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "chroma_vector_store.py"
 SEMANTIC_SEARCH_PATH = SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py"
 RAG_RETRIEVAL_PATH = SRC_ROOT / "ai" / "RAG" / "Python" / "retrieval_service.py"
 RAG_PROMPT_BUILDER_PATH = SRC_ROOT / "ai" / "RAG" / "Python" / "prompt_builder.py"
@@ -26,7 +26,6 @@ SHOPPING_SERVICE_PATH = SRC_ROOT / "services" / "Services.Python" / "shopping_se
 TOOL_EXECUTOR_PATH = SRC_ROOT / "services" / "Services.Python" / "tool_executor.py"
 TOOL_REGISTRY_PATH = SRC_ROOT / "tools" / "tool_registry.json"
 REPOSITORY_PATH = SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py"
-EMBEDDINGS_DIR = SRC_ROOT.parent / "data" / "embeddings"
 
 if str(ORCHESTRATION_PYTHON_PATH) not in sys.path:
     sys.path.insert(0, str(ORCHESTRATION_PYTHON_PATH))
@@ -122,7 +121,7 @@ AssistantService = assistant_module.AssistantService
 MealService = meal_module.MealService
 OllamaClient = ollama_module.OllamaClient
 OllamaEmbeddingService = embedding_module.OllamaEmbeddingService
-LocalVectorStore = vector_store_module.LocalVectorStore
+ChromaVectorStore = vector_store_module.ChromaVectorStore
 SemanticSearchService = semantic_search_module.SemanticSearchService
 RecipeMetadataProvider = semantic_search_module.RecipeMetadataProvider
 RetrievalService = rag_retrieval_module.RetrievalService
@@ -157,7 +156,7 @@ recipe_repository = Repository()
 semantic_metadata_provider = RecipeMetadataProvider(recipe_repository)
 semantic_search_service = SemanticSearchService(
     embedding_service,
-    LocalVectorStore(EMBEDDINGS_DIR),
+    ChromaVectorStore(),
     semantic_metadata_provider,
 )
 retrieval_service = RetrievalService(semantic_search_service, semantic_metadata_provider)
@@ -359,7 +358,7 @@ def generate_embedding(request: EmbeddingRequest):
 
 @app.post("/api/semantic-search", response_model=List[SemanticSearchResponse])
 def semantic_search(request: SemanticSearchRequest):
-    """Search recipes semantically using the prebuilt local embedding index."""
+    """Search recipes semantically using the configured ChromaDB vector store."""
     if not request.query or len(request.query.strip()) == 0:
         raise HTTPException(status_code=400, detail="Query is required")
 

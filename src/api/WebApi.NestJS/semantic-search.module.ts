@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
-import { resolve } from 'path';
+import {
+  CHROMA_VECTOR_STORE_OPTIONS,
+  ChromaVectorStoreOptions,
+  createChromaVectorStoreOptions,
+} from '../../ai/VectorStores/NestJS/chroma-vector-store-options';
+import { ChromaVectorStore } from '../../ai/VectorStores/NestJS/chroma-vector-store';
 import { IEmbeddingService } from '../../ai/Embedding.NestJS/embedding.service.interface';
-import { IVectorStore, LocalVectorStore } from '../../ai/VectorStores/NestJS/local-vector-store';
+import { IVectorStore } from '../../ai/VectorStores/NestJS/vector-store';
 import { ISemanticRecipeMetadataProvider, SemanticSearchService } from '../../ai/SemanticSearch/NestJS/semantic-search.service';
 import { EmbeddingServiceModule } from './embedding-service.module';
 import { RecipeRepositoryModule } from './recipe-repository.module';
@@ -11,8 +16,13 @@ import { RepositorySemanticMetadataProvider } from './repository-semantic-metada
   imports: [EmbeddingServiceModule, RecipeRepositoryModule],
   providers: [
     {
+      provide: CHROMA_VECTOR_STORE_OPTIONS,
+      useFactory: createChromaVectorStoreOptions,
+    },
+    {
       provide: IVectorStore,
-      useFactory: () => new LocalVectorStore(resolve(process.cwd(), '..', '..', '..', 'data', 'embeddings')),
+      useFactory: (options: ChromaVectorStoreOptions) => new ChromaVectorStore(options),
+      inject: [CHROMA_VECTOR_STORE_OPTIONS],
     },
     {
       provide: ISemanticRecipeMetadataProvider,

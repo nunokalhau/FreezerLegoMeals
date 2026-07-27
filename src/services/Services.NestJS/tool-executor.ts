@@ -20,11 +20,15 @@ export interface ToolHandler {
 export class ToolExecutor {
   // TODO: Add Redis-backed execution metadata/history and reusable result caching when tool execution needs cross-instance observability.
   // TODO: Add RedisToolExecutor, MCPToolExecutor, DockerToolExecutor, and RemoteToolExecutor implementations behind this executor contract.
+  private readonly pythonExecutableArgs: string[];
+
   constructor(
     private readonly toolRegistry: ToolRegistry,
     private readonly toolsRoot: string,
-    private readonly pythonExecutable = 'python'
-  ) {}
+    private readonly pythonExecutable = process.env.PYTHON_EXECUTABLE || (process.platform === 'win32' ? 'py' : 'python')
+  ) {
+    this.pythonExecutableArgs = this.pythonExecutable.toLowerCase() === 'py' ? ['-3'] : [];
+  }
 
   getTools(): ToolDefinition[] {
     return this.toolRegistry.getTools();
@@ -58,7 +62,7 @@ export class ToolExecutor {
 
   private executeWrapper(wrapper: string, parameters: ToolParameters): Promise<unknown> {
     return new Promise((resolveOutput, reject) => {
-      const process = spawn(this.pythonExecutable, [wrapper], { cwd: this.toolsRoot, windowsHide: true });
+      const process = spawn(this.pythonExecutable, [...this.pythonExecutableArgs, wrapper], { cwd: this.toolsRoot, windowsHide: true });
       let stdout = '';
       let stderr = '';
 

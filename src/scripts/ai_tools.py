@@ -217,13 +217,13 @@ def semantic_search(parameters: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
     embedding_module = _load_module("embedding_python_service", SRC_ROOT / "ai" / "Embedding.Python" / "embedding_service.py")
-    vector_store_module = _load_module("semantic_local_vector_store", SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_store.py")
+    vector_store_module = _load_module("semantic_chroma_vector_store", SRC_ROOT / "ai" / "VectorStores" / "Python" / "chroma_vector_store.py")
     semantic_module = _load_module("semantic_search_python_service", SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py")
     repository_module = _load_module("repository_python", SRC_ROOT / "repositories" / "Repository.Python" / "__init__.py")
 
     service = semantic_module.SemanticSearchService(
         embedding_module.OllamaEmbeddingService(),
-        vector_store_module.LocalVectorStore(EMBEDDINGS_DIR),
+        vector_store_module.ChromaVectorStore(),
         semantic_module.RecipeMetadataProvider(repository_module.Repository(DB_PATH)),
     )
     return [result.__dict__ for result in service.search(query, top_k)]

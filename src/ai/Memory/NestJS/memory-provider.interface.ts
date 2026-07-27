@@ -1,4 +1,4 @@
-import { ConversationHistory, ConversationMessage } from '../../services/Services.NestJS/conversation-store';
+import { ConversationHistory, ConversationMessage } from '../../../services/Services.NestJS/conversation-store';
 
 /**
  * Interface for conversation memory providers.

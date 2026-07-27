@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { IEmbeddingService } from '../../Embedding.NestJS/embedding.service.interface';
-import { IVectorStore } from '../../VectorStores/NestJS/local-vector-store';
+import { IVectorStore } from '../../VectorStores/NestJS/vector-store';
 
 export type SemanticSearchResult = {
   recipeId: string;

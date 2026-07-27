@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ConversationStore, ConversationHistory, ConversationMessage } from '../../services/Services.NestJS/conversation-store';
+import { ConversationStore, ConversationHistory, ConversationMessage } from '../../../services/Services.NestJS/conversation-store';
 import { IMemoryProvider } from './memory-provider.interface';
 
 /**

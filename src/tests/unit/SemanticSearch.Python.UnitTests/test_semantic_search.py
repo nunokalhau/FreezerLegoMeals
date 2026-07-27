@@ -2,10 +2,13 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
+
+import pytest
 
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
-VECTOR_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "local_vector_store.py"
+VECTOR_PATH = SRC_ROOT / "ai" / "VectorStores" / "Python" / "chroma_vector_store.py"
 SEMANTIC_PATH = SRC_ROOT / "ai" / "SemanticSearch" / "Python" / "semantic_search_service.py"
 
 
@@ -19,7 +22,7 @@ def load_module(name: str, path: Path):
     return module
 
 
-vector_module = load_module("local_vector_store", VECTOR_PATH)
+vector_module = load_module("chroma_vector_store", VECTOR_PATH)
 semantic_module = load_module("semantic_search_service", SEMANTIC_PATH)
 
 
@@ -39,13 +42,30 @@ class StubRepository:
         return [{"name": "chicken"}] if recipe_id == 1 else [{"name": "rice"}]
 
 
-def write_embedding(directory: Path, recipe_id: str, embedding: list[float]):
-    (directory / f"{recipe_id}.json").write_text(json.dumps({
-        "recipeId": recipe_id,
-        "model": "test",
-        "dimensions": len(embedding),
-        "embedding": embedding,
-    }), encoding="utf-8")
+class FakeHttpResponse:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self):
+        return json.dumps(self._payload).encode("utf-8")
+
+
+def build_store(collection_name: str = "recipe_embeddings"):
+    return vector_module.ChromaVectorStore(
+        vector_module.ChromaVectorStoreOptions(
+            base_url="http://localhost:8001",
+            tenant="default_tenant",
+            database="default_database",
+            collection_name=collection_name,
+            timeout_seconds=5,
+        )
+    )
 
 
 def test_cosine_similarity():
@@ -54,29 +74,107 @@ def test_cosine_similarity():
     assert vector_module.cosine_similarity([1, 0], []) == 0
 
 
-def test_local_vector_store_ranking_top_k_and_cache(tmp_path):
-    write_embedding(tmp_path, "1", [1.0, 0.0])
-    write_embedding(tmp_path, "2", [0.0, 1.0])
-    store = vector_module.LocalVectorStore(tmp_path)
+def test_chroma_vector_store_ranking_top_k_and_collection_cache(monkeypatch):
+    create_calls = 0
+    query_calls = 0
+    query_responses = [
+        {
+            "ids": [["1"]],
+            "embeddings": [[[1.0, 0.0]]],
+            "distances": [[0.0]],
+            "include": ["embeddings", "distances"],
+        },
+        {
+            "ids": [["1", "2"]],
+            "embeddings": [[[1.0, 0.0], [0.0, 1.0]]],
+            "distances": [[0.0, 1.0]],
+            "include": ["embeddings", "distances"],
+        },
+    ]
+
+    def fake_urlopen(req, timeout):
+        nonlocal create_calls
+        nonlocal query_calls
+        assert timeout == 5
+        body = json.loads(req.data.decode("utf-8"))
+        if req.full_url.endswith("/collections"):
+            create_calls += 1
+            assert body["name"] == "recipe_embeddings"
+            assert body["get_or_create"] is True
+            return FakeHttpResponse({"id": "collection-1"})
+
+        if req.full_url.endswith("/query"):
+            query_calls += 1
+            assert body["query_embeddings"] == [[1.0, 0.0]]
+            assert body["n_results"] in (1, 2)
+            return FakeHttpResponse(query_responses.pop(0))
+
+        raise AssertionError(f"Unexpected request {req.full_url}")
+
+    monkeypatch.setattr(vector_module.request, "urlopen", fake_urlopen)
+    store = build_store()
 
     matches = store.search([1.0, 0.0], 1)
-    (tmp_path / "1.json").unlink()
     cached_matches = store.search([1.0, 0.0], 2)
 
     assert [match.recipe_id for match in matches] == ["1"]
     assert [match.recipe_id for match in cached_matches] == ["1", "2"]
+    assert create_calls == 1
+    assert query_calls == 2
 
 
-def test_empty_embedding_index_returns_no_matches(tmp_path):
-    assert vector_module.LocalVectorStore(tmp_path).search([1.0, 0.0], 5) == []
+def test_chroma_vector_store_returns_empty_for_empty_index(monkeypatch):
+    def fake_urlopen(req, timeout):
+        if req.full_url.endswith("/collections"):
+            return FakeHttpResponse({"id": "collection-1"})
+        if req.full_url.endswith("/query"):
+            return FakeHttpResponse({"ids": [[]], "embeddings": [[]], "distances": [[]]})
+        raise AssertionError(f"Unexpected request {req.full_url}")
+
+    monkeypatch.setattr(vector_module.request, "urlopen", fake_urlopen)
+    assert build_store().search([1.0, 0.0], 5) == []
 
 
-def test_semantic_search_service_returns_rich_ranked_results(tmp_path):
-    write_embedding(tmp_path, "1", [1.0, 0.0])
-    write_embedding(tmp_path, "2", [0.0, 1.0])
+def test_chroma_vector_store_with_missing_collection_name_raises_runtime_error():
+    with pytest.raises(RuntimeError, match="collection name"):
+        build_store(collection_name=" ")
+
+
+def test_chroma_vector_store_when_collection_create_has_no_id_raises_runtime_error(monkeypatch):
+    monkeypatch.setattr(vector_module.request, "urlopen", lambda req, timeout: FakeHttpResponse({"name": "recipe_embeddings"}))
+
+    with pytest.raises(RuntimeError, match="did not include an id"):
+        build_store().search([1.0, 0.0], 1)
+
+
+def test_chroma_vector_store_when_embeddings_missing_uses_distance_fallback(monkeypatch):
+    def fake_urlopen(req, timeout):
+        if req.full_url.endswith("/collections"):
+            return FakeHttpResponse({"id": "collection-1"})
+        if req.full_url.endswith("/query"):
+            return FakeHttpResponse({
+                "ids": [["2", "1"]],
+                "embeddings": None,
+                "distances": [[0.6, 0.1]],
+                "include": ["distances"],
+            })
+        raise AssertionError(f"Unexpected request {req.full_url}")
+
+    monkeypatch.setattr(vector_module.request, "urlopen", fake_urlopen)
+    matches = build_store().search([1.0, 0.0], 2)
+
+    assert [match.recipe_id for match in matches] == ["1", "2"]
+    assert matches[0].score == pytest.approx(0.9, rel=1e-5)
+    assert matches[1].score == pytest.approx(0.4, rel=1e-5)
+
+
+def test_semantic_search_service_returns_rich_ranked_results():
     service = semantic_module.SemanticSearchService(
         StubEmbeddingService(),
-        vector_module.LocalVectorStore(tmp_path),
+        SimpleNamespace(search=lambda _embedding, _top_k: [
+            vector_module.VectorMatch(recipe_id="1", score=1.0),
+            vector_module.VectorMatch(recipe_id="2", score=0.0),
+        ]),
         semantic_module.RecipeMetadataProvider(StubRepository()),
     )
 
@@ -89,10 +187,10 @@ def test_semantic_search_service_returns_rich_ranked_results(tmp_path):
     assert "High semantic similarity" in results[0].reason
 
 
-def test_unknown_or_blank_queries_return_empty(tmp_path):
+def test_unknown_or_blank_queries_return_empty():
     service = semantic_module.SemanticSearchService(
         StubEmbeddingService(),
-        vector_module.LocalVectorStore(tmp_path),
+        SimpleNamespace(search=lambda _embedding, _top_k: []),
         semantic_module.RecipeMetadataProvider(StubRepository()),
     )
 

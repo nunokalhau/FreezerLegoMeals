@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
-import { ConversationHistory, ConversationMessage } from '../../services/Services.NestJS/conversation-store';
+import { ConversationHistory, ConversationMessage } from '../../../services/Services.NestJS/conversation-store';
 import { IMemoryProvider } from './memory-provider.interface';
 
 // Constants for Redis keys and expiration
@@ -79,12 +79,12 @@ export class RedisMemoryProvider implements IMemoryProvider {
       }
       
       // If Redis is not available or no conversation found, we fall back to using InMemoryConversationStore
-      const inMemoryProvider = new (await import('../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
+      const inMemoryProvider = new (await import('../../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
       return inMemoryProvider.getOrCreateConversation(conversationId);
     } catch (error) {
       this.logger.error('Error retrieving conversation from Redis, using fallback:', error);
       // If there's an error accessing Redis, fall back to in-memory storage
-      const inMemoryProvider = new (await import('../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
+      const inMemoryProvider = new (await import('../../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
       return inMemoryProvider.getOrCreateConversation(conversationId);
     }
   }
@@ -125,13 +125,13 @@ export class RedisMemoryProvider implements IMemoryProvider {
         );
       } else {
         // Use in-memory fallback if Redis is not available
-        const inMemoryProvider = new (await import('../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
+        const inMemoryProvider = new (await import('../../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
         await inMemoryProvider.appendMessages(conversationId, messages);
       }
     } catch (error) {
       this.logger.error('Error appending messages to Redis, using fallback:', error);
       // If there's an error accessing Redis, fall back to in-memory storage
-      const inMemoryProvider = new (await import('../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
+      const inMemoryProvider = new (await import('../../../services/Services.NestJS/conversation-store')).InMemoryConversationStore();
       await inMemoryProvider.appendMessages(conversationId, messages);
     }
   }

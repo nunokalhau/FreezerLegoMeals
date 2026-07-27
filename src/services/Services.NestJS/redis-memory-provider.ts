@@ -8,7 +8,7 @@ const EXPIRE_SECONDS = 3600; // 1 hour expiry by default
 
 @Injectable()
 export class RedisMemoryProvider {
-  private readonly redis: Redis;
+  private readonly redis: Redis | null;
   private readonly inMemoryFallback: InMemoryConversationStore;
 
   constructor() {
@@ -23,7 +23,7 @@ export class RedisMemoryProvider {
           return delay;
         },
         // Set connection timeout for graceful fallback
-        connectionTimeout: 1000,
+        connectTimeout: 1000,
       });
 
       // Listen for Redis connection events
