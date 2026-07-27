@@ -3,9 +3,6 @@ using Microsoft.Extensions.Options;
 
 namespace Services.DotNet;
 
-// TODO: Replace InMemoryConversationStore with a Redis-backed implementation.
-// TODO: Persist conversation history using Redis running in Docker.
-// TODO: Support distributed conversation storage for multiple API instances.
 public sealed class InMemoryConversationStore : IConversationStore
 {
     private readonly ConcurrentDictionary<string, ConversationState> _conversations = new();

@@ -1,12 +1,21 @@
 # Retrieval-Augmented Generation
 
-RAG is implemented here as reusable retrieval and prompt-building components for Python, .NET, and NestJS.
+RAG in this repository is now implemented and productionized first in .NET. Python and NestJS should follow the same architecture over time.
 
 ## Responsibilities
 
 - `RetrievalService` receives a user question, calls `SemanticSearchService`, retrieves the top recipe matches, and returns structured context.
 - `PromptBuilder` receives the user question plus retrieved recipes and renders the final repository-grounded prompt from `prompts/rag_prompt.txt`.
 - `AssistantOrchestrator` owns Assistant workflow coordination. It keeps existing tool calling first, then uses RAG for repository-knowledge questions, then falls back to direct Ollama answers for general chat.
+
+## Completed in .NET
+
+- RAG retrieval flow is implemented in `src/ai/RAG/DotNet/RetrievalService.cs`.
+- Prompt rendering is implemented in `src/ai/RAG/DotNet/PromptBuilder.cs`.
+- Assistant orchestration uses RAG for repository-knowledge prompts in `src/orchestration/DotNet/MealPlanningAgent.cs`.
+- Source attribution is appended to assistant responses for retrieval-backed answers.
+- Redis-backed conversation persistence and fallback memory are already implemented in `src/ai/Memory/DotNet` and wired in `src/api/WebApi.DotNet/Program.cs`.
+- ChromaDB vector retrieval is implemented in `src/ai/VectorStores/DotNet/ChromaVectorStore.cs` and wired in `src/api/WebApi.DotNet/Program.cs`.
 
 ## Hallucination Prevention
 
@@ -34,10 +43,12 @@ This preserves the Assistant API contract while making recipe usage visible for 
 
 ## Future TODOs
 
-TODO: Add Conversation Memory in `src/ai/Memory` when that phase starts.
+TODO: Add policy-based assistant routing so tool-first, retrieval-first, and direct-LLM paths are selected deterministically from explicit orchestration rules instead of keyword heuristics alone.
 
-TODO: Add Redis only when distributed caching or memory is introduced.
+TODO: Add retrieval quality gates (decision reasons, no-context diagnostics, score distribution logging, and retrieval latency tracking) as first-class observability artifacts.
 
-TODO: Add ChromaDB or another vector database only if local disk-backed vectors become insufficient.
+TODO: Add resilience policies around LLM, vector store, and tool execution boundaries (retry/backoff/circuit-breaker strategy per dependency).
 
-TODO: Add autonomous AI-agent research only after its boundaries are explicitly defined outside deterministic Assistant orchestration.
+TODO: Add memory summarization and token-budget-aware context assembly so long-running conversations remain grounded and efficient.
+
+TODO: Add autonomous AI-agent research only after boundaries and safety guardrails are explicitly defined outside deterministic Assistant orchestration.

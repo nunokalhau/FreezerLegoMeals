@@ -1,20 +1,26 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Services.DotNet;
 
 public class OllamaClient : IOllamaClient
 {
+    private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly HttpClient _httpClient;
     private readonly OllamaOptions _options;
+    private readonly ILogger<OllamaClient> _logger;
 
-    public OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> options)
+    public OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> options, ILogger<OllamaClient>? logger = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger ?? NullLogger<OllamaClient>.Instance;
     }
 
     public async Task<OllamaChatResult> ChatAsync(
@@ -30,7 +36,16 @@ public class OllamaClient : IOllamaClient
         if (string.IsNullOrWhiteSpace(selectedModel))
             throw new InvalidOperationException("An Ollama model must be provided or configured as the default model.");
 
+        using var activity = ActivitySource.StartActivity("llm.ollama.chat", ActivityKind.Client);
+        activity?.SetTag("llm.provider", "ollama");
+        activity?.SetTag("llm.model", selectedModel);
+        activity?.SetTag("llm.message_count", messages.Count);
+        activity?.SetTag("llm.tool_count", tools.Count);
+
+        var startedAt = Stopwatch.StartNew();
+
         using var response = await SendChatAsync(selectedModel, messages, tools, cancellationToken);
+        activity?.SetTag("llm.http_status_code", (int)response.StatusCode);
         response.EnsureSuccessStatusCode();
 
         var chatResponse = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
@@ -38,6 +53,22 @@ public class OllamaClient : IOllamaClient
             .Where(toolCall => !string.IsNullOrWhiteSpace(toolCall.Function?.Name))
             .Select(toolCall => AssistantToolCall.FromJsonArguments(toolCall.Function!.Name, toolCall.Function.Arguments))
             .ToList() ?? [];
+
+        startedAt.Stop();
+        var contentLength = chatResponse?.Message?.Content?.Length ?? 0;
+        _logger.LogInformation(
+            "LLM chat completed provider={Provider} model={Model} messageCount={MessageCount} toolCount={ToolCount} toolCallCount={ToolCallCount} contentLength={ContentLength} statusCode={StatusCode} latencyMs={LatencyMs}",
+            "ollama",
+            selectedModel,
+            messages.Count,
+            tools.Count,
+            toolCalls.Count,
+            contentLength,
+            (int)response.StatusCode,
+            startedAt.Elapsed.TotalMilliseconds);
+        activity?.SetTag("llm.tool_call_count", toolCalls.Count);
+        activity?.SetTag("llm.content_length", contentLength);
+        activity?.SetTag("llm.latency_ms", startedAt.Elapsed.TotalMilliseconds);
 
         return new OllamaChatResult(chatResponse?.Message?.Content ?? string.Empty, toolCalls);
     }
@@ -58,6 +89,10 @@ public class OllamaClient : IOllamaClient
         if (response.StatusCode != HttpStatusCode.BadRequest || tools.Count == 0)
             return response;
 
+        _logger.LogWarning(
+            "LLM chat returned bad request with tools enabled; retrying without tools model={Model} toolCount={ToolCount}",
+            selectedModel,
+            tools.Count);
         response.Dispose();
         var fallbackRequest = request with { Tools = [] };
         return await _httpClient.PostAsJsonAsync("api/chat", fallbackRequest, cancellationToken);

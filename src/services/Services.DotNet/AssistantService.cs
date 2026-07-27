@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using Orchestration.DotNet;
 
 namespace Services.DotNet;
 
 public class AssistantService : IAssistantService
 {
+    private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly IConversationStore _conversationStore;
     private readonly IAssistantOrchestrator _orchestrator;
     private readonly ILogger<AssistantService> _logger;
@@ -28,7 +30,12 @@ public class AssistantService : IAssistantService
         if (string.IsNullOrWhiteSpace(message))
             throw new ArgumentException("Message is required", nameof(message));
 
+        using var activity = ActivitySource.StartActivity("assistant.chat", ActivityKind.Server);
+        activity?.SetTag("assistant.conversation_id.input", conversationId ?? string.Empty);
+        activity?.SetTag("assistant.user_message_length", message.Length);
+
         var conversation = _conversationStore.GetOrCreateConversation(conversationId);
+        activity?.SetTag("assistant.conversation_id", conversation.ConversationId);
         var now = DateTimeOffset.UtcNow;
         var currentUserMessage = new ConversationMessage(ConversationRole.User, message, now);
         var messages = new List<ConversationMessage>
@@ -49,10 +56,24 @@ public class AssistantService : IAssistantService
             messagesToPersist,
             _options);
         var result = await _orchestrator.ExecuteAsync(context, cancellationToken);
+        activity?.SetTag("assistant.selected_agent", result.SelectedAgent);
+        activity?.SetTag("assistant.execution_duration_ms", result.ExecutionDuration.TotalMilliseconds);
+        activity?.SetTag("assistant.error_count", result.Errors.Count);
+        activity?.SetTag("assistant.executed_tool_count", result.ExecutedTools.Count);
+        activity?.SetTag("assistant.retrieved_recipe_count", result.RetrievedRecipes.Count);
 
         _conversationStore.AppendMessages(conversation.ConversationId, result.MessagesToPersist);
         if (result.Errors.Count > 0)
             _logger.LogWarning("Assistant request completed with orchestration errors: {AssistantErrors}", string.Join("; ", result.Errors));
+
+        _logger.LogInformation(
+            "Assistant chat completed conversation={ConversationId} selectedAgent={SelectedAgent} durationMs={DurationMs} toolCalls={ToolCalls} retrievedRecipes={RetrievedRecipes} errors={ErrorCount}",
+            conversation.ConversationId,
+            result.SelectedAgent,
+            result.ExecutionDuration.TotalMilliseconds,
+            result.ExecutedTools.Count,
+            result.RetrievedRecipes.Count,
+            result.Errors.Count);
 
         return new AssistantChatResult(conversation.ConversationId, result.FinalResponse);
     }

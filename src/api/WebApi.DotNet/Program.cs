@@ -31,7 +31,8 @@ builder.Services.AddSingleton<IToolRegistry>(_ => new ToolRegistry(
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools", "tool_registry.json"))));
 builder.Services.AddScoped<IToolExecutor>(serviceProvider => new PythonToolExecutor(
     serviceProvider.GetRequiredService<IToolRegistry>(),
-    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools"))));
+    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools")),
+    logger: serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PythonToolExecutor>>()));
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
@@ -52,7 +53,8 @@ builder.Services.AddHttpClient(ChromaVectorStore.HttpClientName, (serviceProvide
 });
 builder.Services.AddSingleton<IVectorStore>(serviceProvider => new ChromaVectorStore(
     serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(ChromaVectorStore.HttpClientName),
-    serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ChromaVectorStoreOptions>>()));
+    serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ChromaVectorStoreOptions>>(),
+    logger: serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ChromaVectorStore>>()));
 builder.Services.AddHttpClient<IOllamaClient, OllamaClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OllamaOptions>>().Value;

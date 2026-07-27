@@ -9,6 +9,7 @@ namespace Orchestration.DotNet;
 
 public sealed class MealPlanningAgent : IAgent
 {
+    private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly IOllamaClient _ollamaClient;
     private readonly IToolExecutor _toolExecutor;
     private readonly ILogger<MealPlanningAgent> _logger;
@@ -35,6 +36,11 @@ public sealed class MealPlanningAgent : IAgent
 
     public async Task<OrchestratorResult> ExecuteAsync(OrchestratorContext context, CancellationToken cancellationToken = default)
     {
+        using var activity = ActivitySource.StartActivity("orchestration.agent.execute", ActivityKind.Internal);
+        activity?.SetTag("agent.name", Name);
+        activity?.SetTag("assistant.correlation_id", context.CorrelationId);
+        activity?.SetTag("assistant.user_request_length", context.UserRequest.Length);
+
         var startedAt = Stopwatch.StartNew();
         var messages = context.Messages.ToList();
         var messagesToPersist = context.MessagesToPersist.ToList();
@@ -68,12 +74,20 @@ public sealed class MealPlanningAgent : IAgent
                     var ragResult = await AnswerWithRetrievalAsync(context, cancellationToken);
                     content = ragResult.Response;
                     retrievedRecipes.AddRange(ragResult.RetrievedRecipes);
+                    _logger.LogInformation(
+                        "{AgentName} RAG decision correlation={CorrelationId} retrievedRecipes={RetrievedRecipeCount}",
+                        Name,
+                        context.CorrelationId,
+                        ragResult.RetrievedRecipes.Count);
                 }
 
                 steps.Add("Answer");
                 var finalMessage = new ConversationMessage(ConversationRole.Assistant, content, DateTimeOffset.UtcNow);
                 messagesToPersist.Add(finalMessage);
                 _logger.LogInformation("{AgentName} completed with {TotalToolCalls} tool calls", Name, totalToolCalls);
+                activity?.SetTag("assistant.tool_call_count", totalToolCalls);
+                activity?.SetTag("assistant.retrieved_recipe_count", retrievedRecipes.Count);
+                activity?.SetTag("assistant.error_count", errors.Count);
                 return BuildResult(context, content, messagesToPersist, executedTools, retrievedRecipes, steps, errors, startedAt);
             }
 
@@ -165,7 +179,13 @@ public sealed class MealPlanningAgent : IAgent
             .Select(source => new RetrievedRecipeInfo(source.RecipeId, source.Title, source.SimilarityScore))
             .ToList();
         if (retrieval.Recipes.Count == 0)
+        {
+            _logger.LogInformation(
+                "{AgentName} retrieval yielded no relevant context correlation={CorrelationId}",
+                Name,
+                context.CorrelationId);
             return ("The repository does not contain enough information to answer that question.\n\nSources: none", retrievedRecipes);
+        }
 
         var prompt = _promptBuilder!.Build(context.UserRequest, retrieval.Recipes);
         var now = DateTimeOffset.UtcNow;
@@ -176,6 +196,12 @@ public sealed class MealPlanningAgent : IAgent
         var content = string.IsNullOrWhiteSpace(response.Content)
             ? "The repository does not contain enough information to answer that question."
             : response.Content.Trim();
+
+        _logger.LogInformation(
+            "{AgentName} retrieval-backed answer correlation={CorrelationId} sourceCount={SourceCount}",
+            Name,
+            context.CorrelationId,
+            retrieval.Sources.Count);
 
         return ($"{content}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
     }

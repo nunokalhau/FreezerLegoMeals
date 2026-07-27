@@ -4,7 +4,6 @@ using Services.DotNet;
 
 namespace AI.Memory.DotNet;
 
-// TODO: Replace InMemoryMemoryProvider with a Redis-backed or database-backed implementation.
 public sealed class InMemoryMemoryProvider : IMemoryProvider
 {
     private readonly ConcurrentDictionary<string, ConversationState> _conversations = new();
