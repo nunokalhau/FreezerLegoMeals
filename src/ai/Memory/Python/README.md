@@ -63,7 +63,7 @@ provider.append_messages("my-conversation", [message])
 ## Testing
 
 Unit tests are provided in:
-- `src/tests/unit/AI.Python.UnitTests/test_redis_memory_provider.py` 
+- `src/tests/unit/Services.Python.UnitTests/test_ai_redis_memory_provider.py` 
 
 These tests replicate the behavior of `.NET RedisMemoryProviderTests.cs` and cover:
 - Basic interface compliance

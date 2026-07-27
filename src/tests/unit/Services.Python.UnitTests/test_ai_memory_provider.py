@@ -5,23 +5,75 @@ Unit tests for Memory Provider implementations.
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
+import importlib.util
+import types
 
 # Import the module we're testing
 import sys
 from pathlib import Path
 
-# Add the src directory to the Python path so we can import modules properly 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+SRC_ROOT = Path(__file__).resolve().parents[3]
+CONVERSATION_STORE_PATH = SRC_ROOT / "services" / "Services.Python" / "conversation_store.py"
+MEMORY_PROVIDER_PATH = SRC_ROOT / "ai" / "Memory" / "Python" / "memory_provider.py"
+REDIS_MEMORY_PROVIDER_PATH = SRC_ROOT / "ai" / "Memory" / "Python" / "redis_memory_provider.py"
 
-from src.ai.Memory.Python.memory_provider import (
-    IMemoryProvider,
-    RedisMemoryProvider,
-    InMemoryMemoryProvider,
-    MemoryMessage,
-    ConversationMemory,
-    get_memory_provider,
-    set_memory_provider
-)
+
+def _ensure_package(name: str) -> None:
+    if name in sys.modules:
+        return
+    package = types.ModuleType(name)
+    package.__path__ = []  # mark as package for import resolution
+    sys.modules[name] = package
+
+
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load {name} from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+for package_name in [
+    "src",
+    "src.ai",
+    "src.ai.Memory",
+    "src.ai.Memory.Python",
+    "src.services",
+    "src.services.Services",
+    "src.services.Services.Python",
+]:
+    _ensure_package(package_name)
+
+_load_module("src.services.Services.Python.conversation_store", CONVERSATION_STORE_PATH)
+
+# memory_provider imports RedisMemoryProvider from this module; provide a stub first to break cycle.
+stub_redis_module = types.ModuleType("src.ai.Memory.Python.redis_memory_provider")
+
+
+class _StubRedisMemoryProvider:
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+stub_redis_module.RedisMemoryProvider = _StubRedisMemoryProvider
+sys.modules["src.ai.Memory.Python.redis_memory_provider"] = stub_redis_module
+
+memory_provider_module = _load_module("src.ai.Memory.Python.memory_provider", MEMORY_PROVIDER_PATH)
+redis_memory_provider_module = _load_module("src.ai.Memory.Python.redis_memory_provider", REDIS_MEMORY_PROVIDER_PATH)
+
+# Ensure memory_provider exports the real RedisMemoryProvider implementation.
+memory_provider_module.RedisMemoryProvider = redis_memory_provider_module.RedisMemoryProvider
+
+IMemoryProvider = memory_provider_module.IMemoryProvider
+RedisMemoryProvider = memory_provider_module.RedisMemoryProvider
+InMemoryMemoryProvider = memory_provider_module.InMemoryMemoryProvider
+MemoryMessage = memory_provider_module.MemoryMessage
+ConversationMemory = memory_provider_module.ConversationMemory
+get_memory_provider = memory_provider_module.get_memory_provider
+set_memory_provider = memory_provider_module.set_memory_provider
 
 
 def test_imemory_provider_interface():
@@ -64,12 +116,9 @@ def test_conversation_memory_structure():
     assert len(conversation.messages) == 1
 
 
-@patch('src.ai.Memory.Python.memory_provider.hasattr')
-def test_redis_memory_provider_fallback(mock_hasattr):
+@patch.object(redis_memory_provider_module, 'HAS_REDIS', False)
+def test_redis_memory_provider_fallback():
     """Test that RedisMemoryProvider falls back to in-memory when Redis is not available."""
-    # Mock that redis library is not available
-    mock_hasattr.return_value = False
-    
     # This should create the fallback in-memory provider without errors
     provider = RedisMemoryProvider()
     
