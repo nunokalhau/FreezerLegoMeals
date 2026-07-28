@@ -5,10 +5,10 @@ export const config = {
   // .NET: http://localhost:5001
   // Python: http://localhost:5000  
   // NestJS: http://localhost:3000
-  apiUrl: 'http://localhost:3000',
+  apiUrl: 'http://localhost:5001',
   
   // API timeout in milliseconds
-  apiTimeout: 10000,
+  apiTimeout: 120000,
   
   // Future authentication support can be added here
   // auth: {

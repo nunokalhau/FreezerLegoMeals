@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Net;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Extensions.Http;
@@ -99,18 +100,7 @@ public sealed class PollyExternalDependencyResiliencePolicyProvider : IExternalD
 
         var timeout = Policy.TimeoutAsync<HttpResponseMessage>(GetTimeout(options));
 
-        var breaker = Policy
-            .Handle<Exception>(ShouldHandleException)
-            .CircuitBreakerAsync(
-                exceptionsAllowedBeforeBreaking: Math.Max(1, options.ExceptionsAllowedBeforeBreaking),
-                durationOfBreak: GetBreakDuration(options),
-                onBreak: (exception, breakDelay) => _logger.LogWarning(
-                    exception,
-                    "Resilience circuit opened dependency={Dependency} breakDurationMs={BreakDurationMs}",
-                    dependency,
-                    breakDelay.TotalMilliseconds),
-                onReset: () => _logger.LogInformation("Resilience circuit reset dependency={Dependency}", dependency),
-                onHalfOpen: () => _logger.LogInformation("Resilience circuit half-open dependency={Dependency}", dependency));
+        var breaker = BuildHttpCircuitBreakerPolicy(dependency, options);
 
         var retry = httpBuilder
             .WaitAndRetryAsync(
@@ -126,7 +116,44 @@ public sealed class PollyExternalDependencyResiliencePolicyProvider : IExternalD
                         DescribeHttpOutcome(outcome));
                 });
 
-        return Policy.WrapAsync(retry, breaker.AsAsyncPolicy<HttpResponseMessage>(), timeout);
+        return Policy.WrapAsync(retry, breaker, timeout);
+    }
+
+    private IAsyncPolicy<HttpResponseMessage> BuildHttpCircuitBreakerPolicy(ExternalDependency dependency, DependencyResiliencePolicyOptions options)
+    {
+        // Ollama returns HTTP 400 as a capability signal for "tools unsupported"; do not open the circuit for that.
+        if (dependency == ExternalDependency.Ollama)
+        {
+            return Policy<HttpResponseMessage>
+                .Handle<HttpRequestException>(ShouldHandleOllamaHttpRequestException)
+                .Or<TimeoutRejectedException>()
+                .OrResult(IsTransientHttpResponse)
+                .CircuitBreakerAsync(
+                    handledEventsAllowedBeforeBreaking: Math.Max(1, options.ExceptionsAllowedBeforeBreaking),
+                    durationOfBreak: GetBreakDuration(options),
+                    onBreak: (outcome, breakDelay) => _logger.LogWarning(
+                        outcome.Exception,
+                        "Resilience circuit opened dependency={Dependency} breakDurationMs={BreakDurationMs} outcome={Outcome}",
+                        dependency,
+                        breakDelay.TotalMilliseconds,
+                        DescribeHttpOutcome(outcome)),
+                    onReset: () => _logger.LogInformation("Resilience circuit reset dependency={Dependency}", dependency),
+                    onHalfOpen: () => _logger.LogInformation("Resilience circuit half-open dependency={Dependency}", dependency));
+        }
+
+        return Policy
+            .Handle<Exception>(ShouldHandleException)
+            .CircuitBreakerAsync(
+                exceptionsAllowedBeforeBreaking: Math.Max(1, options.ExceptionsAllowedBeforeBreaking),
+                durationOfBreak: GetBreakDuration(options),
+                onBreak: (exception, breakDelay) => _logger.LogWarning(
+                    exception,
+                    "Resilience circuit opened dependency={Dependency} breakDurationMs={BreakDurationMs}",
+                    dependency,
+                    breakDelay.TotalMilliseconds),
+                onReset: () => _logger.LogInformation("Resilience circuit reset dependency={Dependency}", dependency),
+                onHalfOpen: () => _logger.LogInformation("Resilience circuit half-open dependency={Dependency}", dependency))
+            .AsAsyncPolicy<HttpResponseMessage>();
     }
 
     private IAsyncPolicy BuildAsyncPolicy(ExternalDependency dependency, DependencyResiliencePolicyOptions options)
@@ -235,6 +262,16 @@ public sealed class PollyExternalDependencyResiliencePolicyProvider : IExternalD
         return outcome.Result is null
             ? "none"
             : $"HTTP {(int)outcome.Result.StatusCode}";
+    }
+
+    private static bool ShouldHandleOllamaHttpRequestException(HttpRequestException exception)
+    {
+        if (exception.StatusCode is null)
+            return true;
+
+        return exception.StatusCode.Value == HttpStatusCode.RequestTimeout ||
+               exception.StatusCode.Value == HttpStatusCode.TooManyRequests ||
+               (int)exception.StatusCode.Value >= 500;
     }
 
     private static bool IsTransientHttpResponse(HttpResponseMessage response)

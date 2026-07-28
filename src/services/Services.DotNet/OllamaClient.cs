@@ -115,7 +115,7 @@ public class OllamaClient : IOllamaClient
             tools.Count);
         response.Dispose();
         var fallbackRequest = request with { Tools = [] };
-        return await _httpClient.PostAsJsonAsync("api/chat", fallbackRequest, cancellationToken);
+        return await _httpClient.PostAsJsonAsync("api/chat", fallbackRequest, CancellationToken.None);
     }
 
     private sealed record OllamaChatRequest(string Model, IEnumerable<OllamaChatMessage> Messages, IEnumerable<OllamaTool> Tools, bool Stream);

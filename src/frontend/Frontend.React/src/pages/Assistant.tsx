@@ -94,9 +94,9 @@ const Assistant: React.FC = () => {
               <p>Ask me about recipes, meal planning, or get suggestions for ingredients.</p>
             </div>
           ) : (
-            messages.map((message) => (
+            messages.map((message, index) => (
               <div 
-                key={message.id} 
+                key={`${message.id}-${index}`} 
                 className={`message ${message.role}`}
               >
                 <div className="message-content">
