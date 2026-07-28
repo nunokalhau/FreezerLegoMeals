@@ -17,12 +17,18 @@ public class OllamaClient : IOllamaClient
     private readonly HttpClient _httpClient;
     private readonly OllamaOptions _options;
     private readonly ILogger<OllamaClient> _logger;
+    private readonly IModelCapabilitiesProvider _modelCapabilitiesProvider;
 
-    public OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> options, ILogger<OllamaClient>? logger = null)
+    public OllamaClient(
+        HttpClient httpClient,
+        IOptions<OllamaOptions> options,
+        ILogger<OllamaClient>? logger = null,
+        IModelCapabilitiesProvider? modelCapabilitiesProvider = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? NullLogger<OllamaClient>.Instance;
+        _modelCapabilitiesProvider = modelCapabilitiesProvider ?? new OllamaModelCapabilitiesProvider(new InMemoryModelCapabilitiesCache());
     }
 
     public async Task<OllamaChatResult> ChatAsync(
@@ -38,17 +44,29 @@ public class OllamaClient : IOllamaClient
         if (string.IsNullOrWhiteSpace(selectedModel))
             throw new InvalidOperationException("An Ollama model must be provided or configured as the default model.");
 
+        var capabilities = await _modelCapabilitiesProvider.GetCapabilitiesAsync(selectedModel, cancellationToken);
+        var toolSupportKnown = capabilities.SupportsToolCalling.HasValue;
+        var toolsForRequest = ResolveToolsForRequest(tools, capabilities);
+        var canFallbackWithoutTools = toolsForRequest.Count > 0 && !toolSupportKnown;
+
         using var activity = ActivitySource.StartActivity("llm.ollama.chat", ActivityKind.Client);
         activity?.SetTag("llm.provider", "ollama");
         activity?.SetTag("llm.model", selectedModel);
         activity?.SetTag("llm.message_count", messages.Count);
         activity?.SetTag("llm.tool_count", tools.Count);
+        activity?.SetTag("llm.tool_count_sent", toolsForRequest.Count);
+        activity?.SetTag("llm.tool_support_known", toolSupportKnown);
 
         var startedAt = Stopwatch.StartNew();
 
         try
         {
-            using var response = await SendChatAsync(selectedModel, messages, tools, cancellationToken);
+            using var response = await SendChatAsync(
+                selectedModel,
+                messages,
+                toolsForRequest,
+                canFallbackWithoutTools,
+                cancellationToken);
             activity?.SetTag("llm.http_status_code", (int)response.StatusCode);
             response.EnsureSuccessStatusCode();
 
@@ -65,7 +83,7 @@ public class OllamaClient : IOllamaClient
                 "ollama",
                 selectedModel,
                 messages.Count,
-                tools.Count,
+                toolsForRequest.Count,
                 toolCalls.Count,
                 contentLength,
                 (int)response.StatusCode,
@@ -85,7 +103,7 @@ public class OllamaClient : IOllamaClient
                 "ollama",
                 selectedModel,
                 messages.Count,
-                tools.Count,
+                toolsForRequest.Count,
                 startedAt.Elapsed.TotalMilliseconds);
             activity?.SetTag("llm.failure", exception.GetType().Name);
             activity?.SetTag("llm.latency_ms", startedAt.Elapsed.TotalMilliseconds);
@@ -97,6 +115,7 @@ public class OllamaClient : IOllamaClient
         string selectedModel,
         IReadOnlyList<ConversationMessage> messages,
         IReadOnlyList<ToolDefinition> tools,
+        bool canFallbackWithoutTools,
         CancellationToken cancellationToken)
     {
         var request = new OllamaChatRequest(
@@ -106,8 +125,41 @@ public class OllamaClient : IOllamaClient
             Stream: false);
 
         var response = await _httpClient.PostAsJsonAsync("api/chat", request, cancellationToken);
-        if (response.StatusCode != HttpStatusCode.BadRequest || tools.Count == 0)
+        if (tools.Count == 0)
+        {
             return response;
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            await _modelCapabilitiesProvider.RecordChatResultAsync(
+                selectedModel,
+                toolsWereRequested: true,
+                response.StatusCode,
+                requestSucceeded: true,
+                responseBody: null,
+                cancellationToken);
+            return response;
+        }
+
+        if (response.StatusCode != HttpStatusCode.BadRequest)
+        {
+            return response;
+        }
+
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        await _modelCapabilitiesProvider.RecordChatResultAsync(
+            selectedModel,
+            toolsWereRequested: true,
+            response.StatusCode,
+            requestSucceeded: false,
+            responseBody,
+            cancellationToken);
+
+        if (!canFallbackWithoutTools)
+        {
+            return response;
+        }
 
         _logger.LogWarning(
             "LLM chat returned bad request with tools enabled; retrying without tools model={Model} toolCount={ToolCount}",
@@ -115,7 +167,7 @@ public class OllamaClient : IOllamaClient
             tools.Count);
         response.Dispose();
         var fallbackRequest = request with { Tools = [] };
-        return await _httpClient.PostAsJsonAsync("api/chat", fallbackRequest, CancellationToken.None);
+        return await _httpClient.PostAsJsonAsync("api/chat", fallbackRequest, cancellationToken);
     }
 
     private sealed record OllamaChatRequest(string Model, IEnumerable<OllamaChatMessage> Messages, IEnumerable<OllamaTool> Tools, bool Stream);
@@ -140,6 +192,18 @@ public class OllamaClient : IOllamaClient
         [property: JsonPropertyName("tool_calls")] IReadOnlyList<OllamaToolCall>? ToolCalls);
 
     private sealed record OllamaChatResponse(OllamaChatResponseMessage? Message);
+
+    private static IReadOnlyList<ToolDefinition> ResolveToolsForRequest(
+        IReadOnlyList<ToolDefinition> tools,
+        ModelCapabilities capabilities)
+    {
+        if (tools.Count == 0 || capabilities.SupportsToolCalling != false)
+        {
+            return tools;
+        }
+
+        return [];
+    }
 
     private static string ToOllamaRole(ConversationRole role)
     {

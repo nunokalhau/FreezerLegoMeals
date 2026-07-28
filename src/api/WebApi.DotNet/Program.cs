@@ -38,6 +38,8 @@ builder.Services.AddAiEvaluationFramework();
 builder.Services.AddSingleton<IRoutingPolicy, DefaultRoutingPolicy>();
 builder.Services.Configure<ExternalDependencyResilienceOptions>(builder.Configuration.GetSection("Resilience"));
 builder.Services.AddSingleton<IExternalDependencyResiliencePolicyProvider, PollyExternalDependencyResiliencePolicyProvider>();
+builder.Services.AddSingleton<IModelCapabilitiesCache, InMemoryModelCapabilitiesCache>();
+builder.Services.AddSingleton<IModelCapabilitiesProvider, OllamaModelCapabilitiesProvider>();
 builder.Services.AddScoped<IAgent, MealPlanningAgent>();
 builder.Services.AddScoped<AssistantOrchestrator>();
 builder.Services.AddScoped<IAssistantOrchestrator>(serviceProvider => new EvaluationAssistantOrchestrator(

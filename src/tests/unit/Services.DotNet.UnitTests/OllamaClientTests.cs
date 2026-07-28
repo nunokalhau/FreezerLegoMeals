@@ -188,6 +188,143 @@ public class OllamaClientTests
         Assert.Empty(fallbackDocument.RootElement.GetProperty("tools").EnumerateArray());
     }
 
+    [Fact]
+    public async Task ChatAsync_UnknownModelLearnsToolUnsupportedAndSkipsToolsOnNextRequest()
+    {
+        var handler = new CapturingHttpMessageHandler([
+            new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = JsonContent.Create(new { error = "model does not support tools" })
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "fallback ok" } })
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "next ok" } })
+            }
+        ]);
+        var capabilitiesProvider = new OllamaModelCapabilitiesProvider(new InMemoryModelCapabilitiesCache());
+        var client = new OllamaClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://localhost:11434") },
+            Options.Create(new OllamaOptions { DefaultModel = "default-model" }),
+            modelCapabilitiesProvider: capabilitiesProvider);
+
+        var tools = new[]
+        {
+            new ToolDefinition { Name = "search_recipes", Description = "Search", Parameters = ["ingredients"] }
+        };
+
+        var firstResult = await client.ChatAsync("adaptive-model", [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], tools);
+        var secondResult = await client.ChatAsync("adaptive-model", [new ConversationMessage(ConversationRole.User, "Again", DateTimeOffset.UtcNow)], tools);
+
+        Assert.Equal("fallback ok", firstResult.Content);
+        Assert.Equal("next ok", secondResult.Content);
+        Assert.Equal(3, handler.RequestBodies.Count);
+
+        using var firstRequestDocument = JsonDocument.Parse(handler.RequestBodies[0]);
+        Assert.NotEmpty(firstRequestDocument.RootElement.GetProperty("tools").EnumerateArray());
+
+        using var fallbackRequestDocument = JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.Empty(fallbackRequestDocument.RootElement.GetProperty("tools").EnumerateArray());
+
+        using var secondCallDocument = JsonDocument.Parse(handler.RequestBodies[2]);
+        Assert.Empty(secondCallDocument.RootElement.GetProperty("tools").EnumerateArray());
+
+        var capabilities = await capabilitiesProvider.GetCapabilitiesAsync("adaptive-model");
+        Assert.False(capabilities.SupportsToolCalling);
+    }
+
+    [Fact]
+    public async Task ChatAsync_ModelThatSupportsToolsContinuesSendingTools()
+    {
+        var handler = new CapturingHttpMessageHandler([
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "first ok" } })
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "second ok" } })
+            }
+        ]);
+        var capabilitiesProvider = new OllamaModelCapabilitiesProvider(new InMemoryModelCapabilitiesCache());
+        var client = new OllamaClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://localhost:11434") },
+            Options.Create(new OllamaOptions { DefaultModel = "default-model" }),
+            modelCapabilitiesProvider: capabilitiesProvider);
+
+        var tools = new[]
+        {
+            new ToolDefinition { Name = "search_recipes", Description = "Search", Parameters = ["ingredients"] }
+        };
+
+        await client.ChatAsync("tool-capable-model", [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], tools);
+        await client.ChatAsync("tool-capable-model", [new ConversationMessage(ConversationRole.User, "Again", DateTimeOffset.UtcNow)], tools);
+
+        Assert.Equal(2, handler.RequestBodies.Count);
+        using var firstRequest = JsonDocument.Parse(handler.RequestBodies[0]);
+        Assert.NotEmpty(firstRequest.RootElement.GetProperty("tools").EnumerateArray());
+        using var secondRequest = JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.NotEmpty(secondRequest.RootElement.GetProperty("tools").EnumerateArray());
+
+        var capabilities = await capabilitiesProvider.GetCapabilitiesAsync("tool-capable-model");
+        Assert.True(capabilities.SupportsToolCalling);
+    }
+
+    [Fact]
+    public async Task ChatAsync_FallbackStillWorksWhenToolCapabilityRemainsUnknown()
+    {
+        var handler = new CapturingHttpMessageHandler([
+            new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = JsonContent.Create(new { error = "request validation failed" })
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "fallback one" } })
+            },
+            new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = JsonContent.Create(new { error = "request validation failed" })
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { message = new { content = "fallback two" } })
+            }
+        ]);
+        var capabilitiesProvider = new OllamaModelCapabilitiesProvider(new InMemoryModelCapabilitiesCache());
+        var client = new OllamaClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://localhost:11434") },
+            Options.Create(new OllamaOptions { DefaultModel = "default-model" }),
+            modelCapabilitiesProvider: capabilitiesProvider);
+
+        var tools = new[]
+        {
+            new ToolDefinition { Name = "search_recipes", Description = "Search", Parameters = ["ingredients"] }
+        };
+
+        var firstResult = await client.ChatAsync("unknown-tools-model", [new ConversationMessage(ConversationRole.User, "Hello", DateTimeOffset.UtcNow)], tools);
+        var secondResult = await client.ChatAsync("unknown-tools-model", [new ConversationMessage(ConversationRole.User, "Again", DateTimeOffset.UtcNow)], tools);
+
+        Assert.Equal("fallback one", firstResult.Content);
+        Assert.Equal("fallback two", secondResult.Content);
+        Assert.Equal(4, handler.RequestBodies.Count);
+
+        using var firstAttempt = JsonDocument.Parse(handler.RequestBodies[0]);
+        Assert.NotEmpty(firstAttempt.RootElement.GetProperty("tools").EnumerateArray());
+        using var firstFallback = JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.Empty(firstFallback.RootElement.GetProperty("tools").EnumerateArray());
+        using var secondAttempt = JsonDocument.Parse(handler.RequestBodies[2]);
+        Assert.NotEmpty(secondAttempt.RootElement.GetProperty("tools").EnumerateArray());
+        using var secondFallback = JsonDocument.Parse(handler.RequestBodies[3]);
+        Assert.Empty(secondFallback.RootElement.GetProperty("tools").EnumerateArray());
+
+        var capabilities = await capabilitiesProvider.GetCapabilitiesAsync("unknown-tools-model");
+        Assert.Null(capabilities.SupportsToolCalling);
+    }
+
     private sealed class CapturingHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;

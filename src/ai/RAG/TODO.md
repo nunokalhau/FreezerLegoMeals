@@ -16,6 +16,7 @@ RAG in this repository is now implemented and productionized first in .NET. Pyth
 - Source attribution is appended to assistant responses for retrieval-backed answers.
 - Redis-backed conversation persistence and fallback memory are already implemented in `src/ai/Memory/DotNet` and wired in `src/api/WebApi.DotNet/Program.cs`.
 - ChromaDB vector retrieval is implemented in `src/ai/VectorStores/DotNet/ChromaVectorStore.cs` and wired in `src/api/WebApi.DotNet/Program.cs`.
+- Ollama model capability detection is implemented with provider abstractions in `src/services/Services.DotNet` and wired in `src/api/WebApi.DotNet/Program.cs` so tool payloads are omitted automatically after runtime discovery.
 
 ## Hallucination Prevention
 
@@ -48,6 +49,8 @@ TODO: Add policy-based assistant routing so tool-first, retrieval-first, and dir
 TODO: Add retrieval quality gates (decision reasons, no-context diagnostics, score distribution logging, and retrieval latency tracking) as first-class observability artifacts.
 
 TODO: Add resilience policies around LLM, vector store, and tool execution boundaries (retry/backoff/circuit-breaker strategy per dependency).
+
+TODO: Add a persistent model capability cache provider (Redis or database) behind the .NET `IModelCapabilitiesCache` abstraction so discovered capabilities survive application restarts.
 
 TODO: Add memory summarization and token-budget-aware context assembly so long-running conversations remain grounded and efficient.
 
