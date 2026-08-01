@@ -36,6 +36,137 @@ public sealed class ChromaVectorStore : IVectorStore
             throw new InvalidOperationException("ChromaVectorStore database must be configured.");
     }
 
+    public async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
+    {
+        _ = await EnsureCollectionIdAsync(cancellationToken);
+    }
+
+    public async Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        if (documents.Count == 0)
+        {
+            _logger.LogInformation(
+                "Vector upsert skipped collection={CollectionName} reason={Reason}",
+                _options.CollectionName,
+                "no-documents");
+            return;
+        }
+
+        if (documents.Any(document => string.IsNullOrWhiteSpace(document.RecipeId)))
+            throw new ArgumentException("Each vector document must include a recipe id.", nameof(documents));
+
+        if (documents.Any(document => document.Embedding.Count == 0))
+            throw new ArgumentException("Each vector document must include an embedding.", nameof(documents));
+
+        using var activity = ActivitySource.StartActivity("vector-store.chroma.upsert", ActivityKind.Client);
+        activity?.SetTag("vector_store.backend", "chroma");
+        activity?.SetTag("vector_store.collection", _options.CollectionName);
+        activity?.SetTag("vector_store.document_count", documents.Count);
+
+        var startedAt = Stopwatch.StartNew();
+        var collectionId = await EnsureCollectionIdAsync(cancellationToken);
+        var ids = documents.Select(document => document.RecipeId).ToList();
+        var embeddings = documents.Select(document => document.Embedding).ToList();
+        var payload = BuildUpsertPayload(ids, embeddings, documents);
+
+        using var response = await _httpClient.PostAsJsonAsync(
+            BuildCollectionUpsertPath(collectionId),
+            payload,
+            JsonOptions,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        startedAt.Stop();
+        _logger.LogInformation(
+            "Vector upsert completed backend={Backend} collection={CollectionName} collectionId={CollectionId} documentCount={DocumentCount} latencyMs={LatencyMs}",
+            "chroma",
+            _options.CollectionName,
+            collectionId,
+            documents.Count,
+            startedAt.Elapsed.TotalMilliseconds);
+        activity?.SetTag("vector_store.collection_id", collectionId);
+        activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+    }
+
+    public async Task DeleteAsync(IReadOnlyList<string> recipeIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(recipeIds);
+
+        if (recipeIds.Count == 0)
+        {
+            _logger.LogInformation(
+                "Vector delete skipped collection={CollectionName} reason={Reason}",
+                _options.CollectionName,
+                "no-recipe-ids");
+            return;
+        }
+
+        if (recipeIds.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException("Recipe ids must be non-empty values.", nameof(recipeIds));
+
+        using var activity = ActivitySource.StartActivity("vector-store.chroma.delete", ActivityKind.Client);
+        activity?.SetTag("vector_store.backend", "chroma");
+        activity?.SetTag("vector_store.collection", _options.CollectionName);
+        activity?.SetTag("vector_store.delete_count", recipeIds.Count);
+
+        var startedAt = Stopwatch.StartNew();
+        var collectionId = await EnsureCollectionIdAsync(cancellationToken);
+        var payload = new DeleteRequestPayload(recipeIds);
+        using var response = await _httpClient.PostAsJsonAsync(
+            BuildCollectionDeletePath(collectionId),
+            payload,
+            JsonOptions,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        startedAt.Stop();
+        _logger.LogInformation(
+            "Vector delete completed backend={Backend} collection={CollectionName} collectionId={CollectionId} deletedCount={DeletedCount} latencyMs={LatencyMs}",
+            "chroma",
+            _options.CollectionName,
+            collectionId,
+            recipeIds.Count,
+            startedAt.Elapsed.TotalMilliseconds);
+        activity?.SetTag("vector_store.collection_id", collectionId);
+        activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+    }
+
+    public async Task ClearCollectionAsync(CancellationToken cancellationToken = default)
+    {
+        using var activity = ActivitySource.StartActivity("vector-store.chroma.clear", ActivityKind.Client);
+        activity?.SetTag("vector_store.backend", "chroma");
+        activity?.SetTag("vector_store.collection", _options.CollectionName);
+
+        var startedAt = Stopwatch.StartNew();
+        var collectionId = await EnsureCollectionIdAsync(cancellationToken);
+        await DeleteCollectionByIdAsync(collectionId, cancellationToken);
+
+        await _collectionLock.WaitAsync(cancellationToken);
+        try
+        {
+            _collectionId = null;
+        }
+        finally
+        {
+            _collectionLock.Release();
+        }
+
+        var recreatedCollectionId = await EnsureCollectionIdAsync(cancellationToken);
+        startedAt.Stop();
+        _logger.LogInformation(
+            "Vector collection cleared backend={Backend} collection={CollectionName} oldCollectionId={OldCollectionId} newCollectionId={NewCollectionId} latencyMs={LatencyMs}",
+            "chroma",
+            _options.CollectionName,
+            collectionId,
+            recreatedCollectionId,
+            startedAt.Elapsed.TotalMilliseconds);
+        activity?.SetTag("vector_store.old_collection_id", collectionId);
+        activity?.SetTag("vector_store.collection_id", recreatedCollectionId);
+        activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
+    }
+
     public async Task<IReadOnlyList<VectorMatch>> SearchAsync(IReadOnlyList<float> queryEmbedding, int topK, CancellationToken cancellationToken = default)
     {
         using var activity = ActivitySource.StartActivity("vector-store.chroma.search", ActivityKind.Client);
@@ -201,6 +332,47 @@ public sealed class ChromaVectorStore : IVectorStore
         return $"{BuildCollectionsPath()}/{Escape(collectionId)}/query";
     }
 
+    private string BuildCollectionUpsertPath(string collectionId)
+    {
+        return $"{BuildCollectionsPath()}/{Escape(collectionId)}/upsert";
+    }
+
+    private string BuildCollectionDeletePath(string collectionId)
+    {
+        return $"{BuildCollectionsPath()}/{Escape(collectionId)}/delete";
+    }
+
+    private string BuildCollectionDeleteByIdPath(string collectionId)
+    {
+        return $"api/v2/tenants/{Escape(_options.Tenant)}/databases/{Escape(_options.Database)}/collections/by-id/{Escape(collectionId)}";
+    }
+
+    private async Task DeleteCollectionByIdAsync(string collectionId, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, BuildCollectionDeleteByIdPath(collectionId));
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static UpsertRequestPayload BuildUpsertPayload(
+        IReadOnlyList<string> ids,
+        IReadOnlyList<IReadOnlyList<float>> embeddings,
+        IReadOnlyList<VectorDocument> documents)
+    {
+        var includeDocuments = documents.All(document => !string.IsNullOrWhiteSpace(document.Document));
+        var includeMetadata = documents.All(document => document.Metadata is not null);
+
+        var documentsPayload = includeDocuments
+            ? documents.Select(document => document.Document!).ToList()
+            : null;
+
+        var metadataPayload = includeMetadata
+            ? documents.Select(document => document.Metadata!).ToList()
+            : null;
+
+        return new UpsertRequestPayload(ids, embeddings, documentsPayload, metadataPayload);
+    }
+
     private static string Escape(string value) => Uri.EscapeDataString(value);
 
     private void LogQueryDiagnostics(
@@ -235,6 +407,19 @@ public sealed class ChromaVectorStore : IVectorStore
         [property: JsonPropertyName("query_embeddings")] IReadOnlyList<IReadOnlyList<float>> QueryEmbeddings,
         [property: JsonPropertyName("n_results")] int NResults,
         [property: JsonPropertyName("include")] IReadOnlyList<string> Include);
+
+    private sealed record UpsertRequestPayload(
+        [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids,
+        [property: JsonPropertyName("embeddings")] IReadOnlyList<IReadOnlyList<float>> Embeddings,
+        [property: JsonPropertyName("documents")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<string>? Documents,
+        [property: JsonPropertyName("metadatas")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<IReadOnlyDictionary<string, object?>>? Metadatas);
+
+    private sealed record DeleteRequestPayload(
+        [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids);
 
     private sealed record QueryResponse(
         IReadOnlyList<IReadOnlyList<string>> Ids,

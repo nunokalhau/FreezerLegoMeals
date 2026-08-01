@@ -14,7 +14,7 @@ public class ChromaVectorStoreIntegrationTests
     private const string Database = "default_database";
 
     [ChromaAvailableFact]
-    public async Task ChromaVectorStore_CreatesCollectionAndReusesItAcrossInstances()
+    public async Task ChromaVectorStore_SupportsEnsureUpsertDeleteAndClear()
     {
         var collectionName = $"itest_recipe_embeddings_{Guid.NewGuid():N}";
         var options = Options.Create(new ChromaVectorStoreOptions
@@ -27,23 +27,23 @@ public class ChromaVectorStoreIntegrationTests
         });
 
         using var chromaClient = CreateHttpClient();
-        string? collectionId = null;
 
         try
         {
             var firstStore = new ChromaVectorStore(CreateHttpClient(), options);
+            await firstStore.EnsureCollectionExistsAsync();
 
             var initiallyEmpty = await firstStore.SearchAsync([1f, 0f], 2);
             Assert.Empty(initiallyEmpty);
 
-            collectionId = await GetCollectionIdByNameAsync(chromaClient, collectionName);
+            var collectionId = await GetCollectionIdByNameAsync(chromaClient, collectionName);
             Assert.False(string.IsNullOrWhiteSpace(collectionId));
 
-            await UpsertEmbeddingsAsync(
-                chromaClient,
-                collectionId!,
-                ["recipe-1", "recipe-2"],
-                [[1f, 0f], [0f, 1f]]);
+            await firstStore.UpsertAsync(
+            [
+                new VectorDocument("recipe-1", [1f, 0f], "doc-1"),
+                new VectorDocument("recipe-2", [0f, 1f], "doc-2")
+            ]);
 
             var firstResults = await firstStore.SearchAsync([1f, 0f], 2);
             Assert.Equal(new[] { "recipe-1", "recipe-2" }, firstResults.Select(match => match.RecipeId).ToArray());
@@ -52,12 +52,23 @@ public class ChromaVectorStoreIntegrationTests
             var secondStore = new ChromaVectorStore(CreateHttpClient(), options);
             var secondResults = await secondStore.SearchAsync([1f, 0f], 2);
             Assert.Equal(new[] { "recipe-1", "recipe-2" }, secondResults.Select(match => match.RecipeId).ToArray());
+
+            await firstStore.DeleteAsync(["recipe-2"]);
+
+            var afterDeleteResults = await firstStore.SearchAsync([1f, 0f], 2);
+            Assert.Equal(new[] { "recipe-1" }, afterDeleteResults.Select(match => match.RecipeId).ToArray());
+
+            await firstStore.ClearCollectionAsync();
+
+            var afterClear = await firstStore.SearchAsync([1f, 0f], 2);
+            Assert.Empty(afterClear);
         }
         finally
         {
+            var collectionId = await GetCollectionIdByNameAsync(chromaClient, collectionName);
             if (!string.IsNullOrWhiteSpace(collectionId))
             {
-                await DeleteCollectionAsync(chromaClient, collectionId);
+                await DeleteCollectionAsync(chromaClient, collectionId!);
             }
         }
     }
@@ -118,20 +129,6 @@ public class ChromaVectorStoreIntegrationTests
         }
 
         return null;
-    }
-
-    private static async Task UpsertEmbeddingsAsync(HttpClient client, string collectionId, IReadOnlyList<string> ids, IReadOnlyList<IReadOnlyList<float>> embeddings)
-    {
-        var payload = new
-        {
-            ids,
-            embeddings
-        };
-
-        using var response = await client.PostAsJsonAsync(
-            $"/api/v2/tenants/{Uri.EscapeDataString(Tenant)}/databases/{Uri.EscapeDataString(Database)}/collections/{Uri.EscapeDataString(collectionId)}/upsert",
-            payload);
-        response.EnsureSuccessStatusCode();
     }
 
     private static async Task DeleteCollectionAsync(HttpClient client, string collectionId)

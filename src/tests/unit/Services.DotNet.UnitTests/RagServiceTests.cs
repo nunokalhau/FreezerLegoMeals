@@ -72,6 +72,14 @@ public class RagServiceTests
 
         public Task<IReadOnlyList<VectorMatch>> SearchAsync(IReadOnlyList<float> queryEmbedding, int topK, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<VectorMatch>>([new VectorMatch("1", _score)]);
+
+        public Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteAsync(IReadOnlyList<string> recipeIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearCollectionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubMetadataProvider : ISemanticRecipeMetadataProvider

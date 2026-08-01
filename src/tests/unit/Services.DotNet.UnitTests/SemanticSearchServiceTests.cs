@@ -227,6 +227,173 @@ public class SemanticSearchServiceTests
     }
 
     [Fact]
+    public async Task ChromaVectorStore_EnsureCollectionExists_IsCached()
+    {
+        var createCalls = 0;
+
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                createCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "id": "collection-1",
+                  "name": "recipe_embeddings"
+                }
+                """));
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        await store.EnsureCollectionExistsAsync();
+        await store.EnsureCollectionExistsAsync();
+
+        Assert.Equal(1, createCalls);
+    }
+
+    [Fact]
+    public async Task ChromaVectorStore_UpsertAsync_SendsIdsEmbeddingsAndOptionalMetadata()
+    {
+        var createCalls = 0;
+        var upsertCalls = 0;
+
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                createCalls++;
+                return Json(HttpStatusCode.OK, """
+                {
+                  "id": "collection-1",
+                  "name": "recipe_embeddings"
+                }
+                """);
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/upsert", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                upsertCalls++;
+                var body = await request.Content!.ReadAsStringAsync();
+                Assert.Contains("\"ids\":[\"1\",\"2\"]", body);
+                Assert.Contains("\"embeddings\":[[1,0],[0,1]]", body);
+                Assert.Contains("\"documents\":[\"doc-1\",\"doc-2\"]", body);
+                Assert.Contains("\"metadatas\":[{\"source\":\"sql\"},{\"source\":\"sql\"}]", body);
+
+                return Json(HttpStatusCode.OK, "{}");
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        await store.UpsertAsync(
+        [
+            new VectorDocument("1", [1f, 0f], "doc-1", new Dictionary<string, object?> { ["source"] = "sql" }),
+            new VectorDocument("2", [0f, 1f], "doc-2", new Dictionary<string, object?> { ["source"] = "sql" })
+        ]);
+
+        Assert.Equal(1, createCalls);
+        Assert.Equal(1, upsertCalls);
+    }
+
+    [Fact]
+    public async Task ChromaVectorStore_DeleteAsync_SendsDeletePayload()
+    {
+        var deleteCalls = 0;
+
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Json(HttpStatusCode.OK, """
+                {
+                  "id": "collection-1",
+                  "name": "recipe_embeddings"
+                }
+                """);
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/delete", StringComparison.OrdinalIgnoreCase) == true && request.Method == HttpMethod.Post)
+            {
+                deleteCalls++;
+                var body = await request.Content!.ReadAsStringAsync();
+                Assert.Contains("\"ids\":[\"recipe-1\",\"recipe-2\"]", body);
+                return Json(HttpStatusCode.OK, "{}");
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        await store.DeleteAsync(["recipe-1", "recipe-2"]);
+
+        Assert.Equal(1, deleteCalls);
+    }
+
+    [Fact]
+    public async Task ChromaVectorStore_ClearCollectionAsync_DeletesAndRecreatesCollection()
+    {
+        var createCalls = 0;
+        var deleteByIdCalls = 0;
+
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                createCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, $$"""
+                {
+                  "id": "collection-{{createCalls}}",
+                  "name": "recipe_embeddings"
+                }
+                """));
+            }
+
+            if (request.Method == HttpMethod.Delete && request.RequestUri?.AbsolutePath.Contains("/collections/by-id/", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                deleteByIdCalls++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var store = new ChromaVectorStore(
+            new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://localhost:8001")
+            },
+            Options.Create(new ChromaVectorStoreOptions()));
+
+        await store.EnsureCollectionExistsAsync();
+        await store.ClearCollectionAsync();
+
+        Assert.Equal(2, createCalls);
+        Assert.Equal(1, deleteByIdCalls);
+    }
+
+    [Fact]
     public async Task SemanticSearchService_ReturnsRichRankedResults()
     {
         var service = new SemanticSearchService(
@@ -286,6 +453,14 @@ public class SemanticSearchServiceTests
     {
         public Task<IReadOnlyList<VectorMatch>> SearchAsync(IReadOnlyList<float> queryEmbedding, int topK, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<VectorMatch>>(new[] { new VectorMatch("1", 1) }.Take(topK).ToList());
+
+        public Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteAsync(IReadOnlyList<string> recipeIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearCollectionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubMetadataProvider : ISemanticRecipeMetadataProvider

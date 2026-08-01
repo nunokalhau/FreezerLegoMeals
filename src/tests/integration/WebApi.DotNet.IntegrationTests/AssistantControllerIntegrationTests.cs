@@ -561,6 +561,14 @@ public class AssistantControllerIntegrationTests
             LastTopK = topK;
             return Task.FromResult<IReadOnlyList<VectorMatch>>([new VectorMatch("1", 0.91)]);
         }
+
+        public Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteAsync(IReadOnlyList<string> recipeIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearCollectionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubMetadataProvider : ISemanticRecipeMetadataProvider

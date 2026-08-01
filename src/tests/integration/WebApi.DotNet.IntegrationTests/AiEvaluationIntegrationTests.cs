@@ -149,6 +149,14 @@ public sealed class AiEvaluationIntegrationTests
                 .Take(topK)
                 .ToArray());
         }
+
+        public Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteAsync(IReadOnlyList<string> recipeIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearCollectionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class DeterministicMetadataProvider : ISemanticRecipeMetadataProvider

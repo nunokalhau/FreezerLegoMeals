@@ -143,6 +143,14 @@ public sealed class AiEvaluationServiceTests
 
             return Task.FromResult<IReadOnlyList<VectorMatch>>(results);
         }
+
+        public Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteAsync(IReadOnlyList<string> recipeIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearCollectionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class DeterministicMetadataProvider : ISemanticRecipeMetadataProvider

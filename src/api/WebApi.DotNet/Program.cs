@@ -67,6 +67,10 @@ builder.Services.AddScoped<IShoppingService, ShoppingService>();
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
 builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.AddScoped<RetrievalService>();
+builder.Services.AddSingleton<IRecipeDocumentBuilder, RecipeDocumentBuilder>();
+builder.Services.AddScoped<IRecipeIndexingService, RecipeIndexingService>();
+builder.Services.Configure<RecipeStartupIndexingOptions>(builder.Configuration.GetSection("AI:Indexing"));
+builder.Services.AddHostedService<RecipeStartupIndexingHostedService>();
 builder.Services.AddScoped<IRetrievalService>(serviceProvider => new EvaluationRetrievalService(
     serviceProvider.GetRequiredService<RetrievalService>(),
     serviceProvider.GetRequiredService<IAiEvaluationTraceContext>()));

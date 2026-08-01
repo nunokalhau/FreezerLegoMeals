@@ -7,6 +7,7 @@ The .NET reference implementation now uses ChromaDB v2 as the primary vector sto
 - ChromaDB collection create/get-or-create is implemented.
 - Query execution against collection id endpoints is implemented.
 - Similarity ranking maintains cosine-based scoring behavior when embeddings are returned.
+- Vector indexing lifecycle operations are implemented through the provider contract: ensure collection, upsert vectors, delete vectors, and clear collection.
 - Integration coverage exists for collection lifecycle and query behavior.
 
 ## Next Architectural Milestones

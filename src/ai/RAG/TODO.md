@@ -17,6 +17,7 @@ RAG in this repository is now implemented and productionized first in .NET. Pyth
 - Redis-backed conversation persistence and fallback memory are already implemented in `src/ai/Memory/DotNet` and wired in `src/api/WebApi.DotNet/Program.cs`.
 - ChromaDB vector retrieval is implemented in `src/ai/VectorStores/DotNet/ChromaVectorStore.cs` and wired in `src/api/WebApi.DotNet/Program.cs`.
 - Ollama model capability detection is implemented with provider abstractions in `src/services/Services.DotNet` and wired in `src/api/WebApi.DotNet/Program.cs` so tool payloads are omitted automatically after runtime discovery.
+- Recipe indexing service is implemented in `src/ai/RAG/DotNet/RecipeIndexingService.cs` with repository loading, semantic document generation, embedding generation, and vector upsert through `IVectorStore`.
 
 ## Hallucination Prevention
 
@@ -49,6 +50,8 @@ TODO: Add policy-based assistant routing so tool-first, retrieval-first, and dir
 TODO: Add retrieval quality gates (decision reasons, no-context diagnostics, score distribution logging, and retrieval latency tracking) as first-class observability artifacts.
 
 TODO: Add resilience policies around LLM, vector store, and tool execution boundaries (retry/backoff/circuit-breaker strategy per dependency).
+
+TODO: Add a manual API or CLI trigger for recipe indexing runs so operators can rebuild vector state on demand without startup coupling.
 
 TODO: Add a persistent model capability cache provider (Redis or database) behind the .NET `IModelCapabilitiesCache` abstraction so discovered capabilities survive application restarts.
 
