@@ -113,6 +113,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IVectorStore>();
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IReranker>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
@@ -165,6 +166,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IVectorStore>();
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IReranker>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
@@ -214,6 +216,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IKeywordSearchService>();
+                services.RemoveAll<IReranker>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
@@ -252,6 +255,64 @@ public class AssistantControllerIntegrationTests
         Assert.True(sourceTwo < sourceThree);
         Assert.Equal("chicken and beef freezer recipes", embeddingService.LastText);
         Assert.Equal(3, vectorStore.LastTopK);
+    }
+
+    [Fact]
+    public async Task Chat_WithRepositoryQuestion_AppliesRerankingBeforeSources()
+    {
+        var vectorStore = new RecordingVectorStore([
+            new VectorMatch("1", 0.95),
+            new VectorMatch("2", 0.90),
+            new VectorMatch("3", 0.70)
+        ]);
+        var metadataProvider = new HybridMetadataProvider();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantRerankIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IReranker>();
+                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService, RecordingEmbeddingService>();
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("chicken freezer meals"));
+                services.AddSingleton<IReranker>(new StubReranker(["2", "1", "3"]));
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "What chicken recipes do you have?"
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        var sourceOne = payload.Response.IndexOf("- 2: Beef Stir Fry", StringComparison.Ordinal);
+        var sourceTwo = payload.Response.IndexOf("- 1: Spicy Chicken", StringComparison.Ordinal);
+        var sourceThree = payload.Response.IndexOf("- 3: Garlic Rice", StringComparison.Ordinal);
+        Assert.True(sourceOne >= 0);
+        Assert.True(sourceTwo >= 0);
+        Assert.True(sourceThree >= 0);
+        Assert.True(sourceOne < sourceTwo);
+        Assert.True(sourceTwo < sourceThree);
     }
 
     [Fact]
@@ -752,6 +813,27 @@ public class AssistantControllerIntegrationTests
         public Task<IReadOnlyList<KeywordSearchResult>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<KeywordSearchResult>>(_results.Take(topK).ToList());
+        }
+    }
+
+    private sealed class StubReranker : IReranker
+    {
+        private readonly IReadOnlyList<string> _order;
+
+        public StubReranker(IReadOnlyList<string> order)
+        {
+            _order = order;
+        }
+
+        public Task<IReadOnlyList<RetrievalRecipe>> RerankAsync(string query, IReadOnlyList<RetrievalRecipe> candidates, CancellationToken cancellationToken = default)
+        {
+            var byRecipeId = candidates.ToDictionary(candidate => candidate.RecipeId, StringComparer.Ordinal);
+            var ordered = _order
+                .Where(recipeId => byRecipeId.ContainsKey(recipeId))
+                .Select(recipeId => byRecipeId[recipeId])
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<RetrievalRecipe>>(ordered);
         }
     }
 

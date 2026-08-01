@@ -114,6 +114,55 @@ public class RagServiceTests
     }
 
     [Fact]
+    public async Task RetrievalService_Reranking_ReordersCandidatesAndPreservesMetadata()
+    {
+        var reranker = new StubReranker(["2", "1", "3"]);
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new MultiMatchVectorStore([
+                new VectorMatch("1", 0.95),
+                new VectorMatch("3", 0.70)
+            ]), new MultiMetadataProvider()),
+            new MultiMetadataProvider(),
+            keywordSearchService: new StubKeywordSearchService([
+                new KeywordSearchResult("2", 4),
+                new KeywordSearchResult("1", 3)
+            ]),
+            reranker: reranker,
+            topK: 3,
+            minimumSimilarity: 0.2);
+
+        var result = await service.RetrieveAsync("chicken dinner ideas");
+
+        Assert.Equal("chicken dinner ideas", reranker.LastQuery);
+        Assert.Equal(new[] { "1", "2", "3" }, reranker.LastCandidateIds);
+        Assert.Equal(new[] { "2", "1", "3" }, result.Recipes.Select(recipe => recipe.RecipeId).ToArray());
+        Assert.Equal("Beef Stir Fry", result.Recipes[0].Title);
+        Assert.Equal("Beef dinner", result.Recipes[0].Description);
+    }
+
+    [Fact]
+    public async Task RetrievalService_WhenRerankingFails_PreservesOriginalRanking()
+    {
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new MultiMatchVectorStore([
+                new VectorMatch("1", 0.95),
+                new VectorMatch("3", 0.70)
+            ]), new MultiMetadataProvider()),
+            new MultiMetadataProvider(),
+            keywordSearchService: new StubKeywordSearchService([
+                new KeywordSearchResult("2", 4),
+                new KeywordSearchResult("1", 3)
+            ]),
+            reranker: new ThrowingReranker(),
+            topK: 3,
+            minimumSimilarity: 0.2);
+
+        var result = await service.RetrieveAsync("chicken dinner ideas");
+
+        Assert.Equal(new[] { "1", "2", "3" }, result.Recipes.Select(recipe => recipe.RecipeId).ToArray());
+    }
+
+    [Fact]
     public void PromptBuilder_RendersRepositoryContext()
     {
         var builder = new PromptBuilder("Context:\n{recipes}\nQuestion:\n{question}");
@@ -245,6 +294,42 @@ public class RagServiceTests
         public Task<IReadOnlyList<KeywordSearchResult>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<KeywordSearchResult>>(_results.Take(topK).ToList());
+        }
+    }
+
+    private sealed class StubReranker : IReranker
+    {
+        private readonly IReadOnlyList<string> _order;
+
+        public StubReranker(IReadOnlyList<string> order)
+        {
+            _order = order;
+        }
+
+        public string? LastQuery { get; private set; }
+
+        public IReadOnlyList<string> LastCandidateIds { get; private set; } = [];
+
+        public Task<IReadOnlyList<RetrievalRecipe>> RerankAsync(string query, IReadOnlyList<RetrievalRecipe> candidates, CancellationToken cancellationToken = default)
+        {
+            LastQuery = query;
+            LastCandidateIds = candidates.Select(candidate => candidate.RecipeId).ToList();
+
+            var byId = candidates.ToDictionary(candidate => candidate.RecipeId, StringComparer.Ordinal);
+            var ordered = _order
+                .Where(recipeId => byId.ContainsKey(recipeId))
+                .Select(recipeId => byId[recipeId])
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<RetrievalRecipe>>(ordered);
+        }
+    }
+
+    private sealed class ThrowingReranker : IReranker
+    {
+        public Task<IReadOnlyList<RetrievalRecipe>> RerankAsync(string query, IReadOnlyList<RetrievalRecipe> candidates, CancellationToken cancellationToken = default)
+        {
+            throw new TimeoutException("rerank timeout");
         }
     }
 }

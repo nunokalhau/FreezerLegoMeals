@@ -68,10 +68,12 @@ builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRe
 builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.AddScoped<IQueryRewriter, QueryRewriterService>();
 builder.Services.AddScoped<IKeywordSearchService, KeywordSearchService>();
+builder.Services.AddScoped<IReranker, OllamaRerankerService>();
 builder.Services.AddScoped<RetrievalService>();
 builder.Services.AddSingleton<IRecipeDocumentBuilder, RecipeDocumentBuilder>();
 builder.Services.AddScoped<IRecipeIndexingService, RecipeIndexingService>();
 builder.Services.Configure<RecipeStartupIndexingOptions>(builder.Configuration.GetSection("AI:Indexing"));
+builder.Services.Configure<RerankingOptions>(builder.Configuration.GetSection("AI:Reranking"));
 builder.Services.AddHostedService<RecipeStartupIndexingHostedService>();
 builder.Services.AddScoped<IRetrievalService>(serviceProvider => new EvaluationRetrievalService(
     serviceProvider.GetRequiredService<RetrievalService>(),

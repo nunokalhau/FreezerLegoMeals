@@ -20,6 +20,7 @@ RAG in this repository is now implemented and productionized first in .NET. Pyth
 - Recipe indexing service is implemented in `src/ai/RAG/DotNet/RecipeIndexingService.cs` with repository loading, semantic document generation, embedding generation, and vector upsert through `IVectorStore`.
 - Query rewriting is implemented for .NET via `IQueryRewriter` and `QueryRewriterService`, and `RetrievalService` now rewrites semantic search queries with fallback to the original user query on rewrite failure.
 - Hybrid retrieval is implemented for .NET via `KeywordSearchService` + `RetrievalService` reciprocal rank fusion (RRF) that merges semantic and keyword rankings into a unified ranked list.
+- Retrieval reranking is implemented for .NET via `IReranker` + `OllamaRerankerService`, and `RetrievalService` now applies a timeout-protected reranking stage with fallback to the original ranking and diagnostic logging.
 
 ## Hallucination Prevention
 

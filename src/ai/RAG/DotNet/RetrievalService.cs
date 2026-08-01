@@ -14,6 +14,7 @@ public sealed class RetrievalService : IRetrievalService
     private readonly ISemanticRecipeMetadataProvider _metadataProvider;
     private readonly IQueryRewriter? _queryRewriter;
     private readonly IKeywordSearchService? _keywordSearchService;
+    private readonly IReranker? _reranker;
     private readonly ILogger<RetrievalService> _logger;
     private readonly int _topK;
     private readonly double _minimumSimilarity;
@@ -23,6 +24,7 @@ public sealed class RetrievalService : IRetrievalService
         ISemanticRecipeMetadataProvider metadataProvider,
         IQueryRewriter? queryRewriter = null,
         IKeywordSearchService? keywordSearchService = null,
+        IReranker? reranker = null,
         int topK = 3,
         double minimumSimilarity = 0.2,
         ILogger<RetrievalService>? logger = null)
@@ -31,6 +33,7 @@ public sealed class RetrievalService : IRetrievalService
         _metadataProvider = metadataProvider ?? throw new ArgumentNullException(nameof(metadataProvider));
         _queryRewriter = queryRewriter;
         _keywordSearchService = keywordSearchService;
+        _reranker = reranker;
         _topK = topK;
         _minimumSimilarity = minimumSimilarity;
         _logger = logger ?? NullLogger<RetrievalService>.Instance;
@@ -145,23 +148,97 @@ public sealed class RetrievalService : IRetrievalService
                 fusedMatch.Score));
         }
 
-        var decision = recipes.Count == 0 ? "no-context" : "context-accepted";
-        var reason = recipes.Count == 0 ? "below-threshold" : "threshold-passed";
+        var originalRanking = recipes
+            .Select(recipe => new RankedRecipe(recipe.RecipeId, recipe.SimilarityScore))
+            .ToList();
+        IReadOnlyList<RetrievalRecipe> rerankedRecipes = recipes;
+        var rerankStartedAt = Stopwatch.StartNew();
+        try
+        {
+            if (_reranker is not null && recipes.Count > 1)
+            {
+                var rerankedCandidates = await _reranker.RerankAsync(question, recipes, cancellationToken);
+                rerankedRecipes = NormalizeRerankedCandidates(recipes, rerankedCandidates);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Retrieval reranking failed; preserving original ranking");
+            rerankedRecipes = recipes;
+        }
+        finally
+        {
+            rerankStartedAt.Stop();
+        }
+
+        var rerankedRanking = rerankedRecipes
+            .Select(recipe => new RankedRecipe(recipe.RecipeId, recipe.SimilarityScore))
+            .ToList();
+        LogRankingDiagnostics("original", originalRanking);
+        LogRankingDiagnostics("reranked", rerankedRanking);
+        activity?.SetTag("retrieval.original_ranking", FormatRanking(originalRanking));
+        activity?.SetTag("retrieval.reranked_ranking", FormatRanking(rerankedRanking));
+        activity?.SetTag("retrieval.rerank_duration_ms", rerankStartedAt.Elapsed.TotalMilliseconds);
+
+        var decision = rerankedRecipes.Count == 0 ? "no-context" : "context-accepted";
+        var reason = rerankedRecipes.Count == 0 ? "below-threshold" : "threshold-passed";
         elapsedMs = startedAt.Elapsed.TotalMilliseconds;
 
-        LogRetrievalDiagnostics(decision, reason, similarityScores, recipes.Count, elapsedMs, question.Length);
+        LogRetrievalDiagnostics(decision, reason, similarityScores, rerankedRecipes.Count, elapsedMs, question.Length);
         activity?.SetTag("retrieval.decision", decision);
         activity?.SetTag("retrieval.reason", reason);
         activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
         activity?.SetTag("retrieval.keyword_match_count", keywordMatches.Count);
         activity?.SetTag("retrieval.fused_match_count", fusedRanking.Count);
-        activity?.SetTag("retrieval.accepted_count", recipes.Count);
+        activity?.SetTag("retrieval.accepted_count", rerankedRecipes.Count);
         activity?.SetTag("retrieval.elapsed_ms", elapsedMs);
 
         return new RetrievalResult(
             question,
-            recipes,
-            recipes.Select(recipe => new SourceAttribution(recipe.RecipeId, recipe.Title, recipe.SimilarityScore)).ToList());
+            rerankedRecipes,
+            rerankedRecipes.Select(recipe => new SourceAttribution(recipe.RecipeId, recipe.Title, recipe.SimilarityScore)).ToList());
+    }
+
+    private static IReadOnlyList<RetrievalRecipe> NormalizeRerankedCandidates(
+        IReadOnlyList<RetrievalRecipe> original,
+        IReadOnlyList<RetrievalRecipe>? reranked)
+    {
+        if (reranked is null || reranked.Count == 0)
+        {
+            return original;
+        }
+
+        var byRecipeId = original
+            .GroupBy(recipe => recipe.RecipeId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        var normalized = new List<RetrievalRecipe>(original.Count);
+        foreach (var candidate in reranked)
+        {
+            if (!byRecipeId.TryGetValue(candidate.RecipeId, out var originalCandidate))
+            {
+                continue;
+            }
+
+            if (normalized.Any(existing => string.Equals(existing.RecipeId, originalCandidate.RecipeId, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            normalized.Add(originalCandidate);
+        }
+
+        foreach (var candidate in original)
+        {
+            if (normalized.Any(existing => string.Equals(existing.RecipeId, candidate.RecipeId, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            normalized.Add(candidate);
+        }
+
+        return normalized;
     }
 
     private List<RankedRecipe> FuseRankings(
