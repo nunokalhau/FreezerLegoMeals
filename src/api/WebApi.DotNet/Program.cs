@@ -64,6 +64,9 @@ builder.Services.AddScoped<IToolExecutor>(serviceProvider =>
 });
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
+builder.Services.AddSingleton<ILanguageContextResolver, LanguageContextResolver>();
+builder.Services.AddSingleton<ILocalizationOptionsFactory, LocalizationOptionsFactory>();
+builder.Services.AddScoped<ILocalizedRecipeQueryService, LocalizedRecipeQueryService>();
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
 builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.AddScoped<IQueryRewriter, QueryRewriterService>();

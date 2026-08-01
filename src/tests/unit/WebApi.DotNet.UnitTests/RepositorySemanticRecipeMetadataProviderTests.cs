@@ -1,6 +1,7 @@
 using Domain.DotNet;
 using Moq;
 using Repository.DotNet;
+using Services.DotNet;
 using WebApi.DotNet.Services;
 using Xunit;
 
@@ -11,27 +12,38 @@ public class RepositorySemanticRecipeMetadataProviderTests
     [Fact]
     public async Task GetMetadataAsync_WithKnownRecipe_BuildsRichMetadataAndCachesResults()
     {
-        var repository = new Mock<IRecipeRepository>();
-        repository
-            .Setup(candidate => candidate.GetRecipesAsync())
+        var queryService = new Mock<ILocalizedRecipeQueryService>();
+        queryService
+            .Setup(candidate => candidate.GetLocalizedRecipesAsync(It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
-                new Recipe
+                new LocalizedRecipe
                 {
-                    Id = 10,
+                    CanonicalRecipeId = 10,
+                    Language = "en",
                     Name = "Spicy Chicken",
                     Notes = "Freezer friendly",
                     Tags = "spicy,high-protein",
                     Prepping = "Slice chicken",
                     TimeToPrepare = 45,
-                    RecipeIngredients =
+                    Ingredients =
                     [
-                        new RecipeIngredient { Ingredient = new Ingredient { Name = "Chicken" } },
-                        new RecipeIngredient { Ingredient = new Ingredient { Name = "Pepper" } }
+                        new LocalizedRecipeIngredient { CanonicalIngredientId = 1, Language = "en", Name = "Chicken" },
+                        new LocalizedRecipeIngredient { CanonicalIngredientId = 2, Language = "en", Name = "Pepper" }
                     ]
                 }
             ]);
 
-        var provider = new RepositorySemanticRecipeMetadataProvider(repository.Object);
+        var optionsFactory = new Mock<ILocalizationOptionsFactory>();
+        optionsFactory
+            .Setup(factory => factory.Create(It.IsAny<LanguageContext>()))
+            .Returns(LocalizationOptions.Create("en"));
+
+        var languageContextResolver = new Mock<ILanguageContextResolver>();
+        languageContextResolver
+            .Setup(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>()))
+            .Returns(new LanguageContext(null, Array.Empty<string>(), "en", false));
+
+        var provider = new RepositorySemanticRecipeMetadataProvider(queryService.Object, languageContextResolver.Object, optionsFactory.Object);
 
         var metadata = await provider.GetMetadataAsync("10");
         var cachedMetadata = await provider.GetMetadataAsync("10");
@@ -50,16 +62,30 @@ public class RepositorySemanticRecipeMetadataProviderTests
         Assert.Equal("45", metadata.CookingTime);
 
         Assert.Equal(metadata, cachedMetadata);
-        repository.Verify(candidate => candidate.GetRecipesAsync(), Times.Once);
+        languageContextResolver.Verify(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Once);
+        optionsFactory.Verify(factory => factory.Create(It.IsAny<LanguageContext>()), Times.Once);
+        queryService.Verify(candidate => candidate.GetLocalizedRecipesAsync(It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetMetadataAsync_WithUnknownRecipe_ReturnsFallbackMetadata()
     {
-        var repository = new Mock<IRecipeRepository>();
-        repository.Setup(candidate => candidate.GetRecipesAsync()).ReturnsAsync(new List<Recipe>());
+        var queryService = new Mock<ILocalizedRecipeQueryService>();
+        queryService
+            .Setup(candidate => candidate.GetLocalizedRecipesAsync(It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
-        var provider = new RepositorySemanticRecipeMetadataProvider(repository.Object);
+        var optionsFactory = new Mock<ILocalizationOptionsFactory>();
+        optionsFactory
+            .Setup(factory => factory.Create(It.IsAny<LanguageContext>()))
+            .Returns(LocalizationOptions.Create("en"));
+
+        var languageContextResolver = new Mock<ILanguageContextResolver>();
+        languageContextResolver
+            .Setup(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>()))
+            .Returns(new LanguageContext(null, Array.Empty<string>(), "en", false));
+
+        var provider = new RepositorySemanticRecipeMetadataProvider(queryService.Object, languageContextResolver.Object, optionsFactory.Object);
 
         var metadata = await provider.GetMetadataAsync("999");
 
@@ -71,6 +97,12 @@ public class RepositorySemanticRecipeMetadataProviderTests
     [Fact]
     public void Constructor_WithNullRepository_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new RepositorySemanticRecipeMetadataProvider(null!));
+        var queryService = new Mock<ILocalizedRecipeQueryService>();
+        var languageContextResolver = new Mock<ILanguageContextResolver>();
+        var optionsFactory = new Mock<ILocalizationOptionsFactory>();
+
+        Assert.Throws<ArgumentNullException>(() => new RepositorySemanticRecipeMetadataProvider(null!, languageContextResolver.Object, optionsFactory.Object));
+        Assert.Throws<ArgumentNullException>(() => new RepositorySemanticRecipeMetadataProvider(queryService.Object, null!, optionsFactory.Object));
+        Assert.Throws<ArgumentNullException>(() => new RepositorySemanticRecipeMetadataProvider(queryService.Object, languageContextResolver.Object, null!));
     }
 }

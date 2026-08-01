@@ -47,6 +47,17 @@ public class RepositoryLayerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRecipesAsync_Preserves_Canonical_RecipeIds()
+    {
+        // Act
+        var result = await _repository.GetRecipesAsync();
+
+        // Assert
+        var recipeIds = result.Select(recipe => recipe.Id).OrderBy(id => id).ToArray();
+        Assert.Equal(new[] { 1, 2, 3 }, recipeIds);
+    }
+
+    [Fact]
     public async Task GetRecipeByIdAsync_Returns_Recipe_With_Correct_Data()
     {
         // Act
