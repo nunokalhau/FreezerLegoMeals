@@ -19,6 +19,7 @@ Each subdirectory contains scripts that help maintain, validate, or generate par
 - `get_recipe_ingredients.py` - Get ingredients for a specified recipe
 - `generate_recipe_index.py` - Generate an index of all available recipes  
 - `validate_recipe_structure.py` - Validate recipe structure and metadata
+- `generate_localization_seed.py` - Generate deterministic localization SQL seed slices from recipe metadata and detect seed drift with `--check`
 
 ## Shopping Scripts
 - `generate_shopping_list.py` - Generate shopping lists from selected recipes and optional inventory data

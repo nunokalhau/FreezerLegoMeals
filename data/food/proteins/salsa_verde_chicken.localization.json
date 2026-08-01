@@ -1,0 +1,50 @@
+{
+  "recipe_id": 2,
+  "updated_at_utc": "2026-08-01T00:00:00Z",
+  "provenance": "phase3-seed-generator",
+  "recipe_translations": [
+    {
+      "language": "en",
+      "name": "Salsa Verde Chicken",
+      "tags": "high-protein, freezer-friendly",
+      "notes": "Fresh and versatile chicken base for meal prep.",
+      "prepping": "Cook chicken with tomato, onion, garlic, chili, then finish with cilantro and lime.",
+      "translation_version": 1
+    },
+    {
+      "language": "pt",
+      "name": "Frango Salsa Verde",
+      "tags": "alto-proteina, congelador",
+      "notes": "Base fresca e versatil para meal prep.",
+      "prepping": "Cozinhar o frango com tomate, cebola, alho e malagueta, terminar com coentros e lima.",
+      "translation_version": 1
+    }
+  ],
+  "ingredient_translations": [
+    { "ingredient_id": 2, "language": "en", "name": "onion", "unit": "unit", "translation_version": 1 },
+    { "ingredient_id": 2, "language": "pt", "name": "cebola", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 3, "language": "en", "name": "garlic", "unit": "clove", "translation_version": 1 },
+    { "ingredient_id": 3, "language": "pt", "name": "alho", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 6, "language": "en", "name": "salt", "unit": "pinch", "translation_version": 1 },
+    { "ingredient_id": 6, "language": "pt", "name": "sal", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 7, "language": "en", "name": "pepper", "unit": "pinch", "translation_version": 1 },
+    { "ingredient_id": 7, "language": "pt", "name": "pimenta", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 8, "language": "en", "name": "olive oil", "unit": "tbsp", "translation_version": 1 },
+    { "ingredient_id": 8, "language": "pt", "name": "azeite", "unit": "ml", "translation_version": 1 },
+    { "ingredient_id": 9, "language": "en", "name": "chicken thigh", "unit": "piece", "translation_version": 1 },
+    { "ingredient_id": 9, "language": "pt", "name": "frango", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 10, "language": "en", "name": "tomato", "unit": "unit", "translation_version": 1 },
+    { "ingredient_id": 10, "language": "pt", "name": "tomate", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 11, "language": "en", "name": "chili", "unit": "unit", "translation_version": 1 },
+    { "ingredient_id": 11, "language": "pt", "name": "malagueta", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 12, "language": "en", "name": "fresh cilantro", "unit": "tbsp", "translation_version": 1 },
+    { "ingredient_id": 12, "language": "pt", "name": "coentros frescos", "unit": "g", "translation_version": 1 },
+    { "ingredient_id": 13, "language": "en", "name": "lime juice", "unit": "tbsp", "translation_version": 1 },
+    { "ingredient_id": 13, "language": "pt", "name": "limao", "unit": "ml", "translation_version": 1 }
+  ],
+  "index_metadata": {
+    "projection_schema_version": "phase3-localized-seed-v1",
+    "projection_fingerprint": "phase3-salsa-verde-seed",
+    "language_coverage": ["en", "pt"]
+  }
+}

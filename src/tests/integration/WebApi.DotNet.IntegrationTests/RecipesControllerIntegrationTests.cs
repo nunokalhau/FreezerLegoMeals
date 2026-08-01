@@ -234,4 +234,62 @@ public class RecipesControllerIntegrationTests : BaseIntegrationTest
         // Assert
         Assert.Equal(404, (int)response.StatusCode);
     }
+
+    [Fact]
+    public async Task GetLocalizedRecipeById_With_Explicit_Language_Returns_Metadata()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/recipes/1/localized?language=pt");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var payload = JsonSerializer.Deserialize<GetLocalizedRecipeByIdResponse>(jsonResponse, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.Equal(1, payload!.Recipe.CanonicalRecipeId);
+        Assert.Equal("pt", payload.Recipe.Language);
+        Assert.Equal("Arroz Frito de Frango", payload.Recipe.Name);
+        Assert.Equal("pt", payload.Localization.ResolvedLanguage);
+        Assert.Null(payload.Localization.FallbackLanguageUsed);
+        Assert.Contains("pt", payload.Localization.AvailableLanguages);
+    }
+
+    [Fact]
+    public async Task GetLocalizedRecipeById_Uses_AcceptLanguage_Fallback_When_Explicit_Missing()
+    {
+        // Arrange
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/recipes/2/localized");
+        request.Headers.Add("Accept-Language", "de, pt;q=0.8, en;q=0.5");
+
+        // Act
+        var response = await _client.SendAsync(request);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var payload = JsonSerializer.Deserialize<GetLocalizedRecipeByIdResponse>(jsonResponse, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.Equal(2, payload!.Recipe.CanonicalRecipeId);
+        Assert.Equal("pt", payload.Recipe.Language);
+        Assert.Equal("pt", payload.Localization.ResolvedLanguage);
+        Assert.Equal("pt", payload.Localization.FallbackLanguageUsed);
+    }
+
+    [Fact]
+    public async Task GetLocalizedRecipeById_With_StrictMode_And_Missing_Translation_Returns_NotFound()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/recipes/1/localized?language=de&strictMode=true");
+
+        // Assert
+        Assert.Equal(404, (int)response.StatusCode);
+    }
 }

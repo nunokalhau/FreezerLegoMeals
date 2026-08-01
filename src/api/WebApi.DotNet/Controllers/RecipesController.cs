@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Services.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
+using WebApi.DotNet.Services;
 
 namespace WebApi.DotNet.Controllers;
 
@@ -70,6 +71,36 @@ public class RecipesController : ControllerBase
         {
             Recipe = recipe
         };
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Get a localized recipe by canonical recipe ID.
+    /// </summary>
+    /// <param name="id">Canonical recipe ID.</param>
+    /// <param name="request">Localization request query options.</param>
+    /// <param name="localizationService">API localization adapter service.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Localized recipe payload with localization metadata.</returns>
+    [HttpGet("{id:int}/localized")]
+    public async Task<ActionResult<GetLocalizedRecipeByIdResponse>> GetLocalizedRecipeById(
+        [FromRoute] int id,
+        [FromQuery] LocalizedRecipeQueryRequest request,
+        [FromServices] IApiRecipeLocalizationService localizationService,
+        CancellationToken cancellationToken)
+    {
+        if (id <= 0)
+            return BadRequest("Recipe ID is required");
+
+        if (localizationService is null)
+            return StatusCode(StatusCodes.Status500InternalServerError, "Localization service is required");
+
+        var response = await localizationService.GetLocalizedRecipeByIdAsync(id, request, Request, cancellationToken);
+        if (response is null)
+        {
+            return NotFound("Localized recipe not found");
+        }
 
         return Ok(response);
     }

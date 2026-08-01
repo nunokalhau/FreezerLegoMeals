@@ -1,6 +1,6 @@
 -- Manual seed data based on the current markdown recipes in src/food
--- Phase 2 note: translation and indexing metadata tables were introduced in schema.
--- Translation row seeding is intentionally deferred to a later content migration phase.
+-- Phase 3 note: localized translation rows for migrated slices are generated from metadata
+-- and applied from data/food/**/*.localization.seed.sql during DB bootstrap.
 
 INSERT INTO ingredients (id, name, unit) VALUES
 (1, 'carne de vaca picada', 'g'),

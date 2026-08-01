@@ -289,9 +289,15 @@ def _ensure_database() -> None:
     try:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         conn.executescript(SEED_PATH.read_text(encoding="utf-8"))
+        for localized_seed_path in _supplemental_seed_paths():
+            conn.executescript(localized_seed_path.read_text(encoding="utf-8"))
         conn.commit()
     finally:
         conn.close()
+
+
+def _supplemental_seed_paths() -> list[Path]:
+    return sorted((FOOD_DIR).glob("**/*.localization.seed.sql"))
 
 
 def _has_recipes_table() -> bool:

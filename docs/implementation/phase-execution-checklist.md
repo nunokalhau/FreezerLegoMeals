@@ -73,20 +73,20 @@ Evidence:
 
 ## Phase 3 Checklist
 
-- [ ] Entry criteria from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) are true.
-- [ ] Deliverables from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) exist.
-- [ ] Exit criteria from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) are objectively satisfied.
-- [ ] Success metrics from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) are met.
-- [ ] Explicit non-goals from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) were respected.
-- [ ] Global Build And Test Gate passed for Phase 3.
+- [x] Entry criteria from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) are true.
+- [x] Deliverables from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) exist.
+- [x] Exit criteria from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) are objectively satisfied.
+- [x] Success metrics from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) are met.
+- [x] Explicit non-goals from [Phase 3](implementation-plan.md#phase-3-seed-generation-and-api-localization-contract-delivery) were respected.
+- [x] Global Build And Test Gate passed for Phase 3.
 
 Evidence:
 
-- PR or commit(s):
-- Salsa Verde Chicken migration evidence:
-- API metadata validation evidence:
-- Deterministic seed run evidence:
-- Technical Debt Discovered updates (if any):
+- PR or commit(s): Working tree changes only in this session; no commit created yet.
+- Salsa Verde Chicken migration evidence: SQL-first localized seed slice delivered via data/food/proteins/salsa_verde_chicken.localization.seed.sql generated from data/food/proteins/salsa_verde_chicken.localization.json; canonical ID continuity for recipe_id=2 validated in src/tests/integration/WebApi.DotNet.IntegrationTests/SalsaVerdeSeedLocalizationIntegrationTests.cs (strict pt lookup returns Frango Salsa Verde while canonical recipe identity remains unchanged).
+- API metadata validation evidence: Added localized endpoint contract and negotiation adapter; integration tests in src/tests/integration/WebApi.DotNet.IntegrationTests/RecipesControllerIntegrationTests.cs validate explicit language precedence, Accept-Language fallback, and strict-mode 404 behavior; unit coverage in src/tests/unit/WebApi.DotNet.UnitTests/ApiRecipeLocalizationServiceTests.cs validates edge precedence mapping to localization options.
+- Deterministic seed run evidence: src/scripts/recipes/generate_localization_seed.py --check reported seed_drift_check: clean; unit tests in src/tests/unit/Scripts.Tests/test_generate_localization_seed.py passed (2/2).
+- Technical Debt Discovered updates (if any): Integration gate remains verbose and slower due to startup indexing and external dependency calls (Ollama/Chroma/Redis fallback logs); recommend dedicated test-host flags and lower default log verbosity for stabilization. SQL-first rebuild workflow is intentional, but it still requires local database recreation for schema/seed evolution.
 
 ## Phase 4 Checklist
 
