@@ -30,6 +30,13 @@ public class InMemoryDbContextFixture : IDisposable
         Context.RecipeCombinations.RemoveRange(Context.RecipeCombinations);
         Context.RecipeIngredients.RemoveRange(Context.RecipeIngredients);
         Context.RecipeCombinationItems.RemoveRange(Context.RecipeCombinationItems);
+        Context.RecipeIngredientLocalizations.RemoveRange(Context.RecipeIngredientLocalizations);
+        Context.RecipeTranslations.RemoveRange(Context.RecipeTranslations);
+        Context.IngredientTranslations.RemoveRange(Context.IngredientTranslations);
+        Context.RecipeCombinationTranslations.RemoveRange(Context.RecipeCombinationTranslations);
+        Context.TagTranslations.RemoveRange(Context.TagTranslations);
+        Context.UnitTranslations.RemoveRange(Context.UnitTranslations);
+        Context.RecipeIndexMetadata.RemoveRange(Context.RecipeIndexMetadata);
         Context.Recipes.RemoveRange(Context.Recipes);
         Context.Ingredients.RemoveRange(Context.Ingredients);
             
@@ -183,6 +190,121 @@ public class InMemoryDbContextFixture : IDisposable
         };
             
         Context.RecipeCombinationItems.AddRange(combinationItem1, combinationItem2, combinationItem3);
+
+        var now = DateTime.UtcNow;
+
+        Context.RecipeTranslations.AddRange(
+            new RecipeTranslationEntity
+            {
+                RecipeId = 1,
+                Language = "pt",
+                Name = "Arroz Frito de Frango",
+                Tags = "frango,arroz,rapido",
+                Notes = "Receita rapida de arroz frito de frango",
+                Prepping = "Picar ingredientes",
+                TranslationVersion = 1,
+                ContentHash = "recipe-1-pt-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            },
+            new RecipeTranslationEntity
+            {
+                RecipeId = 2,
+                Language = "pt",
+                Name = "Salteado de Carne",
+                Tags = "carne,vegetais,rapido",
+                Notes = "Receita rapida de carne salteada",
+                Prepping = "Cortar legumes",
+                TranslationVersion = 1,
+                ContentHash = "recipe-2-pt-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            },
+            new RecipeTranslationEntity
+            {
+                RecipeId = 2,
+                Language = "es",
+                Name = "Salteado de Res",
+                Tags = "res,verduras,rapido",
+                Notes = "Salteado rapido de res",
+                Prepping = "Cortar verduras",
+                TranslationVersion = 1,
+                ContentHash = "recipe-2-es-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            });
+
+        Context.IngredientTranslations.AddRange(
+            new IngredientTranslationEntity
+            {
+                IngredientId = 1,
+                Language = "pt",
+                Name = "Frango",
+                Unit = "libra",
+                TranslationVersion = 1,
+                ContentHash = "ingredient-1-pt-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            },
+            new IngredientTranslationEntity
+            {
+                IngredientId = 2,
+                Language = "pt",
+                Name = "Arroz",
+                Unit = "chavena",
+                TranslationVersion = 1,
+                ContentHash = "ingredient-2-pt-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            },
+            new IngredientTranslationEntity
+            {
+                IngredientId = 3,
+                Language = "pt",
+                Name = "Brocolos",
+                Unit = "cabeca",
+                TranslationVersion = 1,
+                ContentHash = "ingredient-3-pt-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            },
+            new IngredientTranslationEntity
+            {
+                IngredientId = 4,
+                Language = "pt",
+                Name = "Carne",
+                Unit = "libra",
+                TranslationVersion = 1,
+                ContentHash = "ingredient-4-pt-v1",
+                Provenance = "unit-test-seed",
+                UpdatedAtUtc = now
+            });
+
+        Context.RecipeIndexMetadata.AddRange(
+            new RecipeIndexMetadataEntity
+            {
+                RecipeId = 1,
+                LanguageCoverage = "en,pt",
+                ProjectionFingerprint = "fp-recipe-1-v1",
+                ProjectionSchemaVersion = "1.0.0",
+                ProjectionGeneratedAtUtc = now
+            },
+            new RecipeIndexMetadataEntity
+            {
+                RecipeId = 2,
+                LanguageCoverage = "en,pt,es",
+                ProjectionFingerprint = "fp-recipe-2-v1",
+                ProjectionSchemaVersion = "1.0.0",
+                ProjectionGeneratedAtUtc = now
+            },
+            new RecipeIndexMetadataEntity
+            {
+                RecipeId = 3,
+                LanguageCoverage = "en",
+                ProjectionFingerprint = "fp-recipe-3-v1",
+                ProjectionSchemaVersion = "1.0.0",
+                ProjectionGeneratedAtUtc = now
+            });
             
         // Save changes to database
         Context.SaveChanges();

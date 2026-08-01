@@ -20,4 +20,5 @@ public class RecipeCombinationEntity
     
     // Navigation properties
     public ICollection<RecipeCombinationItemEntity> RecipeCombinationItems { get; set; } = new List<RecipeCombinationItemEntity>();
+    public ICollection<RecipeCombinationTranslationEntity> Translations { get; set; } = new List<RecipeCombinationTranslationEntity>();
 }

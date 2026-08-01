@@ -16,6 +16,13 @@ public static class IntegrationTestDbSeeder
         context.RecipeCombinations.RemoveRange(context.RecipeCombinations);
         context.RecipeIngredients.RemoveRange(context.RecipeIngredients);
         context.RecipeCombinationItems.RemoveRange(context.RecipeCombinationItems);
+        context.RecipeIngredientLocalizations.RemoveRange(context.RecipeIngredientLocalizations);
+        context.RecipeTranslations.RemoveRange(context.RecipeTranslations);
+        context.IngredientTranslations.RemoveRange(context.IngredientTranslations);
+        context.RecipeCombinationTranslations.RemoveRange(context.RecipeCombinationTranslations);
+        context.TagTranslations.RemoveRange(context.TagTranslations);
+        context.UnitTranslations.RemoveRange(context.UnitTranslations);
+        context.RecipeIndexMetadata.RemoveRange(context.RecipeIndexMetadata);
         context.Recipes.RemoveRange(context.Recipes);
         context.Ingredients.RemoveRange(context.Ingredients);
 
@@ -204,6 +211,89 @@ public static class IntegrationTestDbSeeder
         };
 
         context.RecipeCombinationItems.AddRange(combinationItem1, combinationItem2, combinationItem3, combinationItem4);
+
+        var now = DateTime.UtcNow;
+
+        context.RecipeTranslations.AddRange(
+            new RecipeTranslationEntity
+            {
+                RecipeId = 1,
+                Language = "pt",
+                Name = "Arroz Frito de Frango",
+                Tags = "frango,arroz,rapido",
+                Notes = "Receita de arroz frito com frango",
+                Prepping = "Picar ingredientes",
+                TranslationVersion = 1,
+                ContentHash = "it-recipe-1-pt-v1",
+                Provenance = "integration-test-seed",
+                UpdatedAtUtc = now
+            },
+            new RecipeTranslationEntity
+            {
+                RecipeId = 2,
+                Language = "pt",
+                Name = "Salteado de Carne",
+                Tags = "carne,vegetais,rapido",
+                Notes = "Receita de carne salteada",
+                Prepping = "Cortar legumes",
+                TranslationVersion = 1,
+                ContentHash = "it-recipe-2-pt-v1",
+                Provenance = "integration-test-seed",
+                UpdatedAtUtc = now
+            });
+
+        context.IngredientTranslations.AddRange(
+            new IngredientTranslationEntity
+            {
+                IngredientId = 1,
+                Language = "pt",
+                Name = "Frango",
+                Unit = "libra",
+                TranslationVersion = 1,
+                ContentHash = "it-ingredient-1-pt-v1",
+                Provenance = "integration-test-seed",
+                UpdatedAtUtc = now
+            },
+            new IngredientTranslationEntity
+            {
+                IngredientId = 2,
+                Language = "pt",
+                Name = "Arroz",
+                Unit = "chavena",
+                TranslationVersion = 1,
+                ContentHash = "it-ingredient-2-pt-v1",
+                Provenance = "integration-test-seed",
+                UpdatedAtUtc = now
+            },
+            new IngredientTranslationEntity
+            {
+                IngredientId = 4,
+                Language = "pt",
+                Name = "Carne",
+                Unit = "libra",
+                TranslationVersion = 1,
+                ContentHash = "it-ingredient-4-pt-v1",
+                Provenance = "integration-test-seed",
+                UpdatedAtUtc = now
+            });
+
+        context.RecipeIndexMetadata.AddRange(
+            new RecipeIndexMetadataEntity
+            {
+                RecipeId = 1,
+                LanguageCoverage = "en,pt",
+                ProjectionFingerprint = "it-fp-recipe-1-v1",
+                ProjectionSchemaVersion = "1.0.0",
+                ProjectionGeneratedAtUtc = now
+            },
+            new RecipeIndexMetadataEntity
+            {
+                RecipeId = 2,
+                LanguageCoverage = "en,pt",
+                ProjectionFingerprint = "it-fp-recipe-2-v1",
+                ProjectionSchemaVersion = "1.0.0",
+                ProjectionGeneratedAtUtc = now
+            });
 
         context.SaveChanges();
     }

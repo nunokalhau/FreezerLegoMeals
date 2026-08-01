@@ -18,4 +18,5 @@ public class IngredientEntity
     
     // Navigation properties
     public ICollection<RecipeIngredientEntity> RecipeIngredients { get; set; } = new List<RecipeIngredientEntity>();
+    public ICollection<IngredientTranslationEntity> Translations { get; set; } = new List<IngredientTranslationEntity>();
 }

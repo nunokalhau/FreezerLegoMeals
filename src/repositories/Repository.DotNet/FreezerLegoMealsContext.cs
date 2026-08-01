@@ -17,6 +17,13 @@ public class FreezerLegoMealsContext : DbContext
     public DbSet<RecipeCombinationEntity> RecipeCombinations { get; set; }
     public DbSet<RecipeIngredientEntity> RecipeIngredients { get; set; }
     public DbSet<RecipeCombinationItemEntity> RecipeCombinationItems { get; set; }
+    public DbSet<RecipeTranslationEntity> RecipeTranslations { get; set; }
+    public DbSet<IngredientTranslationEntity> IngredientTranslations { get; set; }
+    public DbSet<RecipeCombinationTranslationEntity> RecipeCombinationTranslations { get; set; }
+    public DbSet<TagTranslationEntity> TagTranslations { get; set; }
+    public DbSet<UnitTranslationEntity> UnitTranslations { get; set; }
+    public DbSet<RecipeIngredientLocalizationEntity> RecipeIngredientLocalizations { get; set; }
+    public DbSet<RecipeIndexMetadataEntity> RecipeIndexMetadata { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -148,6 +155,152 @@ public class FreezerLegoMealsContext : DbContext
             .WithMany(r => r.RecipeCombinationItems)
             .HasForeignKey(rci => rci.RecipeId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RecipeTranslationEntity>(entity =>
+        {
+            entity.ToTable("recipe_translations");
+            entity.HasKey(candidate => new { candidate.RecipeId, candidate.Language });
+
+            entity.Property(candidate => candidate.RecipeId).HasColumnName("recipe_id");
+            entity.Property(candidate => candidate.Language).HasColumnName("language");
+            entity.Property(candidate => candidate.Name).HasColumnName("name").IsRequired();
+            entity.Property(candidate => candidate.Tags).HasColumnName("tags");
+            entity.Property(candidate => candidate.Notes).HasColumnName("notes");
+            entity.Property(candidate => candidate.Prepping).HasColumnName("prepping");
+            entity.Property(candidate => candidate.TranslationVersion).HasColumnName("translation_version");
+            entity.Property(candidate => candidate.ContentHash).HasColumnName("content_hash").IsRequired();
+            entity.Property(candidate => candidate.Provenance).HasColumnName("provenance").IsRequired();
+            entity.Property(candidate => candidate.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.HasIndex(candidate => candidate.Language)
+                .HasDatabaseName("idx_recipe_translations_language");
+
+            entity.HasOne(candidate => candidate.Recipe)
+                .WithMany(recipe => recipe.Translations)
+                .HasForeignKey(candidate => candidate.RecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IngredientTranslationEntity>(entity =>
+        {
+            entity.ToTable("ingredient_translations");
+            entity.HasKey(candidate => new { candidate.IngredientId, candidate.Language });
+
+            entity.Property(candidate => candidate.IngredientId).HasColumnName("ingredient_id");
+            entity.Property(candidate => candidate.Language).HasColumnName("language");
+            entity.Property(candidate => candidate.Name).HasColumnName("name").IsRequired();
+            entity.Property(candidate => candidate.Unit).HasColumnName("unit");
+            entity.Property(candidate => candidate.TranslationVersion).HasColumnName("translation_version");
+            entity.Property(candidate => candidate.ContentHash).HasColumnName("content_hash").IsRequired();
+            entity.Property(candidate => candidate.Provenance).HasColumnName("provenance").IsRequired();
+            entity.Property(candidate => candidate.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.HasIndex(candidate => candidate.Language)
+                .HasDatabaseName("idx_ingredient_translations_language");
+
+            entity.HasOne(candidate => candidate.Ingredient)
+                .WithMany(ingredient => ingredient.Translations)
+                .HasForeignKey(candidate => candidate.IngredientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RecipeCombinationTranslationEntity>(entity =>
+        {
+            entity.ToTable("recipe_combination_translations");
+            entity.HasKey(candidate => new { candidate.CombinationId, candidate.Language });
+
+            entity.Property(candidate => candidate.CombinationId).HasColumnName("combination_id");
+            entity.Property(candidate => candidate.Language).HasColumnName("language");
+            entity.Property(candidate => candidate.Name).HasColumnName("name").IsRequired();
+            entity.Property(candidate => candidate.Description).HasColumnName("description");
+            entity.Property(candidate => candidate.Notes).HasColumnName("notes");
+            entity.Property(candidate => candidate.TranslationVersion).HasColumnName("translation_version");
+            entity.Property(candidate => candidate.ContentHash).HasColumnName("content_hash").IsRequired();
+            entity.Property(candidate => candidate.Provenance).HasColumnName("provenance").IsRequired();
+            entity.Property(candidate => candidate.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.HasIndex(candidate => candidate.Language)
+                .HasDatabaseName("idx_recipe_combination_translations_language");
+
+            entity.HasOne(candidate => candidate.RecipeCombination)
+                .WithMany(combination => combination.Translations)
+                .HasForeignKey(candidate => candidate.CombinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TagTranslationEntity>(entity =>
+        {
+            entity.ToTable("tag_translations");
+            entity.HasKey(candidate => new { candidate.TagKey, candidate.Language });
+
+            entity.Property(candidate => candidate.TagKey).HasColumnName("tag_key");
+            entity.Property(candidate => candidate.Language).HasColumnName("language");
+            entity.Property(candidate => candidate.DisplayName).HasColumnName("display_name").IsRequired();
+            entity.Property(candidate => candidate.TranslationVersion).HasColumnName("translation_version");
+            entity.Property(candidate => candidate.ContentHash).HasColumnName("content_hash").IsRequired();
+            entity.Property(candidate => candidate.Provenance).HasColumnName("provenance").IsRequired();
+            entity.Property(candidate => candidate.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.HasIndex(candidate => candidate.Language)
+                .HasDatabaseName("idx_tag_translations_language");
+        });
+
+        modelBuilder.Entity<UnitTranslationEntity>(entity =>
+        {
+            entity.ToTable("unit_translations");
+            entity.HasKey(candidate => new { candidate.UnitKey, candidate.Language });
+
+            entity.Property(candidate => candidate.UnitKey).HasColumnName("unit_key");
+            entity.Property(candidate => candidate.Language).HasColumnName("language");
+            entity.Property(candidate => candidate.DisplayName).HasColumnName("display_name").IsRequired();
+            entity.Property(candidate => candidate.TranslationVersion).HasColumnName("translation_version");
+            entity.Property(candidate => candidate.ContentHash).HasColumnName("content_hash").IsRequired();
+            entity.Property(candidate => candidate.Provenance).HasColumnName("provenance").IsRequired();
+            entity.Property(candidate => candidate.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.HasIndex(candidate => candidate.Language)
+                .HasDatabaseName("idx_unit_translations_language");
+        });
+
+        modelBuilder.Entity<RecipeIngredientLocalizationEntity>(entity =>
+        {
+            entity.ToTable("recipe_ingredient_localizations");
+            entity.HasKey(candidate => new { candidate.RecipeId, candidate.IngredientId, candidate.Language });
+
+            entity.Property(candidate => candidate.RecipeId).HasColumnName("recipe_id");
+            entity.Property(candidate => candidate.IngredientId).HasColumnName("ingredient_id");
+            entity.Property(candidate => candidate.Language).HasColumnName("language");
+            entity.Property(candidate => candidate.AmountText).HasColumnName("amount_text");
+            entity.Property(candidate => candidate.UnitText).HasColumnName("unit_text");
+            entity.Property(candidate => candidate.Notes).HasColumnName("notes");
+            entity.Property(candidate => candidate.SourceText).HasColumnName("source_text");
+            entity.Property(candidate => candidate.TranslationVersion).HasColumnName("translation_version");
+            entity.Property(candidate => candidate.ContentHash).HasColumnName("content_hash").IsRequired();
+            entity.Property(candidate => candidate.Provenance).HasColumnName("provenance").IsRequired();
+            entity.Property(candidate => candidate.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.HasOne(candidate => candidate.RecipeIngredient)
+                .WithMany(recipeIngredient => recipeIngredient.Localizations)
+                .HasForeignKey(candidate => new { candidate.RecipeId, candidate.IngredientId })
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RecipeIndexMetadataEntity>(entity =>
+        {
+            entity.ToTable("recipe_index_metadata");
+            entity.HasKey(candidate => candidate.RecipeId);
+
+            entity.Property(candidate => candidate.RecipeId).HasColumnName("recipe_id");
+            entity.Property(candidate => candidate.LanguageCoverage).HasColumnName("language_coverage").IsRequired();
+            entity.Property(candidate => candidate.ProjectionFingerprint).HasColumnName("projection_fingerprint").IsRequired();
+            entity.Property(candidate => candidate.ProjectionSchemaVersion).HasColumnName("projection_schema_version").IsRequired();
+            entity.Property(candidate => candidate.ProjectionGeneratedAtUtc).HasColumnName("projection_generated_at_utc");
+
+            entity.HasOne(candidate => candidate.Recipe)
+                .WithOne(recipe => recipe.IndexMetadata)
+                .HasForeignKey<RecipeIndexMetadataEntity>(candidate => candidate.RecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         base.OnModelCreating(modelBuilder);
     }

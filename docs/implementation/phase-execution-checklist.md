@@ -33,9 +33,9 @@ Run after each phase:
 
 Evidence:
 
-- Build run reference: dotnet build src/api/WebApi.DotNet/WebApi.DotNet.slnx -> succeeded after Phase 1 fixes.
-- Unit test run reference: Repository.DotNet.UnitTests passed (21/21), Services.DotNet.UnitTests passed (139/139), WebApi.DotNet.UnitTests passed (21/21; duration 15.6s).
-- Integration test run reference: WebApi.DotNet.IntegrationTests passed (43/43; failed 0; duration 214.4s).
+- Build run reference: dotnet build src/api/WebApi.DotNet/WebApi.DotNet.slnx -> succeeded (Phase 2 validation run, 2026-08-01).
+- Unit test run reference: Repository.DotNet.UnitTests passed (25/25), Services.DotNet.UnitTests passed (139/139), WebApi.DotNet.UnitTests passed (21/21).
+- Integration test run reference: WebApi.DotNet.IntegrationTests passed (46/46; failed 0; duration 228.7s).
 
 ## Phase 1 Checklist
 
@@ -56,20 +56,20 @@ Evidence:
 
 ## Phase 2 Checklist
 
-- [ ] Entry criteria from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) are true.
-- [ ] Deliverables from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) exist.
-- [ ] Exit criteria from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) are objectively satisfied.
-- [ ] Success metrics from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) are met.
-- [ ] Explicit non-goals from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) were respected.
-- [ ] Global Build And Test Gate passed for Phase 2.
+- [x] Entry criteria from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) are true.
+- [x] Deliverables from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) exist.
+- [x] Exit criteria from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) are objectively satisfied.
+- [x] Success metrics from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) are met.
+- [x] Explicit non-goals from [Phase 2](implementation-plan.md#phase-2-persistence-evolution-and-localized-repository-queries) were respected.
+- [x] Global Build And Test Gate passed for Phase 2.
 
 Evidence:
 
-- PR or commit(s):
-- Migrations compile/apply evidence:
-- Query/fallback tests evidence:
-- Deprecated paths removed:
-- Technical Debt Discovered updates (if any):
+- PR or commit(s): Working tree changes only in this session; no commit created yet.
+- Schema evolution evidence (SQL-first): Updated data/recipes.sqlite.sql with translation and index metadata tables and indexes; local workflow intentionally uses full DB rebuild from schema script rather than EF incremental migration history. Removed transient Phase 2 migration and its dedicated migration test from the working set.
+- Query/fallback tests evidence: LocalizedRecipeQueryServiceTests expanded for preferred language, fallback chain, canonical fallback, and strict mode; LocalizedRecipeQueryIntegrationTests added and passing within integration suite (46/46).
+- Deprecated paths removed: Touched API metadata provider path already uses ILocalizedRecipeQueryService; no remaining replaced repository query path usage in touched modules for localized recipe metadata flow.
+- Technical Debt Discovered updates (if any): Integration test output remains extremely verbose and occasionally time-intensive due to startup indexing/external dependency diagnostics; recommend log-level controls and targeted test-host feature flags in a later stabilization phase. SQL-first rebuild workflow means schema changes require recreating local DB instead of in-place upgrade steps.
 
 ## Phase 3 Checklist
 

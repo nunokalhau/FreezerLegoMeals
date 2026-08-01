@@ -24,4 +24,5 @@ public class RecipeIngredientEntity
     // Navigation properties
     public RecipeEntity Recipe { get; set; } = null!;
     public IngredientEntity Ingredient { get; set; } = null!;
+    public ICollection<RecipeIngredientLocalizationEntity> Localizations { get; set; } = new List<RecipeIngredientLocalizationEntity>();
 }

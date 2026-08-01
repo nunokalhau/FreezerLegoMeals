@@ -35,4 +35,6 @@ public class RecipeEntity
     // Navigation properties
     public ICollection<RecipeIngredientEntity> RecipeIngredients { get; set; } = new List<RecipeIngredientEntity>();
     public ICollection<RecipeCombinationItemEntity> RecipeCombinationItems { get; set; } = new List<RecipeCombinationItemEntity>();
+    public ICollection<RecipeTranslationEntity> Translations { get; set; } = new List<RecipeTranslationEntity>();
+    public RecipeIndexMetadataEntity? IndexMetadata { get; set; }
 }
