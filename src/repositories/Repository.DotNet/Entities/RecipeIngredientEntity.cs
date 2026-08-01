@@ -7,16 +7,19 @@ namespace Repository.DotNet.Entities;
 /// </summary>
 public class RecipeIngredientEntity
 {
-    [Key]
-    public int Id { get; set; }
-    
     public int RecipeId { get; set; }
     
     public int IngredientId { get; set; }
     
     public double? Amount { get; set; }
     
-    public string Unit { get; set; } = string.Empty;
+    public string? AmountText { get; set; }
+
+    public string? Unit { get; set; }
+
+    public string? Notes { get; set; }
+
+    public string? SourceText { get; set; }
     
     // Navigation properties
     public RecipeEntity Recipe { get; set; } = null!;

@@ -7,14 +7,13 @@ namespace Repository.DotNet.Entities;
 /// </summary>
 public class RecipeCombinationItemEntity
 {
-    [Key]
-    public int Id { get; set; }
-    
     public int CombinationId { get; set; }
     
     public int RecipeId { get; set; }
     
     public int Position { get; set; }
+
+    public string? Notes { get; set; }
     
     // Navigation properties
     public RecipeCombinationEntity RecipeCombination { get; set; } = null!;

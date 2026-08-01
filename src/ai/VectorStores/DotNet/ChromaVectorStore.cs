@@ -342,6 +342,11 @@ public sealed class ChromaVectorStore : IVectorStore
         return $"{BuildCollectionsPath()}/{Escape(collectionId)}/delete";
     }
 
+    private string BuildCollectionGetPath(string collectionId)
+    {
+        return $"{BuildCollectionsPath()}/{Escape(collectionId)}/get";
+    }
+
     private string BuildCollectionDeleteByIdPath(string collectionId)
     {
         return $"api/v2/tenants/{Escape(_options.Tenant)}/databases/{Escape(_options.Database)}/collections/by-id/{Escape(collectionId)}";
@@ -351,7 +356,38 @@ public sealed class ChromaVectorStore : IVectorStore
     {
         using var request = new HttpRequestMessage(HttpMethod.Delete, BuildCollectionDeleteByIdPath(collectionId));
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (response.IsSuccessStatusCode)
+            return;
+
+        // Some Chroma deployments reject collection deletion endpoints.
+        // In that case, clear the collection by deleting all document ids.
+        await ClearCollectionDocumentsAsync(collectionId, cancellationToken);
+    }
+
+    private async Task ClearCollectionDocumentsAsync(string collectionId, CancellationToken cancellationToken)
+    {
+        const int pageSize = 512;
+        while (true)
+        {
+            using var getResponse = await _httpClient.PostAsJsonAsync(
+                BuildCollectionGetPath(collectionId),
+                new GetRequestPayload(pageSize, 0, ["documents"]),
+                JsonOptions,
+                cancellationToken);
+            getResponse.EnsureSuccessStatusCode();
+
+            var payload = await getResponse.Content.ReadFromJsonAsync<GetResponse>(JsonOptions, cancellationToken);
+            var ids = payload?.Ids ?? [];
+            if (ids.Count == 0)
+                break;
+
+            using var deleteResponse = await _httpClient.PostAsJsonAsync(
+                BuildCollectionDeletePath(collectionId),
+                new DeleteRequestPayload(ids),
+                JsonOptions,
+                cancellationToken);
+            deleteResponse.EnsureSuccessStatusCode();
+        }
     }
 
     private static UpsertRequestPayload BuildUpsertPayload(
@@ -419,6 +455,14 @@ public sealed class ChromaVectorStore : IVectorStore
         IReadOnlyList<IReadOnlyDictionary<string, object?>>? Metadatas);
 
     private sealed record DeleteRequestPayload(
+        [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids);
+
+    private sealed record GetRequestPayload(
+        [property: JsonPropertyName("limit")] int Limit,
+        [property: JsonPropertyName("offset")] int Offset,
+        [property: JsonPropertyName("include")] IReadOnlyList<string> Include);
+
+    private sealed record GetResponse(
         [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids);
 
     private sealed record QueryResponse(

@@ -177,7 +177,6 @@ public static class IntegrationTestDbSeeder
 
         var combinationItem1 = new RecipeCombinationItemEntity
         {
-            Id = 1,
             CombinationId = 1,
             RecipeId = 1,
             Position = 1
@@ -185,7 +184,6 @@ public static class IntegrationTestDbSeeder
 
         var combinationItem2 = new RecipeCombinationItemEntity
         {
-            Id = 2,
             CombinationId = 1,
             RecipeId = 2,
             Position = 2
@@ -193,7 +191,6 @@ public static class IntegrationTestDbSeeder
 
         var combinationItem3 = new RecipeCombinationItemEntity
         {
-            Id = 3,
             CombinationId = 2,
             RecipeId = 3,
             Position = 1
@@ -201,7 +198,6 @@ public static class IntegrationTestDbSeeder
 
         var combinationItem4 = new RecipeCombinationItemEntity
         {
-            Id = 4,
             CombinationId = 1,
             RecipeId = 4,
             Position = 3

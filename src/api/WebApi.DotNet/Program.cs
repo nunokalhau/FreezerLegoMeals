@@ -125,7 +125,23 @@ builder.Services.AddHttpClient<IEmbeddingService, OllamaEmbeddingService>((servi
 });
 
 builder.Services.AddDbContext<FreezerLegoMealsContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
+
+    var normalized = connectionString.TrimStart();
+    if (normalized.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase)
+        || normalized.EndsWith(".db", StringComparison.OrdinalIgnoreCase)
+        || normalized.EndsWith(".sqlite", StringComparison.OrdinalIgnoreCase))
+    {
+        options.UseSqlite(connectionString);
+    }
+    else
+    {
+        options.UseSqlServer(connectionString);
+    }
+});
 
 builder.Services.AddHealthChecks();
 

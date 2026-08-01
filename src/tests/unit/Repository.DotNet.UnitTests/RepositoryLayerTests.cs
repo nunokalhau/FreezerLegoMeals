@@ -121,6 +121,18 @@ public class RepositoryLayerTests : IDisposable
     }
 
     [Fact]
+    public async Task FindRecipesWithIngredientsAsync_Finds_Recipes_With_Partial_Ingredient_Term()
+    {
+        // Act
+        var result = await _repository.FindRecipesWithIngredientsAsync(new[] { "chi" });
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.NotEmpty(result);
+        Assert.Contains(result, recipe => recipe.Name == "Chicken Fried Rice");
+    }
+
+    [Fact]
     public async Task GetCombinationsAsync_Returns_All_Combinations()
     {
         // Act

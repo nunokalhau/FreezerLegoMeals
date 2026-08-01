@@ -107,8 +107,8 @@ public class InMemoryDbContextFixture : IDisposable
         // Add recipe combination items
         var combinationItems = new List<RecipeCombinationItemEntity>
         {
-            new RecipeCombinationItemEntity { Id = 1, CombinationId = 1, RecipeId = 1, Position = 1 },
-            new RecipeCombinationItemEntity { Id = 2, CombinationId = 1, RecipeId = 2, Position = 2 }
+            new RecipeCombinationItemEntity { CombinationId = 1, RecipeId = 1, Position = 1 },
+            new RecipeCombinationItemEntity { CombinationId = 1, RecipeId = 2, Position = 2 }
         };
         
         Context.RecipeCombinationItems.AddRange(combinationItems);

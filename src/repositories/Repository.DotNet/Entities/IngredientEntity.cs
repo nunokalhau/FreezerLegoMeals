@@ -13,6 +13,8 @@ public class IngredientEntity
     [Required]
     [StringLength(255)]
     public string Name { get; set; } = string.Empty;
+
+    public string? Unit { get; set; }
     
     // Navigation properties
     public ICollection<RecipeIngredientEntity> RecipeIngredients { get; set; } = new List<RecipeIngredientEntity>();

@@ -33,6 +33,11 @@ public class AdminControllerIntegrationTests
         using var factory = CreateFactory(vectorStore, indexingService, "admin_test_collection");
         using var client = factory.CreateClient();
 
+        var operationsBeforeCall = operations.Count;
+        var ensureCallsBeforeCall = vectorStore.EnsureCalls;
+        var clearCallsBeforeCall = vectorStore.ClearCalls;
+        var indexCallsBeforeCall = indexingService.CallCount;
+
         var response = await client.PostAsJsonAsync("/api/admin/reindex", new { });
 
         response.EnsureSuccessStatusCode();
@@ -46,10 +51,11 @@ public class AdminControllerIntegrationTests
         Assert.Equal("admin_test_collection", payload.CollectionName);
         Assert.True(payload.ElapsedMs >= 0);
 
-        Assert.Equal(new[] { "ensure", "clear", "index" }, operations);
-        Assert.Equal(1, vectorStore.EnsureCalls);
-        Assert.Equal(1, vectorStore.ClearCalls);
-        Assert.Equal(1, indexingService.CallCount);
+        var reindexOperations = operations.Skip(operationsBeforeCall).ToArray();
+        Assert.Equal(new[] { "ensure", "clear", "index" }, reindexOperations);
+        Assert.Equal(ensureCallsBeforeCall + 1, vectorStore.EnsureCalls);
+        Assert.Equal(clearCallsBeforeCall + 1, vectorStore.ClearCalls);
+        Assert.Equal(indexCallsBeforeCall + 1, indexingService.CallCount);
     }
 
     [Fact]
@@ -64,17 +70,20 @@ public class AdminControllerIntegrationTests
         using var factory = CreateFactory(vectorStore, indexingService, "recipe_embeddings");
         using var client = factory.CreateClient();
 
+        var indexCallsBeforeAssistant = indexingService.CallCount;
+
         var assistantResponse = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
         {
             Message = " "
         });
 
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, assistantResponse.StatusCode);
-        Assert.Equal(0, indexingService.CallCount);
+        Assert.Equal(indexCallsBeforeAssistant, indexingService.CallCount);
 
+        var indexCallsBeforeAdmin = indexingService.CallCount;
         var adminResponse = await client.PostAsJsonAsync("/api/admin/reindex", new { });
         adminResponse.EnsureSuccessStatusCode();
-        Assert.Equal(1, indexingService.CallCount);
+        Assert.Equal(indexCallsBeforeAdmin + 1, indexingService.CallCount);
     }
 
     private static WebApplicationFactory<Program> CreateFactory(

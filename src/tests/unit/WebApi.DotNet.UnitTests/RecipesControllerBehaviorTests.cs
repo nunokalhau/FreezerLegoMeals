@@ -31,7 +31,7 @@ public class RecipesControllerBehaviorTests
         service.Setup(x => x.GetRecipeByIdAsync(55)).ReturnsAsync((Recipe?)null);
         var controller = new RecipesController(service.Object);
 
-        var result = await controller.GetRecipeById(new GetRecipeByIdRequest { Id = 55 });
+        var result = await controller.GetRecipeById(55);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
@@ -45,7 +45,7 @@ public class RecipesControllerBehaviorTests
             .ReturnsAsync(new RecipeDetailsResponse { Error = "No recipe found with ID 7" });
         var controller = new RecipesController(service.Object);
 
-        var result = await controller.GetRecipeDetails(new GetRecipeByIdRequest { Id = 7 });
+        var result = await controller.GetRecipeDetails(7);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }

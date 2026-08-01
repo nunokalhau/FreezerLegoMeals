@@ -14,7 +14,9 @@ public class RecipeCombinationEntity
     [StringLength(255)]
     public string Name { get; set; } = string.Empty;
     
-    public string Description { get; set; } = string.Empty;
+    public string? Description { get; set; }
+
+    public string? Notes { get; set; }
     
     // Navigation properties
     public ICollection<RecipeCombinationItemEntity> RecipeCombinationItems { get; set; } = new List<RecipeCombinationItemEntity>();

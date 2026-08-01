@@ -17,9 +17,9 @@ public interface IRecipeRepository
     Task<Recipe?> GetRecipeByIdAsync(int id);
     Task<IEnumerable<Recipe>> FindRecipesWithIngredientsAsync(IEnumerable<string> ingredients);
     Task<IEnumerable<RecipeCombination>> GetCombinationsAsync();
-    Task<RecipeCombination> GetCombinationByIdAsync(int id);
+    Task<RecipeCombination?> GetCombinationByIdAsync(int id);
     Task<IEnumerable<Ingredient>> GetIngredientsAsync();
-    Task<Ingredient> GetIngredientByNameAsync(string name);
+    Task<Ingredient?> GetIngredientByNameAsync(string name);
 }
 
 /// <summary>
@@ -65,22 +65,121 @@ public class RecipeRepository : IRecipeRepository
         var ingredientNames = ingredients
             .Where(i => !string.IsNullOrWhiteSpace(i))
             .Select(i => i.Trim().ToLower())
+            .Distinct()
             .ToList();
         if (!ingredientNames.Any()) return Enumerable.Empty<Recipe>();
 
+        // Match ingredient terms as partial text so queries like "tofu" match "tofu firme".
+        IQueryable<IngredientEntity> matchingIngredients = _context.Ingredients.Where(_ => false);
+        foreach (var ingredientTerm in ingredientNames)
+        {
+            var currentTerm = ingredientTerm;
+            matchingIngredients = matchingIngredients.Union(
+                _context.Ingredients.Where(i => i.Name.ToLower().Contains(currentTerm)));
+        }
+
+        var matchingIngredientIds = await matchingIngredients
+            .Select(i => i.Id)
+            .Distinct()
+            .ToListAsync();
+
+        if (!matchingIngredientIds.Any())
+        {
+            return Enumerable.Empty<Recipe>();
+        }
+
         var recipeIds = await _context.RecipeIngredients
-            .Where(ri => ingredientNames.Contains(ri.Ingredient.Name.ToLower()))
+            .Where(ri => matchingIngredientIds.Contains(ri.IngredientId))
             .Select(ri => ri.RecipeId)
             .Distinct()
             .ToListAsync();
 
-        var entities = await _context.Recipes
-            .Include(r => r.RecipeIngredients)
-                .ThenInclude(ri => ri.Ingredient)
-            .Where(r => recipeIds.Contains(r.Id))
+        if (!recipeIds.Any())
+        {
+            return Enumerable.Empty<Recipe>();
+        }
+
+        var recipeRows = await _context.RecipeIngredients
+            .AsNoTracking()
+            .Where(ri => recipeIds.Contains(ri.RecipeId))
+            .Select(ri => new
+            {
+                ri.RecipeId,
+                RecipeName = ri.Recipe.Name,
+                RecipeSourcePath = ri.Recipe.SourcePath,
+                RecipeTags = ri.Recipe.Tags,
+                RecipeServings = ri.Recipe.Servings,
+                RecipeTimeToPrepare = ri.Recipe.TimeToPrepare,
+                RecipePrepping = ri.Recipe.Prepping,
+                RecipeFreezingNotes = ri.Recipe.FreezingNotes,
+                RecipeReheatNotes = ri.Recipe.ReheatNotes,
+                RecipeCombinations = ri.Recipe.Combinations,
+                RecipeNotes = ri.Recipe.Notes,
+                ri.IngredientId,
+                ri.Amount,
+                ri.Unit,
+                IngredientName = ri.Ingredient.Name
+            })
             .ToListAsync();
 
-        return entities.Select(e => MapRecipe(e));
+        var recipes = recipeRows
+            .GroupBy(r => new
+            {
+                r.RecipeId,
+                r.RecipeName,
+                r.RecipeSourcePath,
+                r.RecipeTags,
+                r.RecipeServings,
+                r.RecipeTimeToPrepare,
+                r.RecipePrepping,
+                r.RecipeFreezingNotes,
+                r.RecipeReheatNotes,
+                r.RecipeCombinations,
+                r.RecipeNotes
+            })
+            .Select(group =>
+            {
+                var recipe = new Recipe
+                {
+                    Id = group.Key.RecipeId,
+                    Name = group.Key.RecipeName,
+                    SourcePath = group.Key.RecipeSourcePath,
+                    Tags = group.Key.RecipeTags ?? string.Empty,
+                    Servings = group.Key.RecipeServings,
+                    TimeToPrepare = group.Key.RecipeTimeToPrepare,
+                    Prepping = group.Key.RecipePrepping ?? string.Empty,
+                    FreezingNotes = group.Key.RecipeFreezingNotes ?? string.Empty,
+                    ReheatNotes = group.Key.RecipeReheatNotes ?? string.Empty,
+                    Combinations = group.Key.RecipeCombinations ?? string.Empty,
+                    Notes = group.Key.RecipeNotes ?? string.Empty,
+                    RecipeIngredients = new List<RecipeIngredient>(),
+                    RecipeCombinationItems = new List<RecipeCombinationItem>()
+                };
+
+                foreach (var row in group)
+                {
+                    recipe.RecipeIngredients.Add(new RecipeIngredient
+                    {
+                        RecipeId = row.RecipeId,
+                        IngredientId = row.IngredientId,
+                        Amount = row.Amount,
+                        Unit = row.Unit,
+                        Recipe = recipe,
+                        Ingredient = new Ingredient
+                        {
+                            Id = row.IngredientId,
+                            Name = row.IngredientName,
+                            RecipeIngredients = new List<RecipeIngredient>()
+                        }
+                    });
+                }
+
+                return recipe;
+            })
+            .OrderBy(r => r.Id)
+            .ToList();
+
+        return recipes;
     }
 
     public async Task<IEnumerable<RecipeCombination>> GetCombinationsAsync()
@@ -93,7 +192,7 @@ public class RecipeRepository : IRecipeRepository
         return entities.Select(e => MapRecipeCombination(e));
     }
 
-    public async Task<RecipeCombination> GetCombinationByIdAsync(int id)
+    public async Task<RecipeCombination?> GetCombinationByIdAsync(int id)
     {
         var entity = await _context.RecipeCombinations
             .Include(rc => rc.RecipeCombinationItems)
@@ -111,7 +210,7 @@ public class RecipeRepository : IRecipeRepository
         return entities.Select(e => MapIngredient(e));
     }
 
-    public async Task<Ingredient> GetIngredientByNameAsync(string name)
+    public async Task<Ingredient?> GetIngredientByNameAsync(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         
@@ -130,14 +229,14 @@ public class RecipeRepository : IRecipeRepository
             Id = entity.Id,
             Name = entity.Name,
             SourcePath = entity.SourcePath,
-            Tags = entity.Tags,
+            Tags = entity.Tags ?? string.Empty,
             Servings = entity.Servings,
             TimeToPrepare = entity.TimeToPrepare,
-            Prepping = entity.Prepping,
-            FreezingNotes = entity.FreezingNotes,
-            ReheatNotes = entity.ReheatNotes,
-            Combinations = entity.Combinations,
-            Notes = entity.Notes,
+            Prepping = entity.Prepping ?? string.Empty,
+            FreezingNotes = entity.FreezingNotes ?? string.Empty,
+            ReheatNotes = entity.ReheatNotes ?? string.Empty,
+            Combinations = entity.Combinations ?? string.Empty,
+            Notes = entity.Notes ?? string.Empty,
             RecipeIngredients = new List<RecipeIngredient>(),
             RecipeCombinationItems = new List<RecipeCombinationItem>()
         };
@@ -166,7 +265,7 @@ public class RecipeRepository : IRecipeRepository
             {
                 var domainCombinationItem = new RecipeCombinationItem
                 {
-                    Id = combinationItem.Id,
+                    Id = 0,
                     CombinationId = combinationItem.CombinationId,
                     RecipeId = combinationItem.RecipeId,
                     Position = combinationItem.Position,
@@ -221,7 +320,7 @@ public class RecipeRepository : IRecipeRepository
         {
             Id = entity.Id,
             Name = entity.Name,
-            Description = entity.Description,
+            Description = entity.Description ?? string.Empty,
             RecipeCombinationItems = new List<RecipeCombinationItem>()
         };
 
@@ -231,7 +330,7 @@ public class RecipeRepository : IRecipeRepository
             {
                 var domainCombinationItem = new RecipeCombinationItem
                 {
-                    Id = combinationItem.Id,
+                    Id = 0,
                     CombinationId = combinationItem.CombinationId,
                     RecipeId = combinationItem.RecipeId,
                     Position = combinationItem.Position,

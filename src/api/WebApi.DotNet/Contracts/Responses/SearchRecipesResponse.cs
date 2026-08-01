@@ -1,5 +1,3 @@
-using Domain.DotNet;
-
 namespace WebApi.DotNet.Contracts.Responses;
 
 /// <summary>
@@ -10,7 +8,7 @@ public class SearchRecipesResponse
     /// <summary>
     /// List of matching recipes.
     /// </summary>
-    public IEnumerable<Recipe> Recipes { get; set; } = new List<Recipe>();
+    public IEnumerable<RecipeSearchItemResponse> Recipes { get; set; } = new List<RecipeSearchItemResponse>();
     
     /// <summary>
     /// Total number of recipes found.

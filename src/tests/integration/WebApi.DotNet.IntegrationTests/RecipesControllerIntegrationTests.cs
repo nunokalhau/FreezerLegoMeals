@@ -121,6 +121,16 @@ public class RecipesControllerIntegrationTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task GetRecipeById_With_Literal_Path_Placeholder_Returns_NotFound()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/recipes/{id}");
+
+        // Assert
+        Assert.Equal(404, (int)response.StatusCode);
+    }
+
+    [Fact]
     public async Task FindMealsWithIngredients_With_Valid_Query_Returns_Success()
     {
         // Arrange
@@ -210,6 +220,16 @@ public class RecipesControllerIntegrationTests : BaseIntegrationTest
 
         // Act
         var response = await _client.GetAsync($"/api/recipes/{getDetailRequest.Id}/details");
+
+        // Assert
+        Assert.Equal(404, (int)response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetRecipeDetails_With_Literal_Path_Placeholder_Returns_NotFound()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/recipes/{id}/details");
 
         // Assert
         Assert.Equal(404, (int)response.StatusCode);

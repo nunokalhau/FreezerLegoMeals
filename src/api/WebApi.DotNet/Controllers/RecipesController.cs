@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Services.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
-using Domain.DotNet;
 
 namespace WebApi.DotNet.Controllers;
 
@@ -40,11 +39,12 @@ public class RecipesController : ControllerBase
             return BadRequest("At least one ingredient is required");
 
         var recipes = await _mealService.SearchRecipesByIngredientsAsync(ingredients);
+        var mappedRecipes = recipes.Select(MapSearchRecipe).ToList();
         
         var response = new SearchRecipesResponse
         {
-            Recipes = recipes,
-            TotalRecipesFound = recipes?.Count() ?? 0
+            Recipes = mappedRecipes,
+            TotalRecipesFound = mappedRecipes.Count
         };
 
         return Ok(response);
@@ -53,15 +53,15 @@ public class RecipesController : ControllerBase
     /// <summary>
     /// Get a specific recipe by ID.
     /// </summary>
-    /// <param name="request">The request containing the recipe ID.</param>
+    /// <param name="id">The recipe ID.</param>
     /// <returns>The recipe if found, null otherwise.</returns>
-    [HttpGet("{id}")]
-    public async Task<ActionResult<GetRecipeByIdResponse>> GetRecipeById([FromRoute] GetRecipeByIdRequest request)
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<GetRecipeByIdResponse>> GetRecipeById([FromRoute] int id)
     {
-        if (request == null || request.Id <= 0)
+        if (id <= 0)
             return BadRequest("Recipe ID is required");
 
-        var recipe = await _mealService.GetRecipeByIdAsync(request.Id);
+        var recipe = await _mealService.GetRecipeByIdAsync(id);
         
         if (recipe == null)
             return NotFound("Recipe not found");
@@ -89,31 +89,61 @@ public class RecipesController : ControllerBase
             return BadRequest("Query is required");
 
         var result = await _mealService.FindMealsWithIngredientsAsync(request.Query);
+        var mappedRecipes = (result.Recipes ?? Enumerable.Empty<Domain.DotNet.Recipe>())
+            .Select(MapSearchRecipe)
+            .ToList();
 
         var response = new FindMealsWithIngredientsResponse
         {
             Query = result.Query ?? request.Query,
-            TotalRecipesFound = result.TotalRecipesFound,
+            TotalRecipesFound = mappedRecipes.Count,
             SearchTerms = result.SearchTerms ?? Enumerable.Empty<string>(),
-            Recipes = result.Recipes ?? Enumerable.Empty<Recipe>(),
+            Recipes = mappedRecipes,
             Message = result.Message ?? string.Empty
         };
 
         return Ok(response);
     }
 
+    private static RecipeSearchItemResponse MapSearchRecipe(Domain.DotNet.Recipe recipe)
+    {
+        return new RecipeSearchItemResponse
+        {
+            Id = recipe.Id,
+            Name = recipe.Name,
+            SourcePath = recipe.SourcePath,
+            Tags = recipe.Tags,
+            Servings = recipe.Servings,
+            TimeToPrepare = recipe.TimeToPrepare,
+            Prepping = recipe.Prepping,
+            FreezingNotes = recipe.FreezingNotes,
+            ReheatNotes = recipe.ReheatNotes,
+            Combinations = recipe.Combinations,
+            Notes = recipe.Notes,
+            RecipeIngredients = (recipe.RecipeIngredients ?? Enumerable.Empty<Domain.DotNet.RecipeIngredient>())
+                .Select(ri => new RecipeSearchIngredientResponse
+                {
+                    IngredientId = ri.IngredientId,
+                    Amount = ri.Amount,
+                    Unit = ri.Unit,
+                    Name = ri.Ingredient?.Name ?? string.Empty
+                })
+                .ToList()
+        };
+    }
+
     /// <summary>
     /// Get detailed information about a specific recipe.
     /// </summary>
-    /// <param name="request">The request containing the recipe ID.</param>
+    /// <param name="id">The recipe ID.</param>
     /// <returns>Detailed recipe information.</returns>
-    [HttpGet("{id}/details")]
-    public async Task<ActionResult<GetRecipeDetailsResponse>> GetRecipeDetails([FromRoute] GetRecipeByIdRequest request)
+    [HttpGet("{id:int}/details")]
+    public async Task<ActionResult<GetRecipeDetailsResponse>> GetRecipeDetails([FromRoute] int id)
     {
-        if (request == null || request.Id <= 0)
+        if (id <= 0)
             return BadRequest("Recipe ID is required");
 
-        var result = await _mealService.GetRecipeDetailsAsync(request.Id);
+        var result = await _mealService.GetRecipeDetailsAsync(id);
 
         if (result.Recipe == null)
             return NotFound("Recipe details not found");
