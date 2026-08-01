@@ -69,6 +69,7 @@ builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.AddScoped<IQueryRewriter, QueryRewriterService>();
 builder.Services.AddScoped<IKeywordSearchService, KeywordSearchService>();
 builder.Services.AddScoped<IReranker, OllamaRerankerService>();
+builder.Services.AddScoped<IAnswerGroundingService, AnswerGroundingService>();
 builder.Services.AddScoped<RetrievalService>();
 builder.Services.AddSingleton<IRecipeDocumentBuilder, RecipeDocumentBuilder>();
 builder.Services.AddScoped<IRecipeIndexingService, RecipeIndexingService>();

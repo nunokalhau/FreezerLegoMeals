@@ -10,12 +10,14 @@ namespace Orchestration.DotNet;
 public sealed class MealPlanningAgent : IAgent
 {
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
+    private const string NoSupportResponse = "The repository does not contain enough information to answer that question.";
     private readonly IOllamaClient _ollamaClient;
     private readonly IToolExecutor _toolExecutor;
     private readonly IRoutingPolicy _routingPolicy;
     private readonly ILogger<MealPlanningAgent> _logger;
     private readonly IRetrievalService? _retrievalService;
     private readonly IPromptBuilder? _promptBuilder;
+    private readonly IAnswerGroundingService? _answerGroundingService;
 
     public MealPlanningAgent(
         IOllamaClient ollamaClient,
@@ -23,7 +25,8 @@ public sealed class MealPlanningAgent : IAgent
         IRoutingPolicy routingPolicy,
         ILogger<MealPlanningAgent> logger,
         IRetrievalService? retrievalService = null,
-        IPromptBuilder? promptBuilder = null)
+        IPromptBuilder? promptBuilder = null,
+        IAnswerGroundingService? answerGroundingService = null)
     {
         _ollamaClient = ollamaClient ?? throw new ArgumentNullException(nameof(ollamaClient));
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
@@ -31,6 +34,7 @@ public sealed class MealPlanningAgent : IAgent
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _retrievalService = retrievalService;
         _promptBuilder = promptBuilder;
+        _answerGroundingService = answerGroundingService;
     }
 
     public string Name => "MealPlanningAgent";
@@ -85,7 +89,7 @@ public sealed class MealPlanningAgent : IAgent
                     steps.Add("Retrieval");
                     steps.Add("Prompt Builder");
                     steps.Add("RAG");
-                    var ragResult = await AnswerWithRetrievalAsync(context, cancellationToken);
+                    var ragResult = await AnswerWithRetrievalAsync(context, activity, cancellationToken);
                     content = ragResult.Response;
                     retrievedRecipes.AddRange(ragResult.RetrievedRecipes);
                     _logger.LogInformation(
@@ -179,7 +183,7 @@ public sealed class MealPlanningAgent : IAgent
         return false;
     }
 
-    private async Task<(string Response, IReadOnlyList<RetrievedRecipeInfo> RetrievedRecipes)> AnswerWithRetrievalAsync(OrchestratorContext context, CancellationToken cancellationToken)
+    private async Task<(string Response, IReadOnlyList<RetrievedRecipeInfo> RetrievedRecipes)> AnswerWithRetrievalAsync(OrchestratorContext context, Activity? activity, CancellationToken cancellationToken)
     {
         var retrieval = await _retrievalService!.RetrieveAsync(context.UserRequest, cancellationToken);
         var retrievedRecipes = retrieval.Sources
@@ -191,7 +195,9 @@ public sealed class MealPlanningAgent : IAgent
                 "{AgentName} retrieval yielded no relevant context correlation={CorrelationId}",
                 Name,
                 context.CorrelationId);
-            return ("The repository does not contain enough information to answer that question.\n\nSources: none", retrievedRecipes);
+            activity?.SetTag("grounding.grounded", false);
+            activity?.SetTag("grounding.unsupported_claims_count", 1);
+            return ($"{NoSupportResponse}\n\nSources: none", retrievedRecipes);
         }
 
         var prompt = _promptBuilder!.Build(context.UserRequest, retrieval.Recipes);
@@ -201,8 +207,26 @@ public sealed class MealPlanningAgent : IAgent
             new ConversationMessage(ConversationRole.User, prompt, now)
         ], [], cancellationToken);
         var content = string.IsNullOrWhiteSpace(response.Content)
-            ? "The repository does not contain enough information to answer that question."
+            ? NoSupportResponse
             : response.Content.Trim();
+
+        var grounding = _answerGroundingService is null
+            ? new AnswerGroundingResult(true, 0)
+            : await _answerGroundingService.ValidateAsync(content, retrieval.Recipes, cancellationToken);
+
+        _logger.LogInformation(
+            "{AgentName} answer grounding correlation={CorrelationId} grounded={Grounded} unsupportedClaimsCount={UnsupportedClaimsCount}",
+            Name,
+            context.CorrelationId,
+            grounding.Grounded,
+            grounding.UnsupportedClaimsCount);
+        activity?.SetTag("grounding.grounded", grounding.Grounded);
+        activity?.SetTag("grounding.unsupported_claims_count", grounding.UnsupportedClaimsCount);
+
+        if (!grounding.Grounded)
+        {
+            return ($"{NoSupportResponse}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
+        }
 
         _logger.LogInformation(
             "{AgentName} retrieval-backed answer correlation={CorrelationId} sourceCount={SourceCount}",

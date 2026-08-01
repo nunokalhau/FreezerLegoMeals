@@ -114,12 +114,14 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
                 services.AddSingleton<IVectorStore>(vectorStore);
                 services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
                 services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("spicy chicken freezer recipes"));
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(true, 0));
             });
         });
 
@@ -167,12 +169,14 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
                 services.AddSingleton<IVectorStore>(vectorStore);
                 services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
                 services.AddSingleton<IQueryRewriter, ThrowingQueryRewriter>();
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(true, 0));
             });
         });
 
@@ -217,6 +221,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IKeywordSearchService>();
                 services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
@@ -227,6 +232,7 @@ public class AssistantControllerIntegrationTests
                     new KeywordSearchResult("2", 3),
                     new KeywordSearchResult("1", 2)
                 ]));
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(true, 0));
             });
         });
 
@@ -282,6 +288,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService, RecordingEmbeddingService>();
@@ -289,6 +296,7 @@ public class AssistantControllerIntegrationTests
                 services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
                 services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("chicken freezer meals"));
                 services.AddSingleton<IReranker>(new StubReranker(["2", "1", "3"]));
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(true, 0));
             });
         });
 
@@ -313,6 +321,58 @@ public class AssistantControllerIntegrationTests
         Assert.True(sourceThree >= 0);
         Assert.True(sourceOne < sourceTwo);
         Assert.True(sourceTwo < sourceThree);
+    }
+
+    [Fact]
+    public async Task Chat_WithRepositoryQuestion_WhenAnswerIsUngrounded_ReturnsSafeResponse()
+    {
+        var vectorStore = new RecordingVectorStore([
+            new VectorMatch("1", 0.95)
+        ]);
+        var metadataProvider = new StubMetadataProvider();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantGroundingIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
+                services.AddSingleton<IOllamaClient, UnsupportedClaimOllamaClient>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService, RecordingEmbeddingService>();
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("spicy chicken meals"));
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(false, 2));
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "What chicken recipes do you have?"
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.Contains("repository does not contain enough information", payload.Response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Sources:", payload.Response);
+        Assert.DoesNotContain("salmon", payload.Response, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -834,6 +894,34 @@ public class AssistantControllerIntegrationTests
                 .ToList();
 
             return Task.FromResult<IReadOnlyList<RetrievalRecipe>>(ordered);
+        }
+    }
+
+    private sealed class StubAnswerGroundingService : IAnswerGroundingService
+    {
+        private readonly AnswerGroundingResult _result;
+
+        public StubAnswerGroundingService(bool grounded, int unsupportedClaimsCount)
+        {
+            _result = new AnswerGroundingResult(grounded, unsupportedClaimsCount);
+        }
+
+        public Task<AnswerGroundingResult> ValidateAsync(string answer, IReadOnlyList<RetrievalRecipe> retrievedRecipes, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class UnsupportedClaimOllamaClient : IOllamaClient
+    {
+        private int _calls;
+
+        public Task<OllamaChatResult> ChatAsync(string? model, IReadOnlyList<ConversationMessage> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+        {
+            _calls++;
+            return Task.FromResult(_calls == 1
+                ? new OllamaChatResult("draft response", [])
+                : new OllamaChatResult("This meal includes salmon and quinoa.", []));
         }
     }
 

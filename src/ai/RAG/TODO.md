@@ -21,6 +21,7 @@ RAG in this repository is now implemented and productionized first in .NET. Pyth
 - Query rewriting is implemented for .NET via `IQueryRewriter` and `QueryRewriterService`, and `RetrievalService` now rewrites semantic search queries with fallback to the original user query on rewrite failure.
 - Hybrid retrieval is implemented for .NET via `KeywordSearchService` + `RetrievalService` reciprocal rank fusion (RRF) that merges semantic and keyword rankings into a unified ranked list.
 - Retrieval reranking is implemented for .NET via `IReranker` + `OllamaRerankerService`, and `RetrievalService` now applies a timeout-protected reranking stage with fallback to the original ranking and diagnostic logging.
+- Answer grounding is implemented for .NET via `IAnswerGroundingService` + `AnswerGroundingService`, and `MealPlanningAgent` now validates retrieval-backed answers, rejects unsupported claims, and returns a safe no-support response when grounding fails.
 
 ## Hallucination Prevention
 

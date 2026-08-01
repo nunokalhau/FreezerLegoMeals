@@ -132,6 +132,85 @@ public class AssistantServiceTests
     }
 
     [Fact]
+    public async Task ChatAsync_WithUnsupportedRagClaims_ReturnsSafeNoSupportResponse()
+    {
+        var ollamaClient = new Mock<IOllamaClient>();
+        ollamaClient
+            .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("This includes salmon and quinoa.", []));
+        var retrievalService = new Mock<IRetrievalService>();
+        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(
+                "What spicy chicken meal can I cook?",
+                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
+                [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
+        var promptBuilder = new Mock<IPromptBuilder>();
+        promptBuilder.Setup(builder => builder.Build(It.IsAny<string>(), It.IsAny<IReadOnlyList<RetrievalRecipe>>()))
+            .Returns("rag prompt");
+        var grounding = new Mock<IAnswerGroundingService>();
+        grounding.Setup(service => service.ValidateAsync(
+                "This includes salmon and quinoa.",
+                It.IsAny<IReadOnlyList<RetrievalRecipe>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AnswerGroundingResult(false, 1));
+        var toolExecutor = new Mock<IToolExecutor>();
+        toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
+        var service = CreateService(
+            ollamaClient.Object,
+            new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
+            toolExecutor.Object,
+            retrievalService: retrievalService.Object,
+            promptBuilder: promptBuilder.Object,
+            answerGroundingService: grounding.Object);
+
+        var result = await service.ChatAsync("What spicy chicken meal can I cook?");
+
+        Assert.Contains("repository does not contain enough information", result.Response);
+        Assert.Contains("Sources:", result.Response);
+        Assert.Contains("1: Spicy Chicken", result.Response);
+    }
+
+    [Fact]
+    public async Task ChatAsync_WithSupportedRagClaims_ReturnsModelAnswer()
+    {
+        var ollamaClient = new Mock<IOllamaClient>();
+        ollamaClient
+            .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("Use the spicy chicken recipe.", []));
+        var retrievalService = new Mock<IRetrievalService>();
+        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(
+                "What spicy chicken meal can I cook?",
+                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
+                [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
+        var promptBuilder = new Mock<IPromptBuilder>();
+        promptBuilder.Setup(builder => builder.Build(It.IsAny<string>(), It.IsAny<IReadOnlyList<RetrievalRecipe>>()))
+            .Returns("rag prompt");
+        var grounding = new Mock<IAnswerGroundingService>();
+        grounding.Setup(service => service.ValidateAsync(
+                "Use the spicy chicken recipe.",
+                It.IsAny<IReadOnlyList<RetrievalRecipe>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AnswerGroundingResult(true, 0));
+        var toolExecutor = new Mock<IToolExecutor>();
+        toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
+        var service = CreateService(
+            ollamaClient.Object,
+            new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
+            toolExecutor.Object,
+            retrievalService: retrievalService.Object,
+            promptBuilder: promptBuilder.Object,
+            answerGroundingService: grounding.Object);
+
+        var result = await service.ChatAsync("What spicy chicken meal can I cook?");
+
+        Assert.Contains("Use the spicy chicken recipe.", result.Response);
+        Assert.Contains("Sources:", result.Response);
+    }
+
+    [Fact]
     public async Task ChatAsync_WithEmptyRetrieval_ReturnsNoRepositoryInformationMessage()
     {
         var ollamaClient = new Mock<IOllamaClient>();
@@ -249,7 +328,8 @@ public class AssistantServiceTests
         IToolExecutor toolExecutor,
         AssistantOptions? options = null,
         IRetrievalService? retrievalService = null,
-        IPromptBuilder? promptBuilder = null)
+        IPromptBuilder? promptBuilder = null,
+        IAnswerGroundingService? answerGroundingService = null)
     {
         var agent = new MealPlanningAgent(
             ollamaClient,
@@ -257,7 +337,8 @@ public class AssistantServiceTests
             new DefaultRoutingPolicy(),
             NullLogger<MealPlanningAgent>.Instance,
             retrievalService,
-            promptBuilder);
+            promptBuilder,
+            answerGroundingService);
         var orchestrator = new AssistantOrchestrator([agent], new DefaultRoutingPolicy(), NullLogger<AssistantOrchestrator>.Instance);
         return new AssistantService(
             conversationStore,
