@@ -7,7 +7,7 @@ This layer does not call an LLM, build prompts, maintain conversation memory, or
 ## Completed in .NET
 
 - `SemanticSearchService` orchestrates embedding generation, vector search, and metadata enrichment.
-- API endpoint coverage exists through `SemanticSearchController` and integration tests.
+- Assistant API integration coverage verifies semantic search through the internal RAG pipeline.
 
 ## Next Architectural Milestones
 

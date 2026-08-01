@@ -1,14 +1,17 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using AI.Memory.DotNet;
+using Embedding.DotNet;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orchestration.DotNet;
 using RAG.DotNet;
+using SemanticSearch.DotNet;
 using Services.DotNet;
 using StackExchange.Redis;
+using VectorStores.DotNet;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
 using Xunit;
@@ -90,8 +93,12 @@ public class AssistantControllerIntegrationTests
     }
 
     [Fact]
-    public async Task Chat_WithRepositoryQuestion_UsesRagAndKeepsPublicContract()
+    public async Task Chat_WithRepositoryQuestion_UsesEmbeddingsVectorSearchAndRag()
     {
+        var embeddingService = new RecordingEmbeddingService();
+        var vectorStore = new RecordingVectorStore();
+        var metadataProvider = new StubMetadataProvider();
+
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
@@ -101,11 +108,15 @@ public class AssistantControllerIntegrationTests
                 services.AddDbContext<FreezerLegoMealsContext>(options =>
                     options.UseInMemoryDatabase("AssistantRagIntegrationTestDatabase"));
                 services.RemoveAll<IOllamaClient>();
-                services.RemoveAll<IRetrievalService>();
                 services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
-                services.AddSingleton<IRetrievalService, StubRetrievalService>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService>(embeddingService);
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
             });
         });
 
@@ -126,6 +137,73 @@ public class AssistantControllerIntegrationTests
         Assert.Contains("Use the spicy chicken recipe.", payload.Response);
         Assert.Contains("Sources:", payload.Response);
         Assert.Contains("1: Spicy Chicken", payload.Response);
+        Assert.Equal("What spicy chicken meal can I cook?", embeddingService.LastText);
+        Assert.Equal(new[] { 1f, 0f }, vectorStore.LastEmbedding);
+        Assert.Equal(3, vectorStore.LastTopK);
+    }
+
+    [Fact]
+    public async Task Chat_WithToolRequest_ExecutesToolThroughAssistantPipeline()
+    {
+        var toolExecutor = new RecordingToolExecutor();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantToolIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IToolExecutor>();
+                services.AddSingleton<IOllamaClient, ToolCallingOllamaClient>();
+                services.AddSingleton<IToolExecutor>(toolExecutor);
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "Use the example tool"
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>();
+
+        Assert.NotNull(payload);
+        Assert.Equal("tool completed", payload.Response);
+        Assert.Equal("example_tool", toolExecutor.LastToolName);
+        Assert.Equal("hello", toolExecutor.LastParameters?["message"]);
+    }
+
+    [Theory]
+    [InlineData("/embeddings")]
+    [InlineData("/api/embeddings")]
+    [InlineData("/api/semantic-search")]
+    public async Task InternalAiEndpoints_AreNotExposed(string endpoint)
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(endpoint, new { text = "spicy chicken", query = "spicy chicken" });
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Swagger_ExposesAssistantAsOnlyPublicAiEndpoint()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        using var swagger = await client.GetFromJsonAsync<JsonDocument>("/swagger/v1/swagger.json");
+        var paths = swagger!.RootElement.GetProperty("paths");
+
+        Assert.True(paths.TryGetProperty("/api/Assistant/chat", out _));
+        Assert.False(paths.TryGetProperty("/embeddings", out _));
+        Assert.False(paths.TryGetProperty("/api/Embeddings", out _));
+        Assert.False(paths.TryGetProperty("/api/semantic-search", out _));
     }
 
     [Fact]
@@ -461,18 +539,68 @@ public class AssistantControllerIntegrationTests
         }
     }
 
-    private sealed class StubRetrievalService : IRetrievalService
+    private sealed class RecordingEmbeddingService : IEmbeddingService
     {
-        public Task<RetrievalResult> RetrieveAsync(string question, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new RetrievalResult(
-                question,
-                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
-                [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
+        public string? LastText { get; private set; }
+
+        public Task<EmbeddingResponse> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)
+        {
+            LastText = text;
+            return Task.FromResult(new EmbeddingResponse("test", 2, [1f, 0f]));
+        }
+    }
+
+    private sealed class RecordingVectorStore : IVectorStore
+    {
+        public IReadOnlyList<float>? LastEmbedding { get; private set; }
+        public int? LastTopK { get; private set; }
+
+        public Task<IReadOnlyList<VectorMatch>> SearchAsync(IReadOnlyList<float> queryEmbedding, int topK, CancellationToken cancellationToken = default)
+        {
+            LastEmbedding = queryEmbedding;
+            LastTopK = topK;
+            return Task.FromResult<IReadOnlyList<VectorMatch>>([new VectorMatch("1", 0.91)]);
+        }
+    }
+
+    private sealed class StubMetadataProvider : ISemanticRecipeMetadataProvider
+    {
+        public Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken dinner", "Dinner", "spicy", ["chicken"], "Slice", "45"));
     }
 
     private sealed class StubPromptBuilder : IPromptBuilder
     {
         public string Build(string question, IReadOnlyList<RetrievalRecipe> recipes) => "rag prompt";
+    }
+
+    private sealed class ToolCallingOllamaClient : IOllamaClient
+    {
+        private int _calls;
+
+        public Task<OllamaChatResult> ChatAsync(string? model, IReadOnlyList<ConversationMessage> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+        {
+            _calls++;
+            return Task.FromResult(_calls == 1
+                ? new OllamaChatResult("", [new AssistantToolCall("example_tool", new Dictionary<string, object?> { ["message"] = "hello" })])
+                : new OllamaChatResult("tool completed", []));
+        }
+    }
+
+    private sealed class RecordingToolExecutor : IToolExecutor
+    {
+        public string? LastToolName { get; private set; }
+        public IReadOnlyDictionary<string, object?>? LastParameters { get; private set; }
+
+        public IReadOnlyList<ToolDefinition> GetTools() =>
+            [new ToolDefinition { Name = "example_tool", Description = "Example tool" }];
+
+        public Task<ToolExecutionResult> ExecuteAsync(string toolName, IReadOnlyDictionary<string, object?>? parameters = null, CancellationToken cancellationToken = default)
+        {
+            LastToolName = toolName;
+            LastParameters = parameters;
+            return Task.FromResult(new ToolExecutionResult { Success = true, Tool = toolName, Output = new { ok = true } });
+        }
     }
 
     private sealed class ConversationCountingOrchestrator : IAssistantOrchestrator
