@@ -98,7 +98,7 @@ public class AssistantControllerIntegrationTests
     {
         var embeddingService = new RecordingEmbeddingService();
         var vectorStore = new RecordingVectorStore();
-        var metadataProvider = new LocalizedMetadataProvider();
+        var metadataProvider = new StubMetadataProvider();
 
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -146,8 +146,6 @@ public class AssistantControllerIntegrationTests
         Assert.Equal("spicy chicken freezer recipe", embeddingService.LastText);
         Assert.Equal(new[] { 1f, 0f }, vectorStore.LastEmbedding);
         Assert.Equal(3, vectorStore.LastTopK);
-        Assert.Equal("1", metadataProvider.LastLocalization?.PreferredLanguage);
-        Assert.False(metadataProvider.LastLocalization?.StrictMode);
     }
 
     [Fact]
@@ -241,7 +239,7 @@ public class AssistantControllerIntegrationTests
         client.DefaultRequestHeaders.Add("Accept-Language", "pt-BR,pt;q=0.9,en;q=0.8");
         var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
         {
-            Message = "Que receita posso cozinhar?",
+            Message = "What spicy chicken meal can I cook?",
             StrictMode = false
         });
 

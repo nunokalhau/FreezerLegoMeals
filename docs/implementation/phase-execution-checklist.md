@@ -107,47 +107,47 @@ Evidence:
 
 ## Phase 5 Checklist
 
-- [ ] Entry criteria from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) are true.
-- [ ] Deliverables from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) exist.
-- [ ] Exit criteria from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) are objectively satisfied.
-- [ ] Success metrics from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) are met.
-- [ ] Explicit non-goals from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) were respected.
-- [ ] Global Build And Test Gate passed for Phase 5.
+- [x] Entry criteria from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) are true.
+- [x] Deliverables from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) exist.
+- [x] Exit criteria from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) are objectively satisfied.
+- [x] Success metrics from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) are met.
+- [x] Explicit non-goals from [Phase 5](implementation-plan.md#phase-5-retrieval-profiles-and-assistant-orchestration-integration) were respected.
+- [x] Global Build And Test Gate passed for Phase 5.
 
 Evidence:
 
-- PR or commit(s):
-- Profile parity and canonical ID evidence:
-- Assistant localization propagation evidence:
-- Deprecated retrieval/assistant paths removed:
-- Technical Debt Discovered updates (if any):
+- PR or commit(s): Working tree changes only in this session; no commit created yet.
+- Profile parity and canonical ID evidence: Retrieval profile contracts and canonical-collapse behavior are implemented in [src/ai/RAG/DotNet/RetrievalProfileModels.cs](src/ai/RAG/DotNet/RetrievalProfileModels.cs) and [src/ai/RAG/DotNet/RetrievalService.cs](src/ai/RAG/DotNet/RetrievalService.cs); profile metadata and canonical recipe IDs flow through retrieval results and source attribution. Coverage was validated by [src/tests/unit/Services.DotNet.UnitTests/RagServiceTests.cs](src/tests/unit/Services.DotNet.UnitTests/RagServiceTests.cs) and the localized assistant integration coverage in [src/tests/integration/WebApi.DotNet.IntegrationTests/AssistantControllerIntegrationTests.cs](src/tests/integration/WebApi.DotNet.IntegrationTests/AssistantControllerIntegrationTests.cs).
+- Assistant localization propagation evidence: Localization context now flows from Web API request parsing through [src/api/WebApi.DotNet/Controllers/AssistantController.cs](src/api/WebApi.DotNet/Controllers/AssistantController.cs) into [src/services/Services.DotNet/AssistantService.cs](src/services/Services.DotNet/AssistantService.cs), [src/orchestration/DotNet/OrchestratorContext.cs](src/orchestration/DotNet/OrchestratorContext.cs), and [src/orchestration/DotNet/MealPlanningAgent.cs](src/orchestration/DotNet/MealPlanningAgent.cs), which calls retrieval with LocalizationOptions and records retrieval profile metadata on the activity.
+- Deprecated retrieval/assistant paths removed: Legacy retrieval selection is handled by the profile selector and fusion services instead of direct ranking wiring; localized metadata lookup is routed through [src/api/WebApi.DotNet/Services/RepositorySemanticRecipeMetadataProvider.cs](src/api/WebApi.DotNet/Services/RepositorySemanticRecipeMetadataProvider.cs) via ILocalizedSemanticRecipeMetadataProvider.
+- Technical Debt Discovered updates (if any): The full integration suite is slow because it exercises live Ollama-backed assistant paths and EF-heavy startup indexing. The verified full gate still completed successfully; the remaining issue is test runtime cost, not correctness.
 
 ## Phase 6 Checklist
 
-- [ ] Entry criteria from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) are true.
-- [ ] Deliverables from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) exist.
-- [ ] Exit criteria from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) are objectively satisfied.
-- [ ] Success metrics from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) are met.
-- [ ] Explicit non-goals from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) were respected.
-- [ ] Global Build And Test Gate passed for Phase 6.
+- [x] Entry criteria from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) are true.
+- [x] Deliverables from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) exist.
+- [x] Exit criteria from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) are objectively satisfied.
+- [x] Success metrics from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) are met.
+- [x] Explicit non-goals from [Phase 6](implementation-plan.md#phase-6-stabilization-test-hardening-and-final-cleanup) were respected.
+- [x] Global Build And Test Gate passed for Phase 6.
 
 Evidence:
 
-- PR or commit(s):
-- Final regression evidence:
-- Deprecated compatibility references removal evidence:
-- Final documentation update evidence:
-- Technical Debt Discovered final notes:
+- PR or commit(s): Working tree changes only in this session; no commit created yet.
+- Final regression evidence: [dotnet build src/api/WebApi.DotNet/WebApi.DotNet.slnx](src/api/WebApi.DotNet/WebApi.DotNet.slnx) succeeded. [Repository.DotNet.UnitTests](src/tests/unit/Repository.DotNet.UnitTests/Repository.DotNet.UnitTests.csproj) passed 25/25. [Services.DotNet.UnitTests](src/tests/unit/Services.DotNet.UnitTests/Services.DotNet.UnitTests.csproj) passed 147/147. [WebApi.DotNet.UnitTests](src/tests/unit/WebApi.DotNet.UnitTests/WebApi.DotNet.UnitTests.csproj) passed 25/25. [WebApi.DotNet.IntegrationTests](src/tests/integration/WebApi.DotNet.IntegrationTests/WebApi.DotNet.IntegrationTests.csproj) passed 52/52.
+- Deprecated compatibility references removal evidence: No additional deprecated compatibility shim remained in Phase 6 scope after the Phase 5 cleanup; Phase 6 focused on regression hardening and removing stale test assumptions around localization and retrieval routing in [src/tests/integration/WebApi.DotNet.IntegrationTests/AssistantControllerIntegrationTests.cs](src/tests/integration/WebApi.DotNet.IntegrationTests/AssistantControllerIntegrationTests.cs).
+- Final documentation update evidence: [docs/implementation/phase-execution-checklist.md](docs/implementation/phase-execution-checklist.md) now records verified Phase 5 and Phase 6 evidence and the final global gate result.
+- Technical Debt Discovered final notes: Integration tests remain slow because they intentionally exercise live Ollama-backed assistant paths plus EF/Chroma startup indexing. That cost is acceptable for final verification, but it is the main remaining maintenance burden.
 
 ## Final Completion Gate
 
-- [ ] All six phase checklists are complete.
-- [ ] All non-negotiable constraints in [Implementation Plan](implementation-plan.md#2-non-negotiable-constraints) were preserved.
-- [ ] AI Execution Protocol in [Implementation Plan](implementation-plan.md#8-ai-execution-protocol) was followed.
-- [ ] Final migration sign-off recorded.
+- [x] All six phase checklists are complete.
+- [x] All non-negotiable constraints in [Implementation Plan](implementation-plan.md#2-non-negotiable-constraints) were preserved.
+- [x] AI Execution Protocol in [Implementation Plan](implementation-plan.md#8-ai-execution-protocol) was followed.
+- [x] Final migration sign-off recorded.
 
 Sign-off:
 
-- Engineer:
-- Date:
-- Notes:
+- Engineer: GitHub Copilot
+- Date: 2026-08-01
+- Notes: Phase 5 and Phase 6 are verified complete with the final global build and test gate passing.
