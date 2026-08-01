@@ -18,6 +18,7 @@ RAG in this repository is now implemented and productionized first in .NET. Pyth
 - ChromaDB vector retrieval is implemented in `src/ai/VectorStores/DotNet/ChromaVectorStore.cs` and wired in `src/api/WebApi.DotNet/Program.cs`.
 - Ollama model capability detection is implemented with provider abstractions in `src/services/Services.DotNet` and wired in `src/api/WebApi.DotNet/Program.cs` so tool payloads are omitted automatically after runtime discovery.
 - Recipe indexing service is implemented in `src/ai/RAG/DotNet/RecipeIndexingService.cs` with repository loading, semantic document generation, embedding generation, and vector upsert through `IVectorStore`.
+- Query rewriting is implemented for .NET via `IQueryRewriter` and `QueryRewriterService`, and `RetrievalService` now rewrites semantic search queries with fallback to the original user query on rewrite failure.
 
 ## Hallucination Prevention
 

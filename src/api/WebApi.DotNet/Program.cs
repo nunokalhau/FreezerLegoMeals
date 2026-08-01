@@ -66,6 +66,7 @@ builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
 builder.Services.AddScoped<SemanticSearchService>();
+builder.Services.AddScoped<IQueryRewriter, QueryRewriterService>();
 builder.Services.AddScoped<RetrievalService>();
 builder.Services.AddSingleton<IRecipeDocumentBuilder, RecipeDocumentBuilder>();
 builder.Services.AddScoped<IRecipeIndexingService, RecipeIndexingService>();

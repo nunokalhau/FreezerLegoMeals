@@ -11,6 +11,7 @@ public sealed class RetrievalService : IRetrievalService
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly SemanticSearchService _semanticSearchService;
     private readonly ISemanticRecipeMetadataProvider _metadataProvider;
+    private readonly IQueryRewriter? _queryRewriter;
     private readonly ILogger<RetrievalService> _logger;
     private readonly int _topK;
     private readonly double _minimumSimilarity;
@@ -18,12 +19,14 @@ public sealed class RetrievalService : IRetrievalService
     public RetrievalService(
         SemanticSearchService semanticSearchService,
         ISemanticRecipeMetadataProvider metadataProvider,
+        IQueryRewriter? queryRewriter = null,
         int topK = 3,
         double minimumSimilarity = 0.2,
         ILogger<RetrievalService>? logger = null)
     {
         _semanticSearchService = semanticSearchService ?? throw new ArgumentNullException(nameof(semanticSearchService));
         _metadataProvider = metadataProvider ?? throw new ArgumentNullException(nameof(metadataProvider));
+        _queryRewriter = queryRewriter;
         _topK = topK;
         _minimumSimilarity = minimumSimilarity;
         _logger = logger ?? NullLogger<RetrievalService>.Instance;
@@ -51,7 +54,40 @@ public sealed class RetrievalService : IRetrievalService
             return new RetrievalResult(question ?? string.Empty, [], []);
         }
 
-        var matches = await _semanticSearchService.SearchAsync(question, _topK, cancellationToken);
+        var rewrittenQuestion = question;
+        var rewriteStartedAt = Stopwatch.StartNew();
+        try
+        {
+            if (_queryRewriter is not null)
+            {
+                var rewrittenCandidate = await _queryRewriter.RewriteAsync(question, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(rewrittenCandidate))
+                {
+                    rewrittenQuestion = rewrittenCandidate;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Query rewrite failed; using original query");
+            rewrittenQuestion = question;
+        }
+        finally
+        {
+            rewriteStartedAt.Stop();
+        }
+
+        _logger.LogInformation(
+            "Retrieval query rewrite originalQuery={OriginalQuery} rewrittenQuery={RewrittenQuery} rewriteDurationMs={RewriteDurationMs}",
+            question,
+            rewrittenQuestion,
+            rewriteStartedAt.Elapsed.TotalMilliseconds);
+        activity?.SetTag("retrieval.original_query", question);
+        activity?.SetTag("retrieval.rewritten_query", rewrittenQuestion);
+        activity?.SetTag("retrieval.rewrite_duration_ms", rewriteStartedAt.Elapsed.TotalMilliseconds);
+        activity?.SetTag("retrieval.rewrite_applied", !string.Equals(question, rewrittenQuestion, StringComparison.Ordinal));
+
+        var matches = await _semanticSearchService.SearchAsync(rewrittenQuestion, _topK, cancellationToken);
         var similarityScores = matches.Select(match => match.Score).ToList();
         var elapsedMs = startedAt.Elapsed.TotalMilliseconds;
         if (matches.Count == 0)

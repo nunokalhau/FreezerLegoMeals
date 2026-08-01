@@ -42,6 +42,34 @@ public class RagServiceTests
     }
 
     [Fact]
+    public async Task RetrievalService_UsesRewrittenQueryForSemanticSearch()
+    {
+        var embeddingService = new RecordingEmbeddingService();
+        var service = new RetrievalService(
+            new SemanticSearchService(embeddingService, new StubVectorStore(0.91), new StubMetadataProvider()),
+            new StubMetadataProvider(),
+            new StubQueryRewriter("chicken freezer recipes"));
+
+        await service.RetrieveAsync("What chicken recipes do you have?");
+
+        Assert.Equal("chicken freezer recipes", embeddingService.LastText);
+    }
+
+    [Fact]
+    public async Task RetrievalService_WhenRewriteReturnsEmpty_FallsBackToOriginalQuery()
+    {
+        var embeddingService = new RecordingEmbeddingService();
+        var service = new RetrievalService(
+            new SemanticSearchService(embeddingService, new StubVectorStore(0.91), new StubMetadataProvider()),
+            new StubMetadataProvider(),
+            new StubQueryRewriter("   "));
+
+        await service.RetrieveAsync("What chicken recipes do you have?");
+
+        Assert.Equal("What chicken recipes do you have?", embeddingService.LastText);
+    }
+
+    [Fact]
     public void PromptBuilder_RendersRepositoryContext()
     {
         var builder = new PromptBuilder("Context:\n{recipes}\nQuestion:\n{question}");
@@ -59,6 +87,32 @@ public class RagServiceTests
     {
         public Task<EmbeddingResponse> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbeddingResponse("test", 2, [1f, 0f]));
+    }
+
+    private sealed class RecordingEmbeddingService : IEmbeddingService
+    {
+        public string? LastText { get; private set; }
+
+        public Task<EmbeddingResponse> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)
+        {
+            LastText = text;
+            return Task.FromResult(new EmbeddingResponse("test", 2, [1f, 0f]));
+        }
+    }
+
+    private sealed class StubQueryRewriter : IQueryRewriter
+    {
+        private readonly string _rewritten;
+
+        public StubQueryRewriter(string rewritten)
+        {
+            _rewritten = rewritten;
+        }
+
+        public Task<string> RewriteAsync(string query, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_rewritten);
+        }
     }
 
     private sealed class StubVectorStore : IVectorStore

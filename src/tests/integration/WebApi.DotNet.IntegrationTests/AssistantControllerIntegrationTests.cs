@@ -112,11 +112,13 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IEmbeddingService>();
                 services.RemoveAll<IVectorStore>();
                 services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
                 services.AddSingleton<IOllamaClient, StubOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
                 services.AddSingleton<IVectorStore>(vectorStore);
                 services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("spicy chicken freezer recipes"));
             });
         });
 
@@ -137,9 +139,54 @@ public class AssistantControllerIntegrationTests
         Assert.Contains("Use the spicy chicken recipe.", payload.Response);
         Assert.Contains("Sources:", payload.Response);
         Assert.Contains("1: Spicy Chicken", payload.Response);
-        Assert.Equal("What spicy chicken meal can I cook?", embeddingService.LastText);
+        Assert.Equal("spicy chicken freezer recipes", embeddingService.LastText);
         Assert.Equal(new[] { 1f, 0f }, vectorStore.LastEmbedding);
         Assert.Equal(3, vectorStore.LastTopK);
+    }
+
+    [Fact]
+    public async Task Chat_WithRepositoryQuestion_WhenQueryRewriteFails_FallsBackToOriginalQuestion()
+    {
+        var embeddingService = new RecordingEmbeddingService();
+        var vectorStore = new RecordingVectorStore();
+        var metadataProvider = new StubMetadataProvider();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantRagRewriteFallbackIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
+                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService>(embeddingService);
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter, ThrowingQueryRewriter>();
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "What spicy chicken meal can I cook?"
+        });
+
+        response.EnsureSuccessStatusCode();
+        _ = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.Equal("What spicy chicken meal can I cook?", embeddingService.LastText);
     }
 
     [Fact]
@@ -580,6 +627,29 @@ public class AssistantControllerIntegrationTests
     private sealed class StubPromptBuilder : IPromptBuilder
     {
         public string Build(string question, IReadOnlyList<RetrievalRecipe> recipes) => "rag prompt";
+    }
+
+    private sealed class StubQueryRewriter : IQueryRewriter
+    {
+        private readonly string _rewritten;
+
+        public StubQueryRewriter(string rewritten)
+        {
+            _rewritten = rewritten;
+        }
+
+        public Task<string> RewriteAsync(string query, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_rewritten);
+        }
+    }
+
+    private sealed class ThrowingQueryRewriter : IQueryRewriter
+    {
+        public Task<string> RewriteAsync(string query, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("query rewrite failure");
+        }
     }
 
     private sealed class ToolCallingOllamaClient : IOllamaClient
