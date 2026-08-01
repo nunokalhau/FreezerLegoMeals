@@ -32,6 +32,7 @@ builder.Services.AddCors(options =>
 
 // Register repositories and services
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
+builder.Services.AddScoped<IRecipeIndexingProjectionRepository, RecipeRepository>();
 
 builder.Services.AddScoped<IAssistantService, AssistantService>();
 builder.Services.AddAiEvaluationFramework();
@@ -55,6 +56,7 @@ builder.Services.AddScoped<IToolExecutor>(serviceProvider =>
     var pythonToolExecutor = new PythonToolExecutor(
         serviceProvider.GetRequiredService<IToolRegistry>(),
         Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "tools")),
+        searchQueryNormalizer: serviceProvider.GetRequiredService<ISearchQueryNormalizer>(),
         logger: serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PythonToolExecutor>>(),
         resiliencePolicyProvider: serviceProvider.GetRequiredService<IExternalDependencyResiliencePolicyProvider>());
 
@@ -70,6 +72,11 @@ builder.Services.AddScoped<ILocalizedRecipeQueryService, LocalizedRecipeQuerySer
 builder.Services.Configure<ApiLocalizationOptions>(builder.Configuration.GetSection("Localization"));
 builder.Services.AddScoped<IApiRecipeLocalizationService, ApiRecipeLocalizationService>();
 builder.Services.AddScoped<ISemanticRecipeMetadataProvider, RepositorySemanticRecipeMetadataProvider>();
+var searchNormalizationOptions = builder.Configuration.GetSection("SearchNormalization").Get<SearchNormalizationOptions>()
+    ?? new SearchNormalizationOptions();
+builder.Services.AddSingleton(searchNormalizationOptions);
+builder.Services.AddSingleton<ISearchQueryNormalizer>(serviceProvider =>
+    new DefaultSearchQueryNormalizer(serviceProvider.GetRequiredService<SearchNormalizationOptions>()));
 builder.Services.AddScoped<SemanticSearchService>();
 builder.Services.AddScoped<IQueryRewriter, QueryRewriterService>();
 builder.Services.AddScoped<IKeywordSearchService, KeywordSearchService>();
@@ -77,6 +84,7 @@ builder.Services.AddScoped<IReranker, OllamaRerankerService>();
 builder.Services.AddScoped<IAnswerGroundingService, AnswerGroundingService>();
 builder.Services.AddScoped<RetrievalService>();
 builder.Services.AddSingleton<IRecipeDocumentBuilder, RecipeDocumentBuilder>();
+builder.Services.AddSingleton<IRecipeProjectionFingerprintService, RecipeProjectionFingerprintService>();
 builder.Services.AddScoped<IRecipeIndexingService, RecipeIndexingService>();
 builder.Services.Configure<RecipeStartupIndexingOptions>(builder.Configuration.GetSection("AI:Indexing"));
 builder.Services.Configure<RerankingOptions>(builder.Configuration.GetSection("AI:Reranking"));

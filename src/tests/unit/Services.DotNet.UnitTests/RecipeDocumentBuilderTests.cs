@@ -27,8 +27,16 @@ public class RecipeDocumentBuilderTests
             ]
         };
 
-        var document = builder.Build(recipe);
+        var projection = builder.BuildProjection(new RecipeProjectionInput(recipe, "search-normalization-v1", ["en", "pt"], ["2 tbsp chili powder"]));
+        var document = projection.Document;
 
+        Assert.Equal("recipe-semantic-projection-v1", projection.ProjectionSchemaVersion);
+        Assert.Equal("search-normalization-v1", projection.NormalizationVersion);
+        Assert.Equal(new[] { "en", "pt" }, projection.LanguageCoverage);
+
+        Assert.Contains("Projection schema version: recipe-semantic-projection-v1", document);
+        Assert.Contains("Normalization version: search-normalization-v1", document);
+        Assert.Contains("Language coverage: en, pt", document);
         Assert.Contains("Title: Spicy Chicken", document);
         Assert.Contains("Description: Great for batch cooking", document);
         Assert.Contains("Tags: protein, spicy", document);
@@ -40,6 +48,7 @@ public class RecipeDocumentBuilderTests
         Assert.Contains("Freezing instructions: Freeze up to 3 months", document);
         Assert.Contains("Reheating instructions: Microwave 2 min", document);
         Assert.Contains("Notes: Great for batch cooking", document);
+        Assert.Contains("Authored source text: 2 tbsp chili powder", document);
     }
 
     [Fact]
@@ -102,8 +111,30 @@ public class RecipeDocumentBuilderTests
 
         var document = builder.Build(recipe);
 
-        Assert.DoesNotContain("Freezing instructions:", document);
-        Assert.DoesNotContain("Reheating instructions:", document);
-        Assert.DoesNotContain("Notes:", document);
+        Assert.Contains("Description: <none>", document);
+        Assert.Contains("Freezing instructions: <none>", document);
+        Assert.Contains("Reheating instructions: <none>", document);
+        Assert.Contains("Notes: <none>", document);
+        Assert.Contains("Authored source text: <none>", document);
+    }
+
+    [Fact]
+    public void BuildProjection_OrdersIngredientsByCanonicalIdentity()
+    {
+        var builder = new RecipeDocumentBuilder();
+        var recipe = new Recipe
+        {
+            Name = "Test",
+            Prepping = "Prep",
+            RecipeIngredients =
+            [
+                new RecipeIngredient { IngredientId = 5, Amount = 1, Unit = "cup", Ingredient = new Ingredient { Name = "Zucchini" } },
+                new RecipeIngredient { IngredientId = 2, Amount = 1, Unit = "cup", Ingredient = new Ingredient { Name = "Apple" } }
+            ]
+        };
+
+        var projection = builder.BuildProjection(new RecipeProjectionInput(recipe, "search-normalization-v1"));
+
+        Assert.Contains("Ingredients: 1 cup Apple, 1 cup Zucchini", projection.Document);
     }
 }

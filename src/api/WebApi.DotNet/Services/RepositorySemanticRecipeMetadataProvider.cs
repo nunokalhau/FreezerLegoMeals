@@ -49,7 +49,11 @@ public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMe
                     recipe.Tags ?? string.Empty,
                     recipe.Ingredients.Select(ingredient => ingredient.Name).Where(name => !string.IsNullOrWhiteSpace(name)).ToList(),
                     recipe.Prepping ?? string.Empty,
-                    recipe.TimeToPrepare?.ToString() ?? string.Empty));
+                    recipe.TimeToPrepare?.ToString() ?? string.Empty,
+                    recipe.ProjectionSchemaVersion,
+                    recipe.NormalizationVersion,
+                    recipe.ProjectionFingerprint,
+                    recipe.LanguageCoverage));
         }
 
         return _cache.TryGetValue(recipeId, out var metadata)

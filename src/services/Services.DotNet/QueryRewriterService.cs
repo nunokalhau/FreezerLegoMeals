@@ -17,7 +17,9 @@ public sealed class QueryRewriterService : IQueryRewriter
     private readonly IOllamaClient _ollamaClient;
     private readonly ILogger<QueryRewriterService> _logger;
 
-    public QueryRewriterService(IOllamaClient ollamaClient, ILogger<QueryRewriterService>? logger = null)
+    public QueryRewriterService(
+        IOllamaClient ollamaClient,
+        ILogger<QueryRewriterService>? logger = null)
     {
         _ollamaClient = ollamaClient ?? throw new ArgumentNullException(nameof(ollamaClient));
         _logger = logger ?? NullLogger<QueryRewriterService>.Instance;

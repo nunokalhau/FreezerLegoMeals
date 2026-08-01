@@ -12,17 +12,20 @@ public sealed class SemanticSearchService
     private readonly IEmbeddingService _embeddingService;
     private readonly IVectorStore _vectorStore;
     private readonly ISemanticRecipeMetadataProvider _metadataProvider;
+    private readonly ISearchQueryNormalizer _searchQueryNormalizer;
     private readonly ILogger<SemanticSearchService> _logger;
 
     public SemanticSearchService(
         IEmbeddingService embeddingService,
         IVectorStore vectorStore,
         ISemanticRecipeMetadataProvider metadataProvider,
-        ILogger<SemanticSearchService>? logger = null)
+        ILogger<SemanticSearchService>? logger = null,
+        ISearchQueryNormalizer? searchQueryNormalizer = null)
     {
         _embeddingService = embeddingService ?? throw new ArgumentNullException(nameof(embeddingService));
         _vectorStore = vectorStore ?? throw new ArgumentNullException(nameof(vectorStore));
         _metadataProvider = metadataProvider ?? throw new ArgumentNullException(nameof(metadataProvider));
+        _searchQueryNormalizer = searchQueryNormalizer ?? new DefaultSearchQueryNormalizer();
         _logger = logger ?? NullLogger<SemanticSearchService>.Instance;
     }
 
@@ -45,7 +48,22 @@ public sealed class SemanticSearchService
             return [];
         }
 
-        var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(query, cancellationToken);
+        var normalizedQuery = _searchQueryNormalizer.Normalize(query);
+        if (string.IsNullOrWhiteSpace(normalizedQuery.NormalizedQuery))
+        {
+            _logger.LogInformation(
+                "Semantic search skipped queryLength={QueryLength} topK={TopK} reason={Reason}",
+                query.Length,
+                topK,
+                "empty-normalized-query");
+            activity?.SetTag("semantic_search.result_count", 0);
+            activity?.SetTag("semantic_search.reason", "empty-normalized-query");
+            return [];
+        }
+
+        activity?.SetTag("semantic_search.normalization_version", normalizedQuery.NormalizationVersion);
+        activity?.SetTag("semantic_search.query_modality", normalizedQuery.Modality);
+        var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuery.NormalizedQuery, cancellationToken);
         var matches = await _vectorStore.SearchAsync(queryEmbedding.Embedding, topK, cancellationToken);
         var results = new List<SemanticSearchResult>();
         foreach (var match in matches)
@@ -56,7 +74,8 @@ public sealed class SemanticSearchService
                 metadata.Title,
                 Math.Round(match.Score, 6),
                 metadata.MatchedText,
-                $"High semantic similarity between the query and {metadata.Title}."));
+                $"High semantic similarity between the query and {metadata.Title}.",
+                metadata.ProjectionSchemaVersion));
         }
 
         startedAt.Stop();

@@ -3,6 +3,7 @@ using Embedding.DotNet;
 using Moq;
 using RAG.DotNet;
 using Repository.DotNet;
+using SemanticSearch.DotNet;
 using VectorStores.DotNet;
 using Xunit;
 
@@ -50,8 +51,13 @@ public class RecipeIndexingServiceTests
             }
         };
 
-        var repository = new Mock<IRecipeRepository>();
-        repository.Setup(candidate => candidate.GetRecipesAsync()).ReturnsAsync(recipes);
+        var repository = new Mock<IRecipeIndexingProjectionRepository>();
+        repository
+            .Setup(candidate => candidate.GetRecipeIndexingProjectionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(recipes.Select(CreateProjection).ToList());
+        repository
+            .Setup(candidate => candidate.UpsertRecipeIndexMetadataAsync(It.IsAny<IReadOnlyList<RecipeIndexMetadataUpsert>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var embeddingService = new Mock<IEmbeddingService>();
         embeddingService
@@ -63,7 +69,13 @@ public class RecipeIndexingServiceTests
         vectorStore.Setup(candidate => candidate.EnsureCollectionExistsAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         vectorStore.Setup(candidate => candidate.UpsertAsync(It.IsAny<IReadOnlyList<VectorDocument>>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        var service = new RecipeIndexingService(repository.Object, embeddingService.Object, new RecipeDocumentBuilder(), vectorStore.Object);
+        var service = new RecipeIndexingService(
+            repository.Object,
+            embeddingService.Object,
+            new RecipeDocumentBuilder(),
+            vectorStore.Object,
+            new RecipeProjectionFingerprintService(),
+            new DefaultSearchQueryNormalizer());
 
         var result = await service.IndexAllRecipesAsync();
 
@@ -81,13 +93,19 @@ public class RecipeIndexingServiceTests
             It.Is<IReadOnlyList<VectorDocument>>(documents => VerifyUpsertDocuments(documents)),
             It.IsAny<CancellationToken>()),
             Times.Once);
+        repository.Verify(candidate => candidate.UpsertRecipeIndexMetadataAsync(
+            It.Is<IReadOnlyList<RecipeIndexMetadataUpsert>>(items => items.Count == 2),
+            It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
     public async Task IndexAllRecipesAsync_WhenNoRecipes_DoesNotEmbedOrUpsert()
     {
-        var repository = new Mock<IRecipeRepository>();
-        repository.Setup(candidate => candidate.GetRecipesAsync()).ReturnsAsync(new List<Recipe>());
+        var repository = new Mock<IRecipeIndexingProjectionRepository>();
+        repository
+            .Setup(candidate => candidate.GetRecipeIndexingProjectionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RecipeIndexingProjection>());
 
         var embeddingService = new Mock<IEmbeddingService>();
         var vectorStore = new Mock<IVectorStore>();
@@ -106,6 +124,7 @@ public class RecipeIndexingServiceTests
         vectorStore.Verify(candidate => candidate.EnsureCollectionExistsAsync(It.IsAny<CancellationToken>()), Times.Once);
         embeddingService.Verify(candidate => candidate.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         vectorStore.Verify(candidate => candidate.UpsertAsync(It.IsAny<IReadOnlyList<VectorDocument>>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(candidate => candidate.UpsertRecipeIndexMetadataAsync(It.IsAny<IReadOnlyList<RecipeIndexMetadataUpsert>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -117,8 +136,13 @@ public class RecipeIndexingServiceTests
             new() { Id = 2, Name = "Bad", RecipeIngredients = [new RecipeIngredient { Ingredient = new Ingredient { Name = "Pepper" } }] }
         };
 
-        var repository = new Mock<IRecipeRepository>();
-        repository.Setup(candidate => candidate.GetRecipesAsync()).ReturnsAsync(recipes);
+        var repository = new Mock<IRecipeIndexingProjectionRepository>();
+        repository
+            .Setup(candidate => candidate.GetRecipeIndexingProjectionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(recipes.Select(CreateProjection).ToList());
+        repository
+            .Setup(candidate => candidate.UpsertRecipeIndexMetadataAsync(It.IsAny<IReadOnlyList<RecipeIndexMetadataUpsert>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var embeddingService = new Mock<IEmbeddingService>();
         embeddingService
@@ -144,6 +168,149 @@ public class RecipeIndexingServiceTests
             It.Is<IReadOnlyList<VectorDocument>>(documents => documents.Count == 1 && documents[0].RecipeId == "1"),
             It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task IndexAllRecipesAsync_WhenFingerprintUnchanged_SkipsReindex()
+    {
+        var recipe = new Recipe
+        {
+            Id = 12,
+            Name = "Rice Bowl",
+            Notes = "Stable fixture",
+            Tags = "starch",
+            Prepping = "Boil rice",
+            RecipeIngredients =
+            [
+                new RecipeIngredient { IngredientId = 3, Amount = 1, Unit = "cup", Ingredient = new Ingredient { Name = "Rice" } }
+            ]
+        };
+
+        var builder = new RecipeDocumentBuilder();
+        var normalizer = new DefaultSearchQueryNormalizer();
+        var normalization = normalizer.Normalize("Rice Bowl starch Stable fixture Boil rice Rice");
+        var projection = builder.BuildProjection(new RecipeProjectionInput(recipe, normalization.NormalizationVersion, ["en"], []));
+        const string fingerprint = "unchanged-fingerprint";
+
+        var repository = new Mock<IRecipeIndexingProjectionRepository>();
+        repository
+            .Setup(candidate => candidate.GetRecipeIndexingProjectionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RecipeIndexingProjection(
+                    recipe,
+                    ["en"],
+                    ["hash-a"],
+                    ["hash-b"],
+                    [],
+                    [],
+                        new RecipeIndexMetadataSnapshot(fingerprint, projection.ProjectionSchemaVersion, "en", DateTime.UtcNow))
+            ]);
+
+        var embeddingService = new Mock<IEmbeddingService>(MockBehavior.Strict);
+        var vectorStore = new Mock<IVectorStore>();
+        vectorStore.Setup(candidate => candidate.EnsureCollectionExistsAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var service = new RecipeIndexingService(
+            repository.Object,
+            embeddingService.Object,
+            builder,
+            vectorStore.Object,
+            new FixedFingerprintService(fingerprint),
+            normalizer);
+
+        var result = await service.IndexAllRecipesAsync();
+
+        Assert.Equal(1, result.TotalRecipes);
+        Assert.Equal(0, result.IndexedRecipes);
+        Assert.Equal(0, result.FailedRecipes);
+        embeddingService.Verify(candidate => candidate.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        vectorStore.Verify(candidate => candidate.UpsertAsync(It.IsAny<IReadOnlyList<VectorDocument>>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(candidate => candidate.UpsertRecipeIndexMetadataAsync(It.IsAny<IReadOnlyList<RecipeIndexMetadataUpsert>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task IndexAllRecipesAsync_WhenFingerprintChanges_ReindexesAndUpdatesMetadata()
+    {
+        var recipe = new Recipe
+        {
+            Id = 13,
+            Name = "Rice Bowl",
+            Notes = "Changed notes",
+            Tags = "starch",
+            Prepping = "Boil rice",
+            RecipeIngredients =
+            [
+                new RecipeIngredient { IngredientId = 3, Amount = 1, Unit = "cup", Ingredient = new Ingredient { Name = "Rice" } }
+            ]
+        };
+
+        var repository = new Mock<IRecipeIndexingProjectionRepository>();
+        repository
+            .Setup(candidate => candidate.GetRecipeIndexingProjectionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RecipeIndexingProjection(
+                    recipe,
+                    ["en", "pt"],
+                    ["hash-a", "hash-c"],
+                    ["hash-b"],
+                    [],
+                    [],
+                    new RecipeIndexMetadataSnapshot("old-fingerprint", RecipeDocumentBuilder.DefaultProjectionSchemaVersion, "en", DateTime.UtcNow))
+            ]);
+        repository
+            .Setup(candidate => candidate.UpsertRecipeIndexMetadataAsync(It.IsAny<IReadOnlyList<RecipeIndexMetadataUpsert>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var embeddingService = new Mock<IEmbeddingService>();
+        embeddingService
+            .Setup(candidate => candidate.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EmbeddingResponse("nomic-embed-text", 2, [1f, 0f]));
+
+        var vectorStore = new Mock<IVectorStore>();
+        vectorStore.Setup(candidate => candidate.EnsureCollectionExistsAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        vectorStore.Setup(candidate => candidate.UpsertAsync(It.IsAny<IReadOnlyList<VectorDocument>>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var service = new RecipeIndexingService(repository.Object, embeddingService.Object, new RecipeDocumentBuilder(), vectorStore.Object);
+
+        var result = await service.IndexAllRecipesAsync();
+
+        Assert.Equal(1, result.TotalRecipes);
+        Assert.Equal(1, result.IndexedRecipes);
+        repository.Verify(candidate => candidate.UpsertRecipeIndexMetadataAsync(
+            It.Is<IReadOnlyList<RecipeIndexMetadataUpsert>>(items =>
+                items.Count == 1
+                && items[0].RecipeId == 13
+                && items[0].ProjectionFingerprint != "old-fingerprint"
+                && items[0].ProjectionSchemaVersion == RecipeDocumentBuilder.DefaultProjectionSchemaVersion),
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    private static RecipeIndexingProjection CreateProjection(Recipe recipe)
+    {
+        return new RecipeIndexingProjection(
+            recipe,
+            ["en"],
+            ["recipe-hash"],
+            ["ingredient-hash"],
+            [],
+            [],
+            null);
+    }
+
+    private sealed class FixedFingerprintService : IRecipeProjectionFingerprintService
+    {
+        private readonly string _value;
+
+        public FixedFingerprintService(string value)
+        {
+            _value = value;
+        }
+
+        public string Compute(RecipeProjectionFingerprintInput input)
+        {
+            return _value;
+        }
     }
 
     private static bool VerifyUpsertDocuments(IReadOnlyList<VectorDocument> documents)

@@ -1,11 +1,9 @@
 using System.Diagnostics;
-using Embedding.DotNet;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using VectorStores.DotNet;
 
 namespace RAG.DotNet;
 
@@ -52,25 +50,7 @@ public sealed class RecipeStartupIndexingHostedService : IHostedService
                 timeout.TotalMilliseconds);
 
             using var scope = _scopeFactory.CreateScope();
-            var vectorStore = scope.ServiceProvider.GetRequiredService<IVectorStore>();
-            var embeddingService = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
             var recipeIndexingService = scope.ServiceProvider.GetRequiredService<IRecipeIndexingService>();
-
-            await vectorStore.EnsureCollectionExistsAsync(token);
-            var indexingRequired = await IsIndexingRequiredAsync(vectorStore, embeddingService, token);
-            activity?.SetTag("indexing.startup.required", indexingRequired);
-
-            if (!indexingRequired)
-            {
-                startedAt.Stop();
-                _logger.LogInformation(
-                    "Startup recipe indexing skipped reason={Reason} elapsedMs={ElapsedMs}",
-                    "index-already-populated",
-                    startedAt.Elapsed.TotalMilliseconds);
-                activity?.SetTag("indexing.startup.skipped", true);
-                activity?.SetTag("indexing.startup.elapsed_ms", startedAt.Elapsed.TotalMilliseconds);
-                return;
-            }
 
             var result = await recipeIndexingService.IndexAllRecipesAsync(token);
             startedAt.Stop();
@@ -114,17 +94,5 @@ public sealed class RecipeStartupIndexingHostedService : IHostedService
     public Task StopAsync(CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
-    }
-
-    private async Task<bool> IsIndexingRequiredAsync(IVectorStore vectorStore, IEmbeddingService embeddingService, CancellationToken cancellationToken)
-    {
-        var probeQuery = string.IsNullOrWhiteSpace(_options.ProbeQuery)
-            ? "freezer meal prep recipes"
-            : _options.ProbeQuery;
-
-        var probeTopK = _options.ProbeTopK <= 0 ? 1 : _options.ProbeTopK;
-        var probeEmbedding = await embeddingService.GenerateEmbeddingAsync(probeQuery, cancellationToken);
-        var matches = await vectorStore.SearchAsync(probeEmbedding.Embedding, probeTopK, cancellationToken);
-        return matches.Count == 0;
     }
 }

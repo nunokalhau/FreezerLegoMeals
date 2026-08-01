@@ -18,5 +18,13 @@ public sealed class LocalizedRecipe
 
     public int? TimeToPrepare { get; init; }
 
+    public string ProjectionSchemaVersion { get; init; } = string.Empty;
+
+    public string ProjectionFingerprint { get; init; } = string.Empty;
+
+    public string LanguageCoverage { get; init; } = string.Empty;
+
+    public string NormalizationVersion { get; init; } = "search-normalization-v1";
+
     public IReadOnlyList<LocalizedRecipeIngredient> Ingredients { get; init; } = Array.Empty<LocalizedRecipeIngredient>();
 }

@@ -10,6 +10,10 @@ public sealed record RetrievalRecipe(
     IReadOnlyList<string> Ingredients,
     string PreparationSteps,
     string CookingTime,
-    double SimilarityScore);
+    double SimilarityScore,
+    string ProjectionSchemaVersion = "",
+    string NormalizationVersion = "",
+    string ProjectionFingerprint = "",
+    string LanguageCoverage = "");
 
 public sealed record RetrievalResult(string Question, IReadOnlyList<RetrievalRecipe> Recipes, IReadOnlyList<SourceAttribution> Sources);

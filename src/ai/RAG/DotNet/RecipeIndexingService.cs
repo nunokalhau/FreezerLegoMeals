@@ -5,6 +5,7 @@ using Domain.DotNet;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Repository.DotNet;
+using SemanticSearch.DotNet;
 using VectorStores.DotNet;
 
 namespace RAG.DotNet;
@@ -13,22 +14,28 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
 {
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
 
-    private readonly IRecipeRepository _recipeRepository;
+    private readonly IRecipeIndexingProjectionRepository _projectionRepository;
     private readonly IEmbeddingService _embeddingService;
     private readonly IRecipeDocumentBuilder _recipeDocumentBuilder;
+    private readonly IRecipeProjectionFingerprintService _fingerprintService;
+    private readonly ISearchQueryNormalizer _searchQueryNormalizer;
     private readonly IVectorStore _vectorStore;
     private readonly ILogger<RecipeIndexingService> _logger;
 
     public RecipeIndexingService(
-        IRecipeRepository recipeRepository,
+        IRecipeIndexingProjectionRepository projectionRepository,
         IEmbeddingService embeddingService,
         IRecipeDocumentBuilder recipeDocumentBuilder,
         IVectorStore vectorStore,
+        IRecipeProjectionFingerprintService? fingerprintService = null,
+        ISearchQueryNormalizer? searchQueryNormalizer = null,
         ILogger<RecipeIndexingService>? logger = null)
     {
-        _recipeRepository = recipeRepository ?? throw new ArgumentNullException(nameof(recipeRepository));
+        _projectionRepository = projectionRepository ?? throw new ArgumentNullException(nameof(projectionRepository));
         _embeddingService = embeddingService ?? throw new ArgumentNullException(nameof(embeddingService));
         _recipeDocumentBuilder = recipeDocumentBuilder ?? throw new ArgumentNullException(nameof(recipeDocumentBuilder));
+        _fingerprintService = fingerprintService ?? new RecipeProjectionFingerprintService();
+        _searchQueryNormalizer = searchQueryNormalizer ?? new DefaultSearchQueryNormalizer();
         _vectorStore = vectorStore ?? throw new ArgumentNullException(nameof(vectorStore));
         _logger = logger ?? NullLogger<RecipeIndexingService>.Instance;
     }
@@ -43,9 +50,9 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
 
         await _vectorStore.EnsureCollectionExistsAsync(cancellationToken);
 
-        var recipes = (await _recipeRepository.GetRecipesAsync()).ToList();
-        activity?.SetTag("indexing.total_recipes", recipes.Count);
-        if (recipes.Count == 0)
+        var projections = await _projectionRepository.GetRecipeIndexingProjectionsAsync(cancellationToken);
+        activity?.SetTag("indexing.total_recipes", projections.Count);
+        if (projections.Count == 0)
         {
             startedAt.Stop();
             _logger.LogInformation("Recipe indexing completed with no recipes to index");
@@ -55,31 +62,68 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
             return new RecipeIndexingResult(0, 0, 0, string.Empty, 0, startedAt.Elapsed.TotalMilliseconds);
         }
 
-        var documents = new List<VectorDocument>(recipes.Count);
+        var documents = new List<VectorDocument>(projections.Count);
+        var metadataUpdates = new List<RecipeIndexMetadataUpsert>(projections.Count);
         var embeddingModel = string.Empty;
         var embeddingDimensions = 0;
         var failedRecipes = 0;
+        var skippedRecipes = 0;
 
-        for (var i = 0; i < recipes.Count; i++)
+        for (var i = 0; i < projections.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var recipe = recipes[i];
+            var projection = projections[i];
+            var recipe = projection.Recipe;
             var recipeId = recipe.Id.ToString(CultureInfo.InvariantCulture);
             try
             {
-                var semanticDocument = _recipeDocumentBuilder.Build(recipe);
-                var metadata = BuildMetadata(recipe);
+                var normalizationArtifact = _searchQueryNormalizer.Normalize(BuildNormalizationSeed(recipe));
+                var projectionDocument = _recipeDocumentBuilder.BuildProjection(new RecipeProjectionInput(
+                    recipe,
+                    normalizationArtifact.NormalizationVersion,
+                    projection.LanguageCoverage,
+                    projection.AuthoredSourceContributions));
+                var canonicalDependencyHashes = BuildCanonicalDependencyHashes(recipe);
+                var fingerprint = _fingerprintService.Compute(new RecipeProjectionFingerprintInput(
+                    recipe.Id,
+                    projectionDocument.ProjectionSchemaVersion,
+                    projectionDocument.NormalizationVersion,
+                    projectionDocument.Document,
+                    projectionDocument.LanguageCoverage,
+                    projection.TranslationContentHashes,
+                    projection.IngredientTranslationContentHashes,
+                    projection.RecipeIngredientLocalizationContentHashes,
+                    canonicalDependencyHashes,
+                    projectionDocument.AuthoredSourceTexts));
 
-                var embedding = await _embeddingService.GenerateEmbeddingAsync(semanticDocument, cancellationToken);
+                var existingMetadata = projection.ExistingMetadata;
+                if (existingMetadata is not null
+                    && string.Equals(existingMetadata.ProjectionFingerprint, fingerprint, StringComparison.Ordinal)
+                    && string.Equals(existingMetadata.ProjectionSchemaVersion, projectionDocument.ProjectionSchemaVersion, StringComparison.Ordinal))
+                {
+                    skippedRecipes++;
+                    continue;
+                }
+
+                var metadata = BuildMetadata(recipe, projectionDocument, fingerprint);
+
+                var embedding = await _embeddingService.GenerateEmbeddingAsync(projectionDocument.Document, cancellationToken);
                 embeddingModel = embedding.Model;
                 embeddingDimensions = embedding.Dimensions;
 
                 documents.Add(new VectorDocument(
                     recipeId,
                     embedding.Embedding,
-                    semanticDocument,
+                    projectionDocument.Document,
                     metadata));
+
+                metadataUpdates.Add(new RecipeIndexMetadataUpsert(
+                    recipe.Id,
+                    fingerprint,
+                    projectionDocument.ProjectionSchemaVersion,
+                    string.Join(",", projectionDocument.LanguageCoverage),
+                    DateTime.UtcNow));
             }
             catch (Exception exception)
             {
@@ -91,26 +135,30 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
                     recipe.Name ?? string.Empty);
             }
 
-            if ((i + 1) % 25 == 0 || i == recipes.Count - 1)
+            if ((i + 1) % 25 == 0 || i == projections.Count - 1)
             {
                 _logger.LogInformation(
-                    "Recipe indexing progress indexed={IndexedCount} total={TotalCount}",
+                    "Recipe indexing progress processed={ProcessedCount} total={TotalCount} changed={ChangedCount} skipped={SkippedCount}",
                     i + 1,
-                    recipes.Count);
+                    projections.Count,
+                    documents.Count,
+                    skippedRecipes);
             }
         }
 
         if (documents.Count > 0)
         {
             await _vectorStore.UpsertAsync(documents, cancellationToken);
+            await _projectionRepository.UpsertRecipeIndexMetadataAsync(metadataUpdates, cancellationToken);
         }
 
         startedAt.Stop();
         _logger.LogInformation(
-            "Recipe indexing completed indexed={IndexedCount} failed={FailedCount} total={TotalCount} model={EmbeddingModel} dimensions={Dimensions} durationMs={DurationMs}",
+            "Recipe indexing completed indexed={IndexedCount} skipped={SkippedCount} failed={FailedCount} total={TotalCount} model={EmbeddingModel} dimensions={Dimensions} durationMs={DurationMs}",
             documents.Count,
+            skippedRecipes,
             failedRecipes,
-            recipes.Count,
+            projections.Count,
             embeddingModel,
             embeddingDimensions,
             startedAt.Elapsed.TotalMilliseconds);
@@ -122,7 +170,7 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
         activity?.SetTag("indexing.duration_ms", startedAt.Elapsed.TotalMilliseconds);
 
         return new RecipeIndexingResult(
-            recipes.Count,
+            projections.Count,
             documents.Count,
             failedRecipes,
             embeddingModel,
@@ -130,7 +178,10 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
             startedAt.Elapsed.TotalMilliseconds);
     }
 
-    private static IReadOnlyDictionary<string, object?> BuildMetadata(Recipe recipe)
+    private static IReadOnlyDictionary<string, object?> BuildMetadata(
+        Recipe recipe,
+        RecipeProjection projection,
+        string fingerprint)
     {
         var ingredientNames = recipe.RecipeIngredients
             .Select(recipeIngredient => recipeIngredient.Ingredient?.Name)
@@ -150,7 +201,55 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
             ["timeToPrepareMinutes"] = recipe.TimeToPrepare,
             ["ingredientNames"] = ingredientNames,
             ["hasFreezingNotes"] = !string.IsNullOrWhiteSpace(recipe.FreezingNotes),
-            ["hasReheatNotes"] = !string.IsNullOrWhiteSpace(recipe.ReheatNotes)
+            ["hasReheatNotes"] = !string.IsNullOrWhiteSpace(recipe.ReheatNotes),
+            ["projectionSchemaVersion"] = projection.ProjectionSchemaVersion,
+            ["projectionFingerprint"] = fingerprint,
+            ["normalizationVersion"] = projection.NormalizationVersion,
+            ["languageCoverage"] = projection.LanguageCoverage
         };
+    }
+
+    private static string BuildNormalizationSeed(Recipe recipe)
+    {
+        var ingredientNames = recipe.RecipeIngredients
+            .Select(ingredient => ingredient.Ingredient?.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name));
+
+        return string.Join(' ', new[]
+        {
+            recipe.Name,
+            recipe.Tags,
+            recipe.Notes,
+            recipe.Prepping,
+            string.Join(' ', ingredientNames)
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static IReadOnlyList<string> BuildCanonicalDependencyHashes(Recipe recipe)
+    {
+        var values = new List<string>
+        {
+            Hash($"recipe:{recipe.Id}"),
+            Hash($"name:{recipe.Name}"),
+            Hash($"tags:{recipe.Tags}"),
+            Hash($"notes:{recipe.Notes}"),
+            Hash($"prepping:{recipe.Prepping}"),
+            Hash($"servings:{recipe.Servings?.ToString(CultureInfo.InvariantCulture) ?? string.Empty}"),
+            Hash($"time:{recipe.TimeToPrepare?.ToString(CultureInfo.InvariantCulture) ?? string.Empty}")
+        };
+
+        values.AddRange(recipe.RecipeIngredients
+            .OrderBy(ingredient => ingredient.IngredientId)
+            .Select(ingredient => Hash($"ingredient:{ingredient.IngredientId}:{ingredient.Amount?.ToString(CultureInfo.InvariantCulture) ?? string.Empty}:{ingredient.Unit}:{ingredient.Ingredient?.Name}")));
+
+        return values
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static string Hash(string value)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value ?? string.Empty));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

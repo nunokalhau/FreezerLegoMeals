@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using SemanticSearch.DotNet;
 
 namespace Services.DotNet;
 
@@ -15,12 +16,14 @@ public sealed class PythonToolExecutor : IToolExecutor
     private readonly string _toolsRoot;
     private readonly string _pythonExecutable;
     private readonly IExternalDependencyResiliencePolicyProvider _resiliencePolicyProvider;
+    private readonly ISearchQueryNormalizer _searchQueryNormalizer;
     private readonly ILogger<PythonToolExecutor> _logger;
 
     public PythonToolExecutor(
         IToolRegistry toolRegistry,
         string toolsRoot,
         string pythonExecutable = "python",
+        ISearchQueryNormalizer? searchQueryNormalizer = null,
         ILogger<PythonToolExecutor>? logger = null,
         IExternalDependencyResiliencePolicyProvider? resiliencePolicyProvider = null)
     {
@@ -28,6 +31,7 @@ public sealed class PythonToolExecutor : IToolExecutor
         _toolsRoot = string.IsNullOrWhiteSpace(toolsRoot) ? throw new ArgumentException("Tools root is required", nameof(toolsRoot)) : toolsRoot;
         _pythonExecutable = string.IsNullOrWhiteSpace(pythonExecutable) ? "python" : pythonExecutable;
         _resiliencePolicyProvider = resiliencePolicyProvider ?? NoOpExternalDependencyResiliencePolicyProvider.Instance;
+        _searchQueryNormalizer = searchQueryNormalizer ?? new DefaultSearchQueryNormalizer();
         _logger = logger ?? NullLogger<PythonToolExecutor>.Instance;
     }
 
@@ -69,12 +73,13 @@ public sealed class PythonToolExecutor : IToolExecutor
             };
         }
 
-        var payload = JsonSerializer.Serialize(parameters ?? new Dictionary<string, object?>());
+        var normalizedParameters = NormalizeToolParameters(parameters ?? new Dictionary<string, object?>());
+        var payload = JsonSerializer.Serialize(normalizedParameters);
         _logger.LogInformation(
             "Tool execution started tool={ToolName} wrapper={Wrapper} parameterCount={ParameterCount}",
             tool.Name,
             wrapper,
-            parameters?.Count ?? 0);
+            normalizedParameters.Count);
 
         try
         {
@@ -101,6 +106,37 @@ public sealed class PythonToolExecutor : IToolExecutor
                 Error = exception.Message
             };
         }
+    }
+
+    private IReadOnlyDictionary<string, object?> NormalizeToolParameters(IReadOnlyDictionary<string, object?> parameters)
+    {
+        if (parameters.Count == 0)
+            return parameters;
+
+        var normalized = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in parameters)
+        {
+            if (value is string stringValue && IsQueryParameter(key))
+            {
+                var normalizedQuery = _searchQueryNormalizer.Normalize(stringValue);
+                normalized[key] = normalizedQuery.NormalizedQuery;
+                normalized[$"{key}_normalization_version"] = normalizedQuery.NormalizationVersion;
+                normalized[$"{key}_modality"] = normalizedQuery.Modality;
+                continue;
+            }
+
+            normalized[key] = value;
+        }
+
+        return normalized;
+    }
+
+    private static bool IsQueryParameter(string key)
+    {
+        return key.Equals("query", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("question", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("search_query", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("text", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<ToolExecutionResult> ExecuteToolProcessAsync(

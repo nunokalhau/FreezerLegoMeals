@@ -25,7 +25,7 @@ public interface IRecipeRepository
 /// <summary>
 /// Implementation of the recipe repository for .NET, using EF Core to map entities to domain models.
 /// </summary>
-public class RecipeRepository : IRecipeRepository
+public class RecipeRepository : IRecipeRepository, IRecipeIndexingProjectionRepository
 {
     private readonly FreezerLegoMealsContext _context;
 
@@ -218,6 +218,127 @@ public class RecipeRepository : IRecipeRepository
             .FirstOrDefaultAsync(i => i.Name == name);
 
         return entity != null ? MapIngredient(entity) : null;
+    }
+
+    public async Task<IReadOnlyList<RecipeIndexingProjection>> GetRecipeIndexingProjectionsAsync(CancellationToken cancellationToken = default)
+    {
+        var entities = await _context.Recipes
+            .AsNoTracking()
+            .Include(recipe => recipe.IndexMetadata)
+            .Include(recipe => recipe.Translations)
+            .Include(recipe => recipe.RecipeIngredients)
+                .ThenInclude(recipeIngredient => recipeIngredient.Localizations)
+            .Include(recipe => recipe.RecipeIngredients)
+                .ThenInclude(recipeIngredient => recipeIngredient.Ingredient)
+                    .ThenInclude(ingredient => ingredient.Translations)
+            .OrderBy(recipe => recipe.Id)
+            .ToListAsync(cancellationToken);
+
+        return entities
+            .Select(entity =>
+            {
+                var recipe = MapRecipe(entity);
+                var languageCoverage = entity.Translations
+                    .Select(translation => translation.Language)
+                    .Where(language => !string.IsNullOrWhiteSpace(language))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(language => language, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                var translationContentHashes = entity.Translations
+                    .Select(translation => translation.ContentHash)
+                    .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(hash => hash, StringComparer.Ordinal)
+                    .ToArray();
+
+                var ingredientTranslationContentHashes = entity.RecipeIngredients
+                    .SelectMany(recipeIngredient => recipeIngredient.Ingredient?.Translations ?? [])
+                    .Select(translation => translation.ContentHash)
+                    .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(hash => hash, StringComparer.Ordinal)
+                    .ToArray();
+
+                var recipeIngredientLocalizationContentHashes = entity.RecipeIngredients
+                    .SelectMany(recipeIngredient => recipeIngredient.Localizations)
+                    .Select(localization => localization.ContentHash)
+                    .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(hash => hash, StringComparer.Ordinal)
+                    .ToArray();
+
+                var authoredSourceContributions = entity.RecipeIngredients
+                    .Select(recipeIngredient => recipeIngredient.SourceText)
+                    .Concat(entity.RecipeIngredients
+                        .SelectMany(recipeIngredient => recipeIngredient.Localizations)
+                        .Select(localization => localization.SourceText))
+                    .Where(sourceText => !string.IsNullOrWhiteSpace(sourceText))
+                    .Select(sourceText => sourceText!.Trim())
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(sourceText => sourceText, StringComparer.Ordinal)
+                    .ToArray();
+
+                RecipeIndexMetadataSnapshot? existingMetadata = null;
+                if (entity.IndexMetadata is not null)
+                {
+                    existingMetadata = new RecipeIndexMetadataSnapshot(
+                        entity.IndexMetadata.ProjectionFingerprint,
+                        entity.IndexMetadata.ProjectionSchemaVersion,
+                        entity.IndexMetadata.LanguageCoverage,
+                        entity.IndexMetadata.ProjectionGeneratedAtUtc);
+                }
+
+                return new RecipeIndexingProjection(
+                    recipe,
+                    languageCoverage,
+                    translationContentHashes,
+                    ingredientTranslationContentHashes,
+                    recipeIngredientLocalizationContentHashes,
+                    authoredSourceContributions,
+                    existingMetadata);
+            })
+            .ToList();
+    }
+
+    public async Task UpsertRecipeIndexMetadataAsync(
+        IReadOnlyList<RecipeIndexMetadataUpsert> updates,
+        CancellationToken cancellationToken = default)
+    {
+        if (updates.Count == 0)
+            return;
+
+        var recipeIds = updates
+            .Select(update => update.RecipeId)
+            .Distinct()
+            .ToArray();
+
+        var existingByRecipeId = await _context.RecipeIndexMetadata
+            .Where(metadata => recipeIds.Contains(metadata.RecipeId))
+            .ToDictionaryAsync(metadata => metadata.RecipeId, cancellationToken);
+
+        foreach (var update in updates)
+        {
+            if (existingByRecipeId.TryGetValue(update.RecipeId, out var entity))
+            {
+                entity.ProjectionFingerprint = update.ProjectionFingerprint;
+                entity.ProjectionSchemaVersion = update.ProjectionSchemaVersion;
+                entity.LanguageCoverage = update.LanguageCoverage;
+                entity.ProjectionGeneratedAtUtc = update.ProjectionGeneratedAtUtc;
+                continue;
+            }
+
+            _context.RecipeIndexMetadata.Add(new RecipeIndexMetadataEntity
+            {
+                RecipeId = update.RecipeId,
+                ProjectionFingerprint = update.ProjectionFingerprint,
+                ProjectionSchemaVersion = update.ProjectionSchemaVersion,
+                LanguageCoverage = update.LanguageCoverage,
+                ProjectionGeneratedAtUtc = update.ProjectionGeneratedAtUtc
+            });
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private Recipe MapRecipe(RecipeEntity entity)

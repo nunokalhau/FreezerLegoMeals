@@ -32,6 +32,7 @@ public sealed class LocalizedRecipeQueryService : ILocalizedRecipeQueryService
 
         var recipes = await _context.Recipes
             .AsNoTracking()
+            .Include(recipe => recipe.IndexMetadata)
             .Include(recipe => recipe.Translations)
             .Include(recipe => recipe.RecipeIngredients)
                 .ThenInclude(recipeIngredient => recipeIngredient.Ingredient)
@@ -55,6 +56,7 @@ public sealed class LocalizedRecipeQueryService : ILocalizedRecipeQueryService
 
         var recipe = await _context.Recipes
             .AsNoTracking()
+            .Include(entity => entity.IndexMetadata)
             .Include(entity => entity.Translations)
             .Include(entity => entity.RecipeIngredients)
                 .ThenInclude(recipeIngredient => recipeIngredient.Ingredient)
@@ -119,6 +121,10 @@ public sealed class LocalizedRecipeQueryService : ILocalizedRecipeQueryService
             Notes = recipeTranslation?.Notes ?? entity.Notes ?? string.Empty,
             Prepping = recipeTranslation?.Prepping ?? entity.Prepping ?? string.Empty,
             TimeToPrepare = entity.TimeToPrepare,
+            ProjectionSchemaVersion = entity.IndexMetadata?.ProjectionSchemaVersion ?? string.Empty,
+            ProjectionFingerprint = entity.IndexMetadata?.ProjectionFingerprint ?? string.Empty,
+            LanguageCoverage = entity.IndexMetadata?.LanguageCoverage ?? string.Empty,
+            NormalizationVersion = "search-normalization-v1",
             Ingredients = ingredients
                 .OrderBy(ingredient => ingredient.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray()

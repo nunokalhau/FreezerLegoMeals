@@ -6,45 +6,71 @@ namespace RAG.DotNet;
 
 public sealed class RecipeDocumentBuilder : IRecipeDocumentBuilder
 {
+    public const string DefaultProjectionSchemaVersion = "recipe-semantic-projection-v1";
+
     public string Build(Recipe recipe)
     {
         ArgumentNullException.ThrowIfNull(recipe);
+        return BuildProjection(new RecipeProjectionInput(recipe, "search-normalization-v1")).Document;
+    }
+
+    public RecipeProjection BuildProjection(RecipeProjectionInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(input.Recipe);
+
+        var recipe = input.Recipe;
+        var languageCoverage = (input.LanguageCoverage ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => Normalize(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var authoredSourceTexts = (input.AuthoredSourceTexts ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(Normalize)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        var projectionSchemaVersion = string.IsNullOrWhiteSpace(input.ProjectionSchemaVersion)
+            ? DefaultProjectionSchemaVersion
+            : Normalize(input.ProjectionSchemaVersion);
 
         var ingredientValues = recipe.RecipeIngredients
+            .OrderBy(ingredient => ingredient.IngredientId)
+            .ThenBy(ingredient => Normalize(ingredient.Ingredient?.Name ?? string.Empty), StringComparer.Ordinal)
             .Select(FormatIngredient)
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var tags = SplitAndNormalizeTags(recipe.Tags);
-        var timeValue = recipe.TimeToPrepare?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        var servingsValue = recipe.Servings?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        var timeValue = recipe.TimeToPrepare?.ToString(CultureInfo.InvariantCulture) ?? "<none>";
+        var servingsValue = recipe.Servings?.ToString(CultureInfo.InvariantCulture) ?? "<none>";
         var description = Normalize(recipe.Notes);
         var notes = Normalize(recipe.Notes);
 
         // Keep section order fixed so semantically identical recipes map to identical documents.
         var lines = new List<string>
         {
+            $"Projection schema version: {projectionSchemaVersion}",
+            $"Normalization version: {Normalize(input.NormalizationVersion)}",
+            $"Language coverage: {(languageCoverage.Length == 0 ? "<none>" : string.Join(", ", languageCoverage))}",
             $"Title: {Normalize(recipe.Name)}",
-            $"Description: {description}",
-            $"Tags: {string.Join(", ", tags)}",
-            $"Ingredients: {string.Join(", ", ingredientValues)}",
+            $"Description: {RenderOptional(description)}",
+            $"Tags: {(tags.Length == 0 ? "<none>" : string.Join(", ", tags))}",
+            $"Ingredients: {(ingredientValues.Length == 0 ? "<none>" : string.Join(", ", ingredientValues))}",
             $"Preparation steps: {Normalize(recipe.Prepping)}",
             $"Cooking time: {timeValue}",
             $"Preparation time: {timeValue}",
             $"Servings: {servingsValue}"
         };
 
-        var freezing = Normalize(recipe.FreezingNotes);
-        if (!string.IsNullOrWhiteSpace(freezing))
-            lines.Add($"Freezing instructions: {freezing}");
-
-        var reheating = Normalize(recipe.ReheatNotes);
-        if (!string.IsNullOrWhiteSpace(reheating))
-            lines.Add($"Reheating instructions: {reheating}");
-
-        if (!string.IsNullOrWhiteSpace(notes))
-            lines.Add($"Notes: {notes}");
+        lines.Add($"Freezing instructions: {RenderOptional(recipe.FreezingNotes)}");
+        lines.Add($"Reheating instructions: {RenderOptional(recipe.ReheatNotes)}");
+        lines.Add($"Notes: {RenderOptional(notes)}");
+        lines.Add($"Authored source text: {(authoredSourceTexts.Length == 0 ? "<none>" : string.Join(" | ", authoredSourceTexts))}");
 
         var builder = new StringBuilder();
         for (var i = 0; i < lines.Count; i++)
@@ -55,7 +81,12 @@ public sealed class RecipeDocumentBuilder : IRecipeDocumentBuilder
             builder.Append(lines[i]);
         }
 
-        return builder.ToString();
+        return new RecipeProjection(
+            builder.ToString(),
+            projectionSchemaVersion,
+            Normalize(input.NormalizationVersion),
+            languageCoverage,
+            authoredSourceTexts);
     }
 
     private static string[] SplitAndNormalizeTags(string? tags)
@@ -95,5 +126,11 @@ public sealed class RecipeDocumentBuilder : IRecipeDocumentBuilder
 
         return string.Join(" ", value
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    private static string RenderOptional(string? value)
+    {
+        var normalized = Normalize(value);
+        return string.IsNullOrWhiteSpace(normalized) ? "<none>" : normalized;
     }
 }

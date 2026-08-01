@@ -90,20 +90,20 @@ Evidence:
 
 ## Phase 4 Checklist
 
-- [ ] Entry criteria from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) are true.
-- [ ] Deliverables from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) exist.
-- [ ] Exit criteria from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) are objectively satisfied.
-- [ ] Success metrics from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) are met.
-- [ ] Explicit non-goals from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) were respected.
-- [ ] Global Build And Test Gate passed for Phase 4.
+- [x] Entry criteria from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) are true.
+- [x] Deliverables from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) exist.
+- [x] Exit criteria from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) are objectively satisfied.
+- [x] Success metrics from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) are met.
+- [x] Explicit non-goals from [Phase 4](implementation-plan.md#phase-4-search-normalization-semantic-projection-and-incremental-indexing) were respected.
+- [x] Global Build And Test Gate passed for Phase 4.
 
 Evidence:
 
-- PR or commit(s):
-- Deterministic projection evidence:
-- Fingerprint reindex behavior evidence:
-- Deprecated normalization/projection paths removed:
-- Technical Debt Discovered updates (if any):
+- PR or commit(s): Working tree changes only in this session; no commit created yet.
+- Deterministic projection evidence: Added shared normalization boundary (`ISearchQueryNormalizer`, `DefaultSearchQueryNormalizer`) and deterministic projection contracts (`RecipeProjectionInput`, `RecipeProjection`) with explicit projection schema/normalization metadata propagation through semantic and retrieval paths. `RecipeDocumentBuilder` now emits stable, ordered projection content (canonical ingredient ordering, explicit optional placeholders, authored source text section).
+- Fingerprint reindex behavior evidence: Added `IRecipeProjectionFingerprintService` (`SHA-256` over normalized ordered projection inputs) and refactored `RecipeIndexingService` to compute projection fingerprints, skip unchanged documents, upsert only changed vectors, and persist `recipe_index_metadata` snapshots via `IRecipeIndexingProjectionRepository`. Unit coverage updated for unchanged/changed fingerprint scenarios.
+- Deprecated normalization/projection paths removed: Removed `KeywordSearchService` local tokenization path in favor of shared query normalizer; removed startup probe-search heuristic from `RecipeStartupIndexingHostedService` so indexing decisions are centralized in incremental fingerprint logic.
+- Technical Debt Discovered updates (if any): Integration and WebApi test logs remain noisy due to EF change tracking and startup indexing/external service chatter; recommend later stabilization with test-host feature flags/log-level reduction. Global gate rerun after final Phase 4 fixes passed: build succeeded; Repository unit tests 25/25; Services unit tests 144/144; WebApi unit tests 24/24; Integration tests 50/50 (duration 154.4s).
 
 ## Phase 5 Checklist
 

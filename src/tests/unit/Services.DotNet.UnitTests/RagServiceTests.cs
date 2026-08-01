@@ -52,7 +52,7 @@ public class RagServiceTests
 
         await service.RetrieveAsync("What chicken recipes do you have?");
 
-        Assert.Equal("chicken freezer recipes", embeddingService.LastText);
+        Assert.Equal("chicken freezer recipe", embeddingService.LastText);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class RagServiceTests
 
         await service.RetrieveAsync("What chicken recipes do you have?");
 
-        Assert.Equal("What chicken recipes do you have?", embeddingService.LastText);
+        Assert.Equal("what chicken recipe do you have", embeddingService.LastText);
     }
 
     [Fact]

@@ -15,6 +15,7 @@ public sealed class RetrievalService : IRetrievalService
     private readonly IQueryRewriter? _queryRewriter;
     private readonly IKeywordSearchService? _keywordSearchService;
     private readonly IReranker? _reranker;
+    private readonly ISearchQueryNormalizer _searchQueryNormalizer;
     private readonly ILogger<RetrievalService> _logger;
     private readonly int _topK;
     private readonly double _minimumSimilarity;
@@ -25,6 +26,7 @@ public sealed class RetrievalService : IRetrievalService
         IQueryRewriter? queryRewriter = null,
         IKeywordSearchService? keywordSearchService = null,
         IReranker? reranker = null,
+        ISearchQueryNormalizer? searchQueryNormalizer = null,
         int topK = 3,
         double minimumSimilarity = 0.2,
         ILogger<RetrievalService>? logger = null)
@@ -34,6 +36,7 @@ public sealed class RetrievalService : IRetrievalService
         _queryRewriter = queryRewriter;
         _keywordSearchService = keywordSearchService;
         _reranker = reranker;
+        _searchQueryNormalizer = searchQueryNormalizer ?? new DefaultSearchQueryNormalizer();
         _topK = topK;
         _minimumSimilarity = minimumSimilarity;
         _logger = logger ?? NullLogger<RetrievalService>.Instance;
@@ -60,6 +63,10 @@ public sealed class RetrievalService : IRetrievalService
             activity?.SetTag("retrieval.reason", "empty-query");
             return new RetrievalResult(question ?? string.Empty, [], []);
         }
+
+        var normalizedQuestion = _searchQueryNormalizer.Normalize(question);
+        activity?.SetTag("retrieval.normalization_version", normalizedQuestion.NormalizationVersion);
+        activity?.SetTag("retrieval.query_modality", normalizedQuestion.Modality);
 
         var rewrittenQuestion = question;
         var rewriteStartedAt = Stopwatch.StartNew();
@@ -90,6 +97,7 @@ public sealed class RetrievalService : IRetrievalService
             rewrittenQuestion,
             rewriteStartedAt.Elapsed.TotalMilliseconds);
         activity?.SetTag("retrieval.original_query", question);
+        activity?.SetTag("retrieval.normalized_query", normalizedQuestion.NormalizedQuery);
         activity?.SetTag("retrieval.rewritten_query", rewrittenQuestion);
         activity?.SetTag("retrieval.rewrite_duration_ms", rewriteStartedAt.Elapsed.TotalMilliseconds);
         activity?.SetTag("retrieval.rewrite_applied", !string.Equals(question, rewrittenQuestion, StringComparison.Ordinal));
@@ -145,7 +153,11 @@ public sealed class RetrievalService : IRetrievalService
                 metadata.Ingredients,
                 metadata.PreparationSteps,
                 metadata.CookingTime,
-                fusedMatch.Score));
+                fusedMatch.Score,
+                metadata.ProjectionSchemaVersion,
+                metadata.NormalizationVersion,
+                metadata.ProjectionFingerprint,
+                metadata.LanguageCoverage));
         }
 
         var originalRanking = recipes

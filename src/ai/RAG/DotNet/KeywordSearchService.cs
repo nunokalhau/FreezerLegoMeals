@@ -1,16 +1,18 @@
-using System.Text;
 using Domain.DotNet;
 using Repository.DotNet;
+using SemanticSearch.DotNet;
 
 namespace RAG.DotNet;
 
 public sealed class KeywordSearchService : IKeywordSearchService
 {
     private readonly IRecipeRepository _recipeRepository;
+    private readonly ISearchQueryNormalizer _searchQueryNormalizer;
 
-    public KeywordSearchService(IRecipeRepository recipeRepository)
+    public KeywordSearchService(IRecipeRepository recipeRepository, ISearchQueryNormalizer? searchQueryNormalizer = null)
     {
         _recipeRepository = recipeRepository ?? throw new ArgumentNullException(nameof(recipeRepository));
+        _searchQueryNormalizer = searchQueryNormalizer ?? new DefaultSearchQueryNormalizer();
     }
 
     public async Task<IReadOnlyList<KeywordSearchResult>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
@@ -20,7 +22,10 @@ public sealed class KeywordSearchService : IKeywordSearchService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var terms = Tokenize(query);
+        var normalizedQuery = _searchQueryNormalizer.Normalize(query);
+        var terms = normalizedQuery.ExpandedTokens
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
         if (terms.Count == 0)
             return [];
 
@@ -34,7 +39,7 @@ public sealed class KeywordSearchService : IKeywordSearchService
             if (string.IsNullOrWhiteSpace(searchableText))
                 continue;
 
-            var score = ScoreRecipe(searchableText, query, terms);
+            var score = ScoreRecipe(searchableText, normalizedQuery.NormalizedQuery, terms);
             if (score <= 0)
                 continue;
 
@@ -45,20 +50,6 @@ public sealed class KeywordSearchService : IKeywordSearchService
             .OrderByDescending(result => result.Score)
             .ThenBy(result => result.RecipeId, StringComparer.Ordinal)
             .Take(topK)
-            .ToList();
-    }
-
-    private static List<string> Tokenize(string query)
-    {
-        var builder = new StringBuilder(query.Length);
-        foreach (var character in query.ToLowerInvariant())
-        {
-            builder.Append(char.IsLetterOrDigit(character) ? character : ' ');
-        }
-
-        return builder.ToString()
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
             .ToList();
     }
 

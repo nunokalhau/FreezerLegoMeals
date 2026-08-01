@@ -142,7 +142,7 @@ public class AssistantControllerIntegrationTests
         Assert.Contains("Use the spicy chicken recipe.", payload.Response);
         Assert.Contains("Sources:", payload.Response);
         Assert.Contains("1: Spicy Chicken", payload.Response);
-        Assert.Equal("spicy chicken freezer recipes", embeddingService.LastText);
+        Assert.Equal("spicy chicken freezer recipe", embeddingService.LastText);
         Assert.Equal(new[] { 1f, 0f }, vectorStore.LastEmbedding);
         Assert.Equal(3, vectorStore.LastTopK);
     }
@@ -192,7 +192,7 @@ public class AssistantControllerIntegrationTests
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
 
-        Assert.Equal("What spicy chicken meal can I cook?", embeddingService.LastText);
+        Assert.Equal("what spicy chicken meal can i cook", embeddingService.LastText);
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class AssistantControllerIntegrationTests
         Assert.True(sourceThree >= 0);
         Assert.True(sourceOne < sourceTwo);
         Assert.True(sourceTwo < sourceThree);
-        Assert.Equal("chicken and beef freezer recipes", embeddingService.LastText);
+        Assert.Equal("chicken and beef freezer recipe", embeddingService.LastText);
         Assert.Equal(3, vectorStore.LastTopK);
     }
 
