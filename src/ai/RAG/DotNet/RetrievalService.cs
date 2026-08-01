@@ -9,9 +9,11 @@ namespace RAG.DotNet;
 public sealed class RetrievalService : IRetrievalService
 {
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
+    private const int ReciprocalRankFusionK = 60;
     private readonly SemanticSearchService _semanticSearchService;
     private readonly ISemanticRecipeMetadataProvider _metadataProvider;
     private readonly IQueryRewriter? _queryRewriter;
+    private readonly IKeywordSearchService? _keywordSearchService;
     private readonly ILogger<RetrievalService> _logger;
     private readonly int _topK;
     private readonly double _minimumSimilarity;
@@ -20,6 +22,7 @@ public sealed class RetrievalService : IRetrievalService
         SemanticSearchService semanticSearchService,
         ISemanticRecipeMetadataProvider metadataProvider,
         IQueryRewriter? queryRewriter = null,
+        IKeywordSearchService? keywordSearchService = null,
         int topK = 3,
         double minimumSimilarity = 0.2,
         ILogger<RetrievalService>? logger = null)
@@ -27,6 +30,7 @@ public sealed class RetrievalService : IRetrievalService
         _semanticSearchService = semanticSearchService ?? throw new ArgumentNullException(nameof(semanticSearchService));
         _metadataProvider = metadataProvider ?? throw new ArgumentNullException(nameof(metadataProvider));
         _queryRewriter = queryRewriter;
+        _keywordSearchService = keywordSearchService;
         _topK = topK;
         _minimumSimilarity = minimumSimilarity;
         _logger = logger ?? NullLogger<RetrievalService>.Instance;
@@ -87,33 +91,58 @@ public sealed class RetrievalService : IRetrievalService
         activity?.SetTag("retrieval.rewrite_duration_ms", rewriteStartedAt.Elapsed.TotalMilliseconds);
         activity?.SetTag("retrieval.rewrite_applied", !string.Equals(question, rewrittenQuestion, StringComparison.Ordinal));
 
-        var matches = await _semanticSearchService.SearchAsync(rewrittenQuestion, _topK, cancellationToken);
-        var similarityScores = matches.Select(match => match.Score).ToList();
+        var semanticMatches = await _semanticSearchService.SearchAsync(rewrittenQuestion, _topK, cancellationToken);
+        var keywordMatches = _keywordSearchService is null
+            ? []
+            : await _keywordSearchService.SearchAsync(question, _topK, cancellationToken);
+
+        var semanticRanking = semanticMatches
+            .Select(match => new RankedRecipe(match.RecipeId, match.Score))
+            .ToList();
+        var keywordRanking = keywordMatches
+            .Select(match => new RankedRecipe(match.RecipeId, match.Score))
+            .ToList();
+        var fusedRanking = FuseRankings(semanticRanking, keywordRanking);
+
+        LogRankingDiagnostics("semantic", semanticRanking);
+        LogRankingDiagnostics("keyword", keywordRanking);
+        LogRankingDiagnostics("fused", fusedRanking);
+
+        activity?.SetTag("retrieval.semantic_ranking", FormatRanking(semanticRanking));
+        activity?.SetTag("retrieval.keyword_ranking", FormatRanking(keywordRanking));
+        activity?.SetTag("retrieval.fused_ranking", FormatRanking(fusedRanking));
+
+        var similarityScores = semanticMatches.Select(match => match.Score).ToList();
         var elapsedMs = startedAt.Elapsed.TotalMilliseconds;
-        if (matches.Count == 0)
+        if (fusedRanking.Count == 0)
         {
-            LogRetrievalDiagnostics("no-context", "no-semantic-matches", similarityScores, 0, elapsedMs, question.Length);
+            var noContextReason = semanticMatches.Count == 0 && keywordMatches.Count == 0
+                ? "no-semantic-or-keyword-matches"
+                : "below-threshold";
+            LogRetrievalDiagnostics("no-context", noContextReason, similarityScores, 0, elapsedMs, question.Length);
             activity?.SetTag("retrieval.decision", "no-context");
-            activity?.SetTag("retrieval.reason", "no-semantic-matches");
-            activity?.SetTag("retrieval.semantic_match_count", 0);
+            activity?.SetTag("retrieval.reason", noContextReason);
+            activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
+            activity?.SetTag("retrieval.keyword_match_count", keywordMatches.Count);
+            activity?.SetTag("retrieval.fused_match_count", fusedRanking.Count);
             activity?.SetTag("retrieval.accepted_count", 0);
             activity?.SetTag("retrieval.elapsed_ms", elapsedMs);
             return new RetrievalResult(question, [], []);
         }
 
         var recipes = new List<RetrievalRecipe>();
-        foreach (var match in matches.Where(match => match.Score >= _minimumSimilarity))
+        foreach (var fusedMatch in fusedRanking)
         {
-            var metadata = await _metadataProvider.GetMetadataAsync(match.RecipeId, cancellationToken);
+            var metadata = await _metadataProvider.GetMetadataAsync(fusedMatch.RecipeId, cancellationToken);
             recipes.Add(new RetrievalRecipe(
-                match.RecipeId,
+                fusedMatch.RecipeId,
                 metadata.Title,
                 metadata.Description,
                 metadata.Tags,
                 metadata.Ingredients,
                 metadata.PreparationSteps,
                 metadata.CookingTime,
-                match.Score));
+                fusedMatch.Score));
         }
 
         var decision = recipes.Count == 0 ? "no-context" : "context-accepted";
@@ -123,7 +152,9 @@ public sealed class RetrievalService : IRetrievalService
         LogRetrievalDiagnostics(decision, reason, similarityScores, recipes.Count, elapsedMs, question.Length);
         activity?.SetTag("retrieval.decision", decision);
         activity?.SetTag("retrieval.reason", reason);
-        activity?.SetTag("retrieval.semantic_match_count", matches.Count);
+        activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
+        activity?.SetTag("retrieval.keyword_match_count", keywordMatches.Count);
+        activity?.SetTag("retrieval.fused_match_count", fusedRanking.Count);
         activity?.SetTag("retrieval.accepted_count", recipes.Count);
         activity?.SetTag("retrieval.elapsed_ms", elapsedMs);
 
@@ -131,6 +162,71 @@ public sealed class RetrievalService : IRetrievalService
             question,
             recipes,
             recipes.Select(recipe => new SourceAttribution(recipe.RecipeId, recipe.Title, recipe.SimilarityScore)).ToList());
+    }
+
+    private List<RankedRecipe> FuseRankings(
+        IReadOnlyList<RankedRecipe> semanticRanking,
+        IReadOnlyList<RankedRecipe> keywordRanking)
+    {
+        var semanticEligibleIds = semanticRanking
+            .Where(candidate => candidate.Score >= _minimumSimilarity)
+            .Select(candidate => candidate.RecipeId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var contributions = new Dictionary<string, double>(StringComparer.Ordinal);
+
+        for (var index = 0; index < semanticRanking.Count; index++)
+        {
+            var entry = semanticRanking[index];
+            if (!semanticEligibleIds.Contains(entry.RecipeId))
+                continue;
+
+            AddContribution(contributions, entry.RecipeId, index + 1);
+        }
+
+        for (var index = 0; index < keywordRanking.Count; index++)
+        {
+            var entry = keywordRanking[index];
+            AddContribution(contributions, entry.RecipeId, index + 1);
+        }
+
+        return contributions
+            .Select(item => new RankedRecipe(item.Key, item.Value))
+            .OrderByDescending(item => item.Score)
+            .ThenBy(item => item.RecipeId, StringComparer.Ordinal)
+            .Take(_topK)
+            .ToList();
+    }
+
+    private static void AddContribution(IDictionary<string, double> contributions, string recipeId, int rank)
+    {
+        var rrfScore = 1d / (ReciprocalRankFusionK + rank);
+        if (contributions.TryGetValue(recipeId, out var existing))
+        {
+            contributions[recipeId] = existing + rrfScore;
+        }
+        else
+        {
+            contributions[recipeId] = rrfScore;
+        }
+    }
+
+    private void LogRankingDiagnostics(string rankingType, IReadOnlyList<RankedRecipe> ranking)
+    {
+        _logger.LogInformation(
+            "Retrieval {RankingType} ranking count={Count} items={Items}",
+            rankingType,
+            ranking.Count,
+            FormatRanking(ranking));
+    }
+
+    private static string FormatRanking(IReadOnlyList<RankedRecipe> ranking)
+    {
+        if (ranking.Count == 0)
+            return "none";
+
+        return string.Join(",", ranking.Select((entry, index) =>
+            $"r{index + 1}:{entry.RecipeId}:{entry.Score.ToString("F6", CultureInfo.InvariantCulture)}"));
     }
 
     private void LogRetrievalDiagnostics(
@@ -157,4 +253,6 @@ public sealed class RetrievalService : IRetrievalService
             formattedScores,
             elapsedMs);
     }
+
+    private sealed record RankedRecipe(string RecipeId, double Score);
 }

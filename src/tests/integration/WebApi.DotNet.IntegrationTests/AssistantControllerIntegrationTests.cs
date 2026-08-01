@@ -190,6 +190,71 @@ public class AssistantControllerIntegrationTests
     }
 
     [Fact]
+    public async Task Chat_WithRepositoryQuestion_UsesHybridFusionRanking()
+    {
+        var embeddingService = new RecordingEmbeddingService();
+        var vectorStore = new RecordingVectorStore([
+            new VectorMatch("1", 0.95),
+            new VectorMatch("3", 0.70)
+        ]);
+        var metadataProvider = new HybridMetadataProvider();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantHybridRagIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IKeywordSearchService>();
+                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService>(embeddingService);
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("chicken and beef freezer recipes"));
+                services.AddSingleton<IKeywordSearchService>(new StubKeywordSearchService([
+                    new KeywordSearchResult("2", 3),
+                    new KeywordSearchResult("1", 2)
+                ]));
+            });
+        });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "What chicken recipes do you have?"
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.Contains("Sources:", payload.Response);
+
+        var sourceOne = payload.Response.IndexOf("- 1: Spicy Chicken", StringComparison.Ordinal);
+        var sourceTwo = payload.Response.IndexOf("- 2: Beef Stir Fry", StringComparison.Ordinal);
+        var sourceThree = payload.Response.IndexOf("- 3: Garlic Rice", StringComparison.Ordinal);
+        Assert.True(sourceOne >= 0);
+        Assert.True(sourceTwo >= 0);
+        Assert.True(sourceThree >= 0);
+        Assert.True(sourceOne < sourceTwo);
+        Assert.True(sourceTwo < sourceThree);
+        Assert.Equal("chicken and beef freezer recipes", embeddingService.LastText);
+        Assert.Equal(3, vectorStore.LastTopK);
+    }
+
+    [Fact]
     public async Task Chat_WithToolRequest_ExecutesToolThroughAssistantPipeline()
     {
         var toolExecutor = new RecordingToolExecutor();
@@ -599,6 +664,13 @@ public class AssistantControllerIntegrationTests
 
     private sealed class RecordingVectorStore : IVectorStore
     {
+        private readonly IReadOnlyList<VectorMatch> _matches;
+
+        public RecordingVectorStore(IReadOnlyList<VectorMatch>? matches = null)
+        {
+            _matches = matches ?? [new VectorMatch("1", 0.91)];
+        }
+
         public IReadOnlyList<float>? LastEmbedding { get; private set; }
         public int? LastTopK { get; private set; }
 
@@ -606,7 +678,7 @@ public class AssistantControllerIntegrationTests
         {
             LastEmbedding = queryEmbedding;
             LastTopK = topK;
-            return Task.FromResult<IReadOnlyList<VectorMatch>>([new VectorMatch("1", 0.91)]);
+            return Task.FromResult<IReadOnlyList<VectorMatch>>(_matches.Take(topK).ToList());
         }
 
         public Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -622,6 +694,22 @@ public class AssistantControllerIntegrationTests
     {
         public Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken dinner", "Dinner", "spicy", ["chicken"], "Slice", "45"));
+    }
+
+    private sealed class HybridMetadataProvider : ISemanticRecipeMetadataProvider
+    {
+        public Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default)
+        {
+            var metadata = recipeId switch
+            {
+                "1" => new RecipeMetadata("1", "Spicy Chicken", "spicy chicken dinner", "Dinner", "spicy", ["chicken"], "Slice", "45"),
+                "2" => new RecipeMetadata("2", "Beef Stir Fry", "beef stir fry", "Dinner", "beef", ["beef"], "Stir fry", "30"),
+                "3" => new RecipeMetadata("3", "Garlic Rice", "garlic rice", "Side", "rice", ["rice"], "Boil", "20"),
+                _ => new RecipeMetadata(recipeId, $"Recipe {recipeId}", string.Empty)
+            };
+
+            return Task.FromResult(metadata);
+        }
     }
 
     private sealed class StubPromptBuilder : IPromptBuilder
@@ -649,6 +737,21 @@ public class AssistantControllerIntegrationTests
         public Task<string> RewriteAsync(string query, CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("query rewrite failure");
+        }
+    }
+
+    private sealed class StubKeywordSearchService : IKeywordSearchService
+    {
+        private readonly IReadOnlyList<KeywordSearchResult> _results;
+
+        public StubKeywordSearchService(IReadOnlyList<KeywordSearchResult> results)
+        {
+            _results = results;
+        }
+
+        public Task<IReadOnlyList<KeywordSearchResult>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<KeywordSearchResult>>(_results.Take(topK).ToList());
         }
     }
 
