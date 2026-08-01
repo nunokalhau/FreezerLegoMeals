@@ -1,6 +1,7 @@
 using Domain.DotNet;
 using Repository.DotNet;
 using Services.DotNet.Contracts;
+using System.Text.RegularExpressions;
 
 namespace Services.DotNet;
 
@@ -99,40 +100,10 @@ public class MealService : IMealService
     /// <returns>List of extracted ingredient terms</returns>
     private IEnumerable<string> ExtractFoodTermsFromQuery(string query)
     {
-        // Simple pattern matching for common food terms
-        var foodTerms = new List<string>
-        {
-            "chicken", "beef", "pork", "tofu", "rice", "potato", "carrot", 
-            "broccoli", "spinach", "onion", "garlic", "tomato", "bean", 
-            "pepper", "cucumber", "mushroom", "egg", "salmon", "lamb",
-            "turkey", "duck", "shrimp", "fish", "quinoa", "noodles", "pasta"
-        };
-
-        var foundIngredients = new List<string>();
-        var queryLower = query.ToLowerInvariant();
-        
-        foreach (var term in foodTerms)
-        {
-            if (queryLower.Contains(term))
-            {
-                foundIngredients.Add(term);
-            }
-        }
-        
-        // If no ingredients found, try to extract words that might be ingredients
-        if (foundIngredients.Count == 0)
-        {
-            var words = query.Split(new char[] { ' ', ',', '.', '!', '?' }, 
-                                    StringSplitOptions.RemoveEmptyEntries);
-            foreach (var word in words)
-            {
-                if (foodTerms.Contains(word.ToLowerInvariant()))
-                {
-                    foundIngredients.Add(word);
-                }
-            }
-        }
-        
-        return foundIngredients;
+        return Regex.Matches(query, "[\\p{L}\\p{Nd}]+", RegexOptions.CultureInvariant)
+            .Select(match => match.Value.ToLowerInvariant())
+            .Where(term => term.Length >= 3)
+            .Distinct()
+            .ToList();
     }
 }

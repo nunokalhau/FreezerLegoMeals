@@ -26,6 +26,9 @@ public sealed class LocalizationOptionsFactory : ILocalizationOptionsFactory
         if (!string.IsNullOrWhiteSpace(context.ExplicitLanguage))
             return context.ExplicitLanguage.Trim();
 
+        if (!string.IsNullOrWhiteSpace(context.DetectedLanguage))
+            return context.DetectedLanguage.Trim();
+
         var negotiated = context.NegotiatedLanguages.FirstOrDefault(language => !string.IsNullOrWhiteSpace(language));
         if (!string.IsNullOrWhiteSpace(negotiated))
             return negotiated.Trim();

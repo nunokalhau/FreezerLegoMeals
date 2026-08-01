@@ -8,7 +8,8 @@ public sealed class LanguageContextResolver : ILanguageContextResolver
         string? explicitLanguage,
         IEnumerable<string>? negotiatedLanguages,
         string defaultLanguage,
-        bool strictMode = false)
+        bool strictMode = false,
+        string? detectedLanguage = null)
     {
         if (string.IsNullOrWhiteSpace(defaultLanguage))
             throw new ArgumentException("Default language is required.", nameof(defaultLanguage));
@@ -23,6 +24,7 @@ public sealed class LanguageContextResolver : ILanguageContextResolver
             ExplicitLanguage: string.IsNullOrWhiteSpace(explicitLanguage) ? null : explicitLanguage.Trim(),
             NegotiatedLanguages: normalizedNegotiated,
             DefaultLanguage: defaultLanguage.Trim(),
-            StrictMode: strictMode);
+            StrictMode: strictMode,
+            DetectedLanguage: string.IsNullOrWhiteSpace(detectedLanguage) ? null : detectedLanguage.Trim());
     }
 }

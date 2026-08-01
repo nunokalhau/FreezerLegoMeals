@@ -1,5 +1,3 @@
-using Domain.DotNet;
-
 namespace WebApi.DotNet.Contracts.Responses;
 
 /// <summary>
@@ -10,7 +8,7 @@ public class GetRecipeDetailsResponse
     /// <summary>
     /// The recipe details.
     /// </summary>
-    public required Recipe Recipe { get; set; }
+    public required RecipeSearchItemResponse Recipe { get; set; }
     
     /// <summary>
     /// A descriptive message about the recipe.

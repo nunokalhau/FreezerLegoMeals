@@ -44,6 +44,18 @@ public class DefaultRoutingPolicyTests
     }
 
     [Fact]
+    public void DetermineAssistantRoute_WhenPortugueseKnowledgeQuestionAndRetrievalAvailable_ReturnsUseRag()
+    {
+        var policy = new DefaultRoutingPolicy();
+        var context = CreateContext("Que receitas tens com frango?");
+        var result = new OllamaChatResult("draft", []);
+
+        var route = policy.DetermineAssistantRoute(context, result, retrievalAvailable: true);
+
+        Assert.Equal(AssistantRoute.UseRag, route);
+    }
+
+    [Fact]
     public void DetermineAssistantRoute_WhenKnowledgeQuestionAndRetrievalUnavailable_ReturnsDirectAnswer()
     {
         var policy = new DefaultRoutingPolicy();

@@ -4,7 +4,8 @@ public sealed record LanguageContext(
     string? ExplicitLanguage,
     IReadOnlyList<string> NegotiatedLanguages,
     string DefaultLanguage,
-    bool StrictMode)
+    bool StrictMode,
+    string? DetectedLanguage = null)
 {
     public static LanguageContext ForDefault(string defaultLanguage = "en", bool strictMode = false)
     {
@@ -15,6 +16,7 @@ public sealed record LanguageContext(
             ExplicitLanguage: null,
             NegotiatedLanguages: Array.Empty<string>(),
             DefaultLanguage: defaultLanguage.Trim(),
-            StrictMode: strictMode);
+            StrictMode: strictMode,
+            DetectedLanguage: null);
     }
 }

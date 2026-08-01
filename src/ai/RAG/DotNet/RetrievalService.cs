@@ -174,6 +174,11 @@ public sealed class RetrievalService : IRetrievalService
         foreach (var fusedMatch in fusedRanking)
         {
             var metadata = await GetMetadataAsync(fusedMatch.RecipeId, localizationOptions, cancellationToken);
+            if (metadata is null)
+            {
+                continue;
+            }
+
             var canonicalRecipeId = string.IsNullOrWhiteSpace(metadata.RecipeId) ? fusedMatch.RecipeId : metadata.RecipeId;
             recipes.Add(new RetrievalRecipe(
                 fusedMatch.RecipeId,
@@ -193,6 +198,22 @@ public sealed class RetrievalService : IRetrievalService
         }
 
         recipes = CollapseCanonicalDuplicates(recipes);
+
+        if (recipes.Count == 0)
+        {
+            var noContextReason = localizationOptions.StrictMode
+                ? "localized-projection-missing"
+                : "metadata-missing";
+            LogRetrievalDiagnostics("no-context", noContextReason, similarityScores, 0, startedAt.Elapsed.TotalMilliseconds, question.Length);
+            activity?.SetTag("retrieval.decision", "no-context");
+            activity?.SetTag("retrieval.reason", noContextReason);
+            activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
+            activity?.SetTag("retrieval.keyword_match_count", keywordMatches.Count);
+            activity?.SetTag("retrieval.fused_match_count", fusedRanking.Count);
+            activity?.SetTag("retrieval.accepted_count", 0);
+            activity?.SetTag("retrieval.elapsed_ms", startedAt.Elapsed.TotalMilliseconds);
+            return new RetrievalResult(question, [], [], selectedProfile, normalizedQuestion.NormalizationVersion);
+        }
 
         var originalRanking = recipes
             .Select(recipe => new RetrievalRankingEntry(recipe.RecipeId, recipe.SimilarityScore))
@@ -252,7 +273,7 @@ public sealed class RetrievalService : IRetrievalService
             normalizedQuestion.NormalizationVersion);
     }
 
-    private async Task<RecipeMetadata> GetMetadataAsync(
+    private async Task<RecipeMetadata?> GetMetadataAsync(
         string recipeId,
         LocalizationOptions localizationOptions,
         CancellationToken cancellationToken)

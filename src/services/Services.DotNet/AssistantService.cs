@@ -13,6 +13,7 @@ public class AssistantService : IAssistantService
     private readonly IAssistantOrchestrator _orchestrator;
     private readonly ILanguageContextResolver _languageContextResolver;
     private readonly ILocalizationOptionsFactory _localizationOptionsFactory;
+    private readonly IAssistantLanguageDetector _languageDetector;
     private readonly ILogger<AssistantService> _logger;
     private readonly AssistantOptions _options;
     private readonly AssistantLocalizationDefaultsOptions _localizationDefaults;
@@ -24,7 +25,8 @@ public class AssistantService : IAssistantService
         ILocalizationOptionsFactory localizationOptionsFactory,
         IOptions<AssistantOptions> options,
         IOptions<AssistantLocalizationDefaultsOptions> localizationDefaults,
-        ILogger<AssistantService> logger)
+        ILogger<AssistantService> logger,
+        IAssistantLanguageDetector? languageDetector = null)
     {
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
@@ -32,6 +34,7 @@ public class AssistantService : IAssistantService
         _localizationOptionsFactory = localizationOptionsFactory ?? throw new ArgumentNullException(nameof(localizationOptionsFactory));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _localizationDefaults = localizationDefaults?.Value ?? throw new ArgumentNullException(nameof(localizationDefaults));
+        _languageDetector = languageDetector ?? new HeuristicAssistantLanguageDetector(Microsoft.Extensions.Options.Options.Create(_localizationDefaults));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -60,8 +63,13 @@ public class AssistantService : IAssistantService
         messages.Add(currentUserMessage);
         var messagesToPersist = new List<ConversationMessage> { currentUserMessage };
 
+        var detectedLanguage = string.IsNullOrWhiteSpace(localization?.ExplicitLanguage)
+            ? _languageDetector.Detect(message)
+            : null;
+
         var languageContext = _languageContextResolver.Resolve(
             explicitLanguage: localization?.ExplicitLanguage,
+            detectedLanguage: detectedLanguage,
             negotiatedLanguages: localization?.NegotiatedLanguages,
             defaultLanguage: ResolveDefaultLanguage(),
             strictMode: localization?.StrictMode ?? false);

@@ -102,6 +102,11 @@ public class RecipesControllerIntegrationTests : BaseIntegrationTest
         Assert.NotNull(responseObject);
         Assert.NotNull(responseObject.Recipe);
         Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
+        Assert.NotEmpty(responseObject.Recipe.RecipeIngredients);
+
+        var firstIngredient = responseObject.Recipe.RecipeIngredients.First();
+        Assert.True(firstIngredient.IngredientId > 0);
+        Assert.False(string.IsNullOrWhiteSpace(firstIngredient.Name));
     }
 
     [Fact]
@@ -163,6 +168,35 @@ public class RecipesControllerIntegrationTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task FindMealsWithIngredients_With_Portuguese_Query_Returns_Success()
+    {
+        // Arrange
+        var findRequest = new FindMealsWithIngredientsRequest
+        {
+            Query = "frango"
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/recipes/find-by-ingredients", findRequest);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(200, (int)response.StatusCode);
+
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var responseObject = JsonSerializer.Deserialize<FindMealsWithIngredientsResponse>(jsonResponse, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(responseObject);
+        Assert.Equal("frango", responseObject.Query);
+        Assert.Contains("frango", responseObject.SearchTerms);
+        Assert.Equal(1, responseObject.TotalRecipesFound);
+        Assert.Contains(responseObject.Recipes, recipe => recipe.Name == "Chicken Fried Rice");
+    }
+
+    [Fact]
     public async Task FindMealsWithIngredients_With_Empty_Query_Returns_BadRequest()
     {
         // Arrange
@@ -207,6 +241,11 @@ public class RecipesControllerIntegrationTests : BaseIntegrationTest
         Assert.NotNull(responseObject);
         Assert.NotNull(responseObject.Recipe); 
         Assert.Equal("Chicken Fried Rice", responseObject.Recipe.Name);
+        Assert.NotEmpty(responseObject.Recipe.RecipeIngredients);
+
+        var firstIngredient = responseObject.Recipe.RecipeIngredients.First();
+        Assert.True(firstIngredient.IngredientId > 0);
+        Assert.False(string.IsNullOrWhiteSpace(firstIngredient.Name));
     }
 
     [Fact]

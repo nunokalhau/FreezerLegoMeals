@@ -75,7 +75,9 @@ public class RecipeRepository : IRecipeRepository, IRecipeIndexingProjectionRepo
         {
             var currentTerm = ingredientTerm;
             matchingIngredients = matchingIngredients.Union(
-                _context.Ingredients.Where(i => i.Name.ToLower().Contains(currentTerm)));
+                _context.Ingredients.Where(i =>
+                    i.Name.ToLower().Contains(currentTerm) ||
+                    i.Translations.Any(translation => translation.Name.ToLower().Contains(currentTerm))));
         }
 
         var matchingIngredientIds = await matchingIngredients

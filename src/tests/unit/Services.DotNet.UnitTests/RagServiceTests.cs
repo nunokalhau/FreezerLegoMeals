@@ -150,6 +150,22 @@ public class RagServiceTests
     }
 
     [Fact]
+    public async Task RetrievalService_StrictLocalization_DropsCandidates_WhenLocalizedMetadataMissing()
+    {
+        var metadataProvider = new StrictAwareLocalizedMetadataProvider();
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new StubVectorStore(0.91), metadataProvider),
+            metadataProvider);
+
+        var result = await service.RetrieveAsync(
+            "Que receitas tens com frango?",
+            LocalizationOptions.Create("pt", ["en"], strictMode: true));
+
+        Assert.Empty(result.Recipes);
+        Assert.Empty(result.Sources);
+    }
+
+    [Fact]
     public async Task RetrievalService_CanonicalCollapse_PreservesCanonicalIdentityAcrossProfiles()
     {
         var metadataProvider = new MultiMetadataProvider();
@@ -345,6 +361,25 @@ public class RagServiceTests
             };
 
             return Task.FromResult(metadata);
+        }
+    }
+
+    private sealed class StrictAwareLocalizedMetadataProvider : ISemanticRecipeMetadataProvider, ILocalizedSemanticRecipeMetadataProvider
+    {
+        public Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken", "Dinner", "spicy", ["chicken"], "Cook", "45"));
+
+        public Task<RecipeMetadata?> GetMetadataAsync(
+            string recipeId,
+            LocalizationOptions localizationOptions,
+            CancellationToken cancellationToken = default)
+        {
+            if (localizationOptions.StrictMode && localizationOptions.PreferredLanguage.Equals("pt", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult<RecipeMetadata?>(null);
+            }
+
+            return Task.FromResult<RecipeMetadata?>(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken", "Dinner", "spicy", ["chicken"], "Cook", "45"));
         }
     }
 

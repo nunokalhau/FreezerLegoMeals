@@ -236,6 +236,84 @@ public class AssistantServiceTests
     }
 
     [Fact]
+    public async Task ChatAsync_UsesDetectedLanguage_WhenExplicitLanguageMissing()
+    {
+        var conversationStore = new InMemoryConversationStore(Options.Create(new ConversationStoreOptions()));
+        var orchestrator = new Mock<IAssistantOrchestrator>();
+        orchestrator
+            .Setup(candidate => candidate.ExecuteAsync(It.IsAny<OrchestratorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestratorResult("assistant response", "agent", [], [], [], TimeSpan.Zero, [], []));
+
+        var languageContextResolver = new Mock<ILanguageContextResolver>();
+        languageContextResolver
+            .Setup(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
+            .Returns(new LanguageContext(null, Array.Empty<string>(), "en", false, "pt"));
+
+        var localizationOptionsFactory = new Mock<ILocalizationOptionsFactory>();
+        localizationOptionsFactory
+            .Setup(factory => factory.Create(It.IsAny<LanguageContext>()))
+            .Returns(LocalizationOptions.Create("pt", ["en"]));
+
+        var service = new AssistantService(
+            conversationStore,
+            orchestrator.Object,
+            languageContextResolver.Object,
+            localizationOptionsFactory.Object,
+            Options.Create(new AssistantOptions()),
+            Options.Create(new AssistantLocalizationDefaultsOptions { DefaultLanguage = "en", SupportedLanguages = ["en", "pt"] }),
+            NullLogger<AssistantService>.Instance);
+
+        await service.ChatAsync("Que receitas tens com frango?");
+
+        languageContextResolver.Verify(resolver => resolver.Resolve(
+            null,
+            It.IsAny<IEnumerable<string>?>(),
+            "en",
+            false,
+            "pt"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ChatAsync_ExplicitLanguage_OverridesDetectedLanguage()
+    {
+        var conversationStore = new InMemoryConversationStore(Options.Create(new ConversationStoreOptions()));
+        var orchestrator = new Mock<IAssistantOrchestrator>();
+        orchestrator
+            .Setup(candidate => candidate.ExecuteAsync(It.IsAny<OrchestratorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestratorResult("assistant response", "agent", [], [], [], TimeSpan.Zero, [], []));
+
+        var languageContextResolver = new Mock<ILanguageContextResolver>();
+        languageContextResolver
+            .Setup(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
+            .Returns(new LanguageContext("en", Array.Empty<string>(), "en", false));
+
+        var localizationOptionsFactory = new Mock<ILocalizationOptionsFactory>();
+        localizationOptionsFactory
+            .Setup(factory => factory.Create(It.IsAny<LanguageContext>()))
+            .Returns(LocalizationOptions.Create("en"));
+
+        var service = new AssistantService(
+            conversationStore,
+            orchestrator.Object,
+            languageContextResolver.Object,
+            localizationOptionsFactory.Object,
+            Options.Create(new AssistantOptions()),
+            Options.Create(new AssistantLocalizationDefaultsOptions { DefaultLanguage = "en", SupportedLanguages = ["en", "pt"] }),
+            NullLogger<AssistantService>.Instance);
+
+        await service.ChatAsync(
+            "Que receitas tens com frango?",
+            localization: new AssistantLocalizationRequest("en", Array.Empty<string>(), false));
+
+        languageContextResolver.Verify(resolver => resolver.Resolve(
+            "en",
+            It.IsAny<IEnumerable<string>?>(),
+            "en",
+            false,
+            null), Times.Once);
+    }
+
+    [Fact]
     public async Task ChatAsync_WithMultipleSequentialToolCalls_ExecutesEachTool()
     {
         var ollamaClient = new Mock<IOllamaClient>();
@@ -333,7 +411,9 @@ public class AssistantServiceTests
         AssistantOptions? options = null,
         IRetrievalService? retrievalService = null,
         IPromptBuilder? promptBuilder = null,
-        IAnswerGroundingService? answerGroundingService = null)
+        IAnswerGroundingService? answerGroundingService = null,
+        AssistantLocalizationDefaultsOptions? localizationDefaults = null,
+        IAssistantLanguageDetector? languageDetector = null)
     {
         var agent = new MealPlanningAgent(
             ollamaClient,
@@ -350,8 +430,9 @@ public class AssistantServiceTests
             new LanguageContextResolver(),
             new LocalizationOptionsFactory(),
             Options.Create(options ?? new AssistantOptions()),
-            Options.Create(new AssistantLocalizationDefaultsOptions { DefaultLanguage = "en" }),
-            NullLogger<AssistantService>.Instance);
+                Options.Create(localizationDefaults ?? new AssistantLocalizationDefaultsOptions { DefaultLanguage = "en", SupportedLanguages = ["en", "pt", "es", "de", "fr"] }),
+                NullLogger<AssistantService>.Instance,
+                languageDetector);
     }
 
     private static Mock<IToolExecutor> CreateToolExecutor(bool success = true)

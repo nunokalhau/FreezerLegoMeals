@@ -34,7 +34,7 @@ public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMe
         return await GetMetadataAsync(recipeId, options, cancellationToken);
     }
 
-    public async Task<RecipeMetadata> GetMetadataAsync(
+    public async Task<RecipeMetadata?> GetMetadataAsync(
         string recipeId,
         LocalizationOptions localizationOptions,
         CancellationToken cancellationToken = default)
@@ -71,9 +71,17 @@ public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMe
             _cache[cacheKey] = cacheByRecipeId;
         }
 
-        return cacheByRecipeId.TryGetValue(recipeId, out var metadata)
-            ? metadata
-            : new RecipeMetadata(recipeId, $"Recipe {recipeId}", string.Empty);
+        if (cacheByRecipeId.TryGetValue(recipeId, out var metadata))
+        {
+            return metadata;
+        }
+
+        if (localizationOptions.StrictMode)
+        {
+            return null;
+        }
+
+        return new RecipeMetadata(recipeId, $"Recipe {recipeId}", string.Empty);
     }
 
     private static string BuildCacheKey(LocalizationOptions options)

@@ -66,6 +66,7 @@ builder.Services.AddScoped<IToolExecutor>(serviceProvider =>
 });
 builder.Services.AddScoped<IMealService, MealService>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
+builder.Services.AddSingleton<IAssistantLanguageDetector, HeuristicAssistantLanguageDetector>();
 builder.Services.AddSingleton<ILanguageContextResolver, LanguageContextResolver>();
 builder.Services.AddSingleton<ILocalizationOptionsFactory, LocalizationOptionsFactory>();
 builder.Services.AddScoped<ILocalizedRecipeQueryService, LocalizedRecipeQueryService>();

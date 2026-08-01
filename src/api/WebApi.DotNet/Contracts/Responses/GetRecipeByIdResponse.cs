@@ -1,5 +1,3 @@
-using Domain.DotNet;
-
 namespace WebApi.DotNet.Contracts.Responses;
 
 /// <summary>
@@ -10,5 +8,5 @@ public class GetRecipeByIdResponse
     /// <summary>
     /// The recipe details.
     /// </summary>
-    public required Recipe Recipe { get; set; }
+    public required RecipeSearchItemResponse Recipe { get; set; }
 }

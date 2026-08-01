@@ -69,7 +69,7 @@ public class RecipesController : ControllerBase
 
         var response = new GetRecipeByIdResponse
         {
-            Recipe = recipe
+            Recipe = MapSearchRecipe(recipe)
         };
 
         return Ok(response);
@@ -181,7 +181,7 @@ public class RecipesController : ControllerBase
 
         var response = new GetRecipeDetailsResponse
         {
-            Recipe = result.Recipe,
+            Recipe = MapSearchRecipe(result.Recipe),
             Message = result.Message ?? string.Empty
         };
 

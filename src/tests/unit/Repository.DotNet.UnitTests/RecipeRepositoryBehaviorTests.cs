@@ -33,6 +33,16 @@ public class RecipeRepositoryBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task FindRecipesWithIngredients_Finds_Recipes_Using_IngredientTranslations()
+    {
+        var results = await _repository.FindRecipesWithIngredientsAsync(new[] { "Frango" });
+
+        var list = results.ToList();
+        Assert.Single(list);
+        Assert.Equal("Chicken Fried Rice", list[0].Name);
+    }
+
+    [Fact]
     public async Task GetIngredientByName_WithWhitespaceOnly_ReturnsNull()
     {
         var result = await _repository.GetIngredientByNameAsync("   ");

@@ -32,6 +32,18 @@ public sealed class LocalizationBoundaryTests
     }
 
     [Fact]
+    public void LocalizationOptionsFactory_Uses_DetectedLanguage_WhenExplicitIsMissing()
+    {
+        var factory = new LocalizationOptionsFactory();
+        var context = new LanguageContext(null, ["en", "fr"], "en", StrictMode: false, DetectedLanguage: "pt");
+
+        var options = factory.Create(context);
+
+        Assert.Equal("pt", options.PreferredLanguage);
+        Assert.Equal(new[] { "en", "fr" }, options.FallbackLanguages);
+    }
+
+    [Fact]
     public void LocalizationOptionsFactory_Uses_NegotiatedLanguage_WhenExplicitIsMissing()
     {
         var factory = new LocalizationOptionsFactory();

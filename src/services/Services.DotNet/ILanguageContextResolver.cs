@@ -8,5 +8,6 @@ public interface ILanguageContextResolver
         string? explicitLanguage,
         IEnumerable<string>? negotiatedLanguages,
         string defaultLanguage,
-        bool strictMode = false);
+    bool strictMode = false,
+    string? detectedLanguage = null);
 }
