@@ -185,7 +185,10 @@ public sealed class MealPlanningAgent : IAgent
 
     private async Task<(string Response, IReadOnlyList<RetrievedRecipeInfo> RetrievedRecipes)> AnswerWithRetrievalAsync(OrchestratorContext context, Activity? activity, CancellationToken cancellationToken)
     {
-        var retrieval = await _retrievalService!.RetrieveAsync(context.UserRequest, cancellationToken);
+        var retrieval = await _retrievalService!.RetrieveAsync(context.UserRequest, context.LocalizationOptions, cancellationToken);
+        activity?.SetTag("retrieval.profile_id", retrieval.Profile?.ProfileId ?? string.Empty);
+        activity?.SetTag("retrieval.profile_family", retrieval.Profile?.ProfileFamily.ToString() ?? string.Empty);
+        activity?.SetTag("retrieval.normalization_version", retrieval.NormalizationVersion);
         var retrievedRecipes = retrieval.Sources
             .Select(source => new RetrievedRecipeInfo(source.RecipeId, source.Title, source.SimilarityScore))
             .ToList();

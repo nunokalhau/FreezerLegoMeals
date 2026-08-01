@@ -51,9 +51,9 @@ public class OllamaRerankerServiceTests
     {
         return
         [
-            new RetrievalRecipe("1", "Spicy Chicken", "desc-1", "tag-1", ["chicken"], "prep-1", "45", 0.8),
-            new RetrievalRecipe("2", "Beef Stir Fry", "desc-2", "tag-2", ["beef"], "prep-2", "30", 0.7),
-            new RetrievalRecipe("3", "Garlic Rice", "desc-3", "tag-3", ["rice"], "prep-3", "20", 0.6)
+            new RetrievalRecipe("1", "1", "Spicy Chicken", "desc-1", "tag-1", ["chicken"], "prep-1", "45", 0.8, "canonical-multilingual-projection"),
+            new RetrievalRecipe("2", "2", "Beef Stir Fry", "desc-2", "tag-2", ["beef"], "prep-2", "30", 0.7, "canonical-multilingual-projection"),
+            new RetrievalRecipe("3", "3", "Garlic Rice", "desc-3", "tag-3", ["rice"], "prep-3", "20", 0.6, "canonical-multilingual-projection")
         ];
     }
 

@@ -1,4 +1,5 @@
 using Domain.DotNet;
+using RAG.DotNet;
 using Repository.DotNet;
 using SemanticSearch.DotNet;
 using Services.DotNet;
@@ -6,11 +7,12 @@ using Services.DotNet;
 namespace WebApi.DotNet.Services;
 
 public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMetadataProvider
+    , ILocalizedSemanticRecipeMetadataProvider
 {
     private readonly ILocalizedRecipeQueryService _localizedRecipeQueryService;
     private readonly ILanguageContextResolver _languageContextResolver;
     private readonly ILocalizationOptionsFactory _localizationOptionsFactory;
-    private Dictionary<string, RecipeMetadata>? _cache;
+    private readonly Dictionary<string, Dictionary<string, RecipeMetadata>> _cache = new(StringComparer.Ordinal);
 
     public RepositorySemanticRecipeMetadataProvider(
         ILocalizedRecipeQueryService localizedRecipeQueryService,
@@ -24,15 +26,26 @@ public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMe
 
     public async Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default)
     {
-        if (_cache is null)
+        var languageContext = _languageContextResolver.Resolve(
+            explicitLanguage: null,
+            negotiatedLanguages: Array.Empty<string>(),
+            defaultLanguage: "en");
+        var options = _localizationOptionsFactory.Create(languageContext);
+        return await GetMetadataAsync(recipeId, options, cancellationToken);
+    }
+
+    public async Task<RecipeMetadata> GetMetadataAsync(
+        string recipeId,
+        LocalizationOptions localizationOptions,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(localizationOptions);
+
+        var cacheKey = BuildCacheKey(localizationOptions);
+        if (!_cache.TryGetValue(cacheKey, out var cacheByRecipeId))
         {
-            var languageContext = _languageContextResolver.Resolve(
-                explicitLanguage: null,
-                negotiatedLanguages: Array.Empty<string>(),
-                defaultLanguage: "en");
-            var options = _localizationOptionsFactory.Create(languageContext);
-            var recipes = await _localizedRecipeQueryService.GetLocalizedRecipesAsync(options, cancellationToken);
-            _cache = recipes.ToDictionary(
+            var recipes = await _localizedRecipeQueryService.GetLocalizedRecipesAsync(localizationOptions, cancellationToken);
+            cacheByRecipeId = recipes.ToDictionary(
                 recipe => recipe.CanonicalRecipeId.ToString(),
                 recipe => new RecipeMetadata(
                     recipe.CanonicalRecipeId.ToString(),
@@ -53,11 +66,21 @@ public sealed class RepositorySemanticRecipeMetadataProvider : ISemanticRecipeMe
                     recipe.ProjectionSchemaVersion,
                     recipe.NormalizationVersion,
                     recipe.ProjectionFingerprint,
-                    recipe.LanguageCoverage));
+                    recipe.LanguageCoverage),
+                StringComparer.Ordinal);
+            _cache[cacheKey] = cacheByRecipeId;
         }
 
-        return _cache.TryGetValue(recipeId, out var metadata)
+        return cacheByRecipeId.TryGetValue(recipeId, out var metadata)
             ? metadata
             : new RecipeMetadata(recipeId, $"Recipe {recipeId}", string.Empty);
+    }
+
+    private static string BuildCacheKey(LocalizationOptions options)
+    {
+        var fallbacks = options.FallbackLanguages.Count == 0
+            ? "none"
+            : string.Join(",", options.FallbackLanguages);
+        return $"{options.PreferredLanguage}|{fallbacks}|strict:{options.StrictMode}";
     }
 }

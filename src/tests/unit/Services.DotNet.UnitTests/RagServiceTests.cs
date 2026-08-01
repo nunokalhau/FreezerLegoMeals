@@ -1,4 +1,5 @@
 using Embedding.DotNet;
+using Domain.DotNet;
 using RAG.DotNet;
 using SemanticSearch.DotNet;
 using VectorStores.DotNet;
@@ -19,11 +20,14 @@ public class RagServiceTests
 
         var recipe = Assert.Single(result.Recipes);
         Assert.Equal("1", recipe.RecipeId);
+        Assert.Equal("1", recipe.CanonicalRecipeId);
         Assert.Equal("Spicy Chicken", recipe.Title);
         Assert.Equal("Freezer-friendly chicken dinner", recipe.Description);
         Assert.Equal(new[] { "chicken", "pepper" }, recipe.Ingredients);
         Assert.Equal("Slice chicken and season it", recipe.PreparationSteps);
         Assert.Equal("45", recipe.CookingTime);
+        Assert.Equal("canonical-multilingual-projection", recipe.RetrievalProfileId);
+        Assert.Equal("canonical-multilingual-projection", result.Profile?.ProfileId);
         Assert.Equal(1.0 / 61.0, Assert.Single(result.Sources).SimilarityScore, 6);
     }
 
@@ -89,6 +93,7 @@ public class RagServiceTests
 
         Assert.Equal(3, result.Recipes.Count);
         Assert.Equal(new[] { "1", "2", "3" }, result.Recipes.Select(recipe => recipe.RecipeId).ToArray());
+        Assert.Equal(RetrievalProfileFamily.CanonicalMultilingualProjection, result.Profile?.ProfileFamily);
         Assert.True(result.Recipes[0].SimilarityScore > result.Recipes[1].SimilarityScore);
         Assert.True(result.Recipes[1].SimilarityScore > result.Recipes[2].SimilarityScore);
     }
@@ -111,6 +116,66 @@ public class RagServiceTests
 
         var recipe = Assert.Single(result.Recipes);
         Assert.Equal("2", recipe.RecipeId);
+        Assert.Equal("2", recipe.CanonicalRecipeId);
+    }
+
+    [Fact]
+    public async Task RetrievalService_SelectsPerLanguageProfile_WhenStrictLocalizationEnabled()
+    {
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new StubVectorStore(0.91), new StubMetadataProvider()),
+            new StubMetadataProvider());
+
+        var result = await service.RetrieveAsync(
+            "What spicy chicken meal can I cook?",
+            LocalizationOptions.Create("pt", ["en"], strictMode: true));
+
+        Assert.Equal("per-language-projection", result.Profile?.ProfileId);
+        Assert.Equal(RetrievalProfileFamily.PerLanguageProjection, result.Profile?.ProfileFamily);
+    }
+
+    [Fact]
+    public async Task RetrievalService_SelectsHybridProfile_WhenPreferredLanguageIsNonDefault()
+    {
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new StubVectorStore(0.91), new StubMetadataProvider()),
+            new StubMetadataProvider());
+
+        var result = await service.RetrieveAsync(
+            "What spicy chicken meal can I cook?",
+            LocalizationOptions.Create("pt", ["en"], strictMode: false));
+
+        Assert.Equal("hybrid-precision-recall", result.Profile?.ProfileId);
+        Assert.Equal(RetrievalProfileFamily.HybridPrecisionRecall, result.Profile?.ProfileFamily);
+    }
+
+    [Fact]
+    public async Task RetrievalService_CanonicalCollapse_PreservesCanonicalIdentityAcrossProfiles()
+    {
+        var metadataProvider = new MultiMetadataProvider();
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new MultiMatchVectorStore([
+                new VectorMatch("1", 0.95),
+                new VectorMatch("1#pt", 0.93),
+                new VectorMatch("2", 0.70)
+            ]), metadataProvider),
+            metadataProvider,
+            keywordSearchService: new StubKeywordSearchService([
+                new KeywordSearchResult("1#pt", 4),
+                new KeywordSearchResult("2", 3)
+            ]),
+            topK: 5,
+            minimumSimilarity: 0.2);
+
+        var canonicalProfileResult = await service.RetrieveAsync(
+            "chicken dinner ideas",
+            LocalizationOptions.Create("en", strictMode: false));
+        var hybridProfileResult = await service.RetrieveAsync(
+            "chicken dinner ideas",
+            LocalizationOptions.Create("pt", ["en"], strictMode: false));
+
+        Assert.Equal(new[] { "1", "2" }, canonicalProfileResult.Recipes.Select(recipe => recipe.CanonicalRecipeId).OrderBy(value => value, StringComparer.Ordinal).ToArray());
+        Assert.Equal(new[] { "1", "2" }, hybridProfileResult.Recipes.Select(recipe => recipe.CanonicalRecipeId).OrderBy(value => value, StringComparer.Ordinal).ToArray());
     }
 
     [Fact]
@@ -166,7 +231,7 @@ public class RagServiceTests
     public void PromptBuilder_RendersRepositoryContext()
     {
         var builder = new PromptBuilder("Context:\n{recipes}\nQuestion:\n{question}");
-        var recipe = new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91);
+        var recipe = new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection");
 
         var prompt = builder.Build("What can I cook?", [recipe]);
 
@@ -273,6 +338,7 @@ public class RagServiceTests
             var metadata = recipeId switch
             {
                 "1" => new RecipeMetadata("1", "Spicy Chicken", "spicy chicken", "Spicy chicken dinner", "spicy", ["chicken"], "Cook", "45"),
+                "1#pt" => new RecipeMetadata("1", "Frango Picante", "frango picante", "Jantar de frango", "picante", ["frango"], "Cozinhar", "45"),
                 "2" => new RecipeMetadata("2", "Beef Stir Fry", "beef stir fry", "Beef dinner", "beef", ["beef"], "Stir fry", "30"),
                 "3" => new RecipeMetadata("3", "Garlic Rice", "garlic rice", "Rice side", "rice", ["rice"], "Boil", "20"),
                 _ => new RecipeMetadata(recipeId, $"Recipe {recipeId}", string.Empty)

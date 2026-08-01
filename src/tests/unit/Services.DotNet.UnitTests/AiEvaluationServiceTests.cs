@@ -55,7 +55,10 @@ public sealed class AiEvaluationServiceTests
         var assistantService = new AssistantService(
             new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
             orchestrator,
+            new LanguageContextResolver(),
+            new LocalizationOptionsFactory(),
             Options.Create(new AssistantOptions { SystemPrompt = "test system prompt" }),
+            Options.Create(new AssistantLocalizationDefaultsOptions { DefaultLanguage = "en" }),
             NullLogger<AssistantService>.Instance);
 
         var service = new AiEvaluationService(

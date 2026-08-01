@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using AI.Memory.DotNet;
+using Domain.DotNet;
 using Embedding.DotNet;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -97,7 +98,7 @@ public class AssistantControllerIntegrationTests
     {
         var embeddingService = new RecordingEmbeddingService();
         var vectorStore = new RecordingVectorStore();
-        var metadataProvider = new StubMetadataProvider();
+        var metadataProvider = new LocalizedMetadataProvider();
 
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -145,6 +146,117 @@ public class AssistantControllerIntegrationTests
         Assert.Equal("spicy chicken freezer recipe", embeddingService.LastText);
         Assert.Equal(new[] { 1f, 0f }, vectorStore.LastEmbedding);
         Assert.Equal(3, vectorStore.LastTopK);
+        Assert.Equal("1", metadataProvider.LastLocalization?.PreferredLanguage);
+        Assert.False(metadataProvider.LastLocalization?.StrictMode);
+    }
+
+    [Fact]
+    public async Task Chat_WithPreferredLanguageAndStrictMode_PropagatesLocalizationToRetrievalMetadata()
+    {
+        var embeddingService = new RecordingEmbeddingService();
+        var vectorStore = new RecordingVectorStore();
+        var metadataProvider = new LocalizedMetadataProvider();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantLocalizationPropagationIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
+                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService>(embeddingService);
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("spicy chicken freezer recipes"));
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(true, 0));
+            });
+        });
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("Accept-Language", "pt-BR,pt;q=0.9,en;q=0.8");
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "What spicy chicken meal can I cook?",
+            Language = "pt",
+            StrictMode = true
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.Contains("Sources:", payload.Response);
+        Assert.Equal("pt", metadataProvider.LastLocalization?.PreferredLanguage);
+        Assert.True(metadataProvider.LastLocalization?.StrictMode);
+    }
+
+    [Fact]
+    public async Task Chat_WithPreferredLanguageAndFallback_UsesFallbackLocalizationMetadata()
+    {
+        var embeddingService = new RecordingEmbeddingService();
+        var vectorStore = new RecordingVectorStore();
+        var metadataProvider = new LocalizedMetadataProvider();
+
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<FreezerLegoMealsContext>>();
+                services.RemoveAll<FreezerLegoMealsContext>();
+                services.AddDbContext<FreezerLegoMealsContext>(options =>
+                    options.UseInMemoryDatabase("AssistantLocalizationFallbackIntegrationTestDatabase"));
+                services.RemoveAll<IOllamaClient>();
+                services.RemoveAll<IPromptBuilder>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<IVectorStore>();
+                services.RemoveAll<ISemanticRecipeMetadataProvider>();
+                services.RemoveAll<IQueryRewriter>();
+                services.RemoveAll<IReranker>();
+                services.RemoveAll<IAnswerGroundingService>();
+                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
+                services.AddSingleton<IEmbeddingService>(embeddingService);
+                services.AddSingleton<IVectorStore>(vectorStore);
+                services.AddSingleton<ISemanticRecipeMetadataProvider>(metadataProvider);
+                services.AddSingleton<IQueryRewriter>(new StubQueryRewriter("frango congelador"));
+                services.AddSingleton<IAnswerGroundingService>(new StubAnswerGroundingService(true, 0));
+            });
+        });
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("Accept-Language", "pt-BR,pt;q=0.9,en;q=0.8");
+        var response = await client.PostAsJsonAsync("/api/assistant/chat", new AssistantChatRequest
+        {
+            Message = "Que receita posso cozinhar?",
+            StrictMode = false
+        });
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AssistantChatResponse>(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        Assert.NotNull(payload);
+        Assert.Contains("Sources:", payload.Response);
+        Assert.Equal("pt-BR", metadataProvider.LastLocalization?.PreferredLanguage);
+        Assert.Contains("pt", metadataProvider.LastLocalization?.FallbackLanguages ?? Array.Empty<string>());
+        Assert.Contains("en", metadataProvider.LastLocalization?.FallbackLanguages ?? Array.Empty<string>());
+        Assert.False(metadataProvider.LastLocalization?.StrictMode);
     }
 
     [Fact]
@@ -815,6 +927,25 @@ public class AssistantControllerIntegrationTests
     {
         public Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken dinner", "Dinner", "spicy", ["chicken"], "Slice", "45"));
+    }
+
+    private sealed class LocalizedMetadataProvider : ISemanticRecipeMetadataProvider, ILocalizedSemanticRecipeMetadataProvider
+    {
+        public LocalizationOptions? LastLocalization { get; private set; }
+
+        public Task<RecipeMetadata> GetMetadataAsync(string recipeId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken dinner", "Dinner", "spicy", ["chicken"], "Slice", "45"));
+        }
+
+        public Task<RecipeMetadata> GetMetadataAsync(
+            string recipeId,
+            LocalizationOptions localizationOptions,
+            CancellationToken cancellationToken = default)
+        {
+            LastLocalization = localizationOptions;
+            return Task.FromResult(new RecipeMetadata(recipeId, "Spicy Chicken", "spicy chicken dinner", "Dinner", "spicy", ["chicken"], "Slice", "45"));
+        }
     }
 
     private sealed class HybridMetadataProvider : ISemanticRecipeMetadataProvider

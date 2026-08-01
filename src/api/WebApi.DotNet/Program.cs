@@ -95,6 +95,7 @@ builder.Services.AddScoped<IRetrievalService>(serviceProvider => new EvaluationR
 builder.Services.AddSingleton<IPromptBuilder>(_ => PromptBuilder.FromFile(
     Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "ai", "RAG", "prompts", "rag_prompt.txt"))));
 builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("Assistant"));
+builder.Services.Configure<AssistantLocalizationDefaultsOptions>(builder.Configuration.GetSection("Localization"));
 builder.Services.Configure<ConversationStoreOptions>(builder.Configuration.GetSection("ConversationStore"));
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection("Ollama"));
 builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection("Embeddings"));

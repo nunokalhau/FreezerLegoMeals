@@ -49,12 +49,14 @@ public class AnswerGroundingServiceTests
     [
         new RetrievalRecipe(
             "1",
+            "1",
             "Spicy Chicken",
             "Freezer-friendly chicken dinner",
             "spicy",
             ["chicken", "pepper"],
             "Slice chicken and season it",
             "45",
-            0.91)
+            0.91,
+            "canonical-multilingual-projection")
     ];
 }

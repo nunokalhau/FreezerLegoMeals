@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using Domain.DotNet;
 using Orchestration.DotNet;
 
 namespace Services.DotNet;
@@ -10,22 +11,35 @@ public class AssistantService : IAssistantService
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
     private readonly IConversationStore _conversationStore;
     private readonly IAssistantOrchestrator _orchestrator;
+    private readonly ILanguageContextResolver _languageContextResolver;
+    private readonly ILocalizationOptionsFactory _localizationOptionsFactory;
     private readonly ILogger<AssistantService> _logger;
     private readonly AssistantOptions _options;
+    private readonly AssistantLocalizationDefaultsOptions _localizationDefaults;
 
     public AssistantService(
         IConversationStore conversationStore,
         IAssistantOrchestrator orchestrator,
+        ILanguageContextResolver languageContextResolver,
+        ILocalizationOptionsFactory localizationOptionsFactory,
         IOptions<AssistantOptions> options,
+        IOptions<AssistantLocalizationDefaultsOptions> localizationDefaults,
         ILogger<AssistantService> logger)
     {
         _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
+        _languageContextResolver = languageContextResolver ?? throw new ArgumentNullException(nameof(languageContextResolver));
+        _localizationOptionsFactory = localizationOptionsFactory ?? throw new ArgumentNullException(nameof(localizationOptionsFactory));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _localizationDefaults = localizationDefaults?.Value ?? throw new ArgumentNullException(nameof(localizationDefaults));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<AssistantChatResult> ChatAsync(string message, string? conversationId = null, CancellationToken cancellationToken = default)
+    public async Task<AssistantChatResult> ChatAsync(
+        string message,
+        string? conversationId = null,
+        AssistantLocalizationRequest? localization = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(message))
             throw new ArgumentException("Message is required", nameof(message));
@@ -46,11 +60,20 @@ public class AssistantService : IAssistantService
         messages.Add(currentUserMessage);
         var messagesToPersist = new List<ConversationMessage> { currentUserMessage };
 
+        var languageContext = _languageContextResolver.Resolve(
+            explicitLanguage: localization?.ExplicitLanguage,
+            negotiatedLanguages: localization?.NegotiatedLanguages,
+            defaultLanguage: ResolveDefaultLanguage(),
+            strictMode: localization?.StrictMode ?? false);
+        var localizationOptions = _localizationOptionsFactory.Create(languageContext);
+
         var context = new OrchestratorContext(
             message,
             now,
             Guid.NewGuid().ToString("N"),
             new Dictionary<string, object?>(),
+            languageContext,
+            localizationOptions,
             conversation.ConversationId,
             messages,
             messagesToPersist,
@@ -76,5 +99,15 @@ public class AssistantService : IAssistantService
             result.Errors.Count);
 
         return new AssistantChatResult(conversation.ConversationId, result.FinalResponse);
+    }
+
+    private string ResolveDefaultLanguage()
+    {
+        if (string.IsNullOrWhiteSpace(_localizationDefaults.DefaultLanguage))
+        {
+            return "en";
+        }
+
+        return _localizationDefaults.DefaultLanguage.Trim();
     }
 }

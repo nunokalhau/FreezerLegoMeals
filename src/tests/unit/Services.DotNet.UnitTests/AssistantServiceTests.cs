@@ -1,4 +1,5 @@
 using Moq;
+using Domain.DotNet;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orchestration.DotNet;
@@ -106,10 +107,10 @@ public class AssistantServiceTests
             .ReturnsAsync(new OllamaChatResult("direct draft", []))
             .ReturnsAsync(new OllamaChatResult("Use the spicy chicken recipe.", []));
         var retrievalService = new Mock<IRetrievalService>();
-        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<CancellationToken>()))
+        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RetrievalResult(
                 "What spicy chicken meal can I cook?",
-                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
+            [new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection")],
                 [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
         var promptBuilder = new Mock<IPromptBuilder>();
         promptBuilder.Setup(builder => builder.Build(It.IsAny<string>(), It.IsAny<IReadOnlyList<RetrievalRecipe>>()))
@@ -140,10 +141,10 @@ public class AssistantServiceTests
             .ReturnsAsync(new OllamaChatResult("direct draft", []))
             .ReturnsAsync(new OllamaChatResult("This includes salmon and quinoa.", []));
         var retrievalService = new Mock<IRetrievalService>();
-        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<CancellationToken>()))
+        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RetrievalResult(
                 "What spicy chicken meal can I cook?",
-                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
+            [new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection")],
                 [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
         var promptBuilder = new Mock<IPromptBuilder>();
         promptBuilder.Setup(builder => builder.Build(It.IsAny<string>(), It.IsAny<IReadOnlyList<RetrievalRecipe>>()))
@@ -180,10 +181,10 @@ public class AssistantServiceTests
             .ReturnsAsync(new OllamaChatResult("direct draft", []))
             .ReturnsAsync(new OllamaChatResult("Use the spicy chicken recipe.", []));
         var retrievalService = new Mock<IRetrievalService>();
-        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<CancellationToken>()))
+        retrievalService.Setup(service => service.RetrieveAsync("What spicy chicken meal can I cook?", It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RetrievalResult(
                 "What spicy chicken meal can I cook?",
-                [new RetrievalRecipe("1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91)],
+            [new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection")],
                 [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
         var promptBuilder = new Mock<IPromptBuilder>();
         promptBuilder.Setup(builder => builder.Build(It.IsAny<string>(), It.IsAny<IReadOnlyList<RetrievalRecipe>>()))
@@ -217,7 +218,7 @@ public class AssistantServiceTests
         ollamaClient.Setup(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new OllamaChatResult("direct draft", []));
         var retrievalService = new Mock<IRetrievalService>();
-        retrievalService.Setup(service => service.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        retrievalService.Setup(service => service.RetrieveAsync(It.IsAny<string>(), It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RetrievalResult("unknown", [], []));
         var toolExecutor = new Mock<IToolExecutor>();
         toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
@@ -318,7 +319,10 @@ public class AssistantServiceTests
         Assert.Throws<ArgumentNullException>(() => new AssistantService(
             Mock.Of<IConversationStore>(),
             null!,
+            Mock.Of<ILanguageContextResolver>(),
+            Mock.Of<ILocalizationOptionsFactory>(),
             Options.Create(new AssistantOptions()),
+            Options.Create(new AssistantLocalizationDefaultsOptions()),
             NullLogger<AssistantService>.Instance));
     }
 
@@ -343,7 +347,10 @@ public class AssistantServiceTests
         return new AssistantService(
             conversationStore,
             orchestrator,
+            new LanguageContextResolver(),
+            new LocalizationOptionsFactory(),
             Options.Create(options ?? new AssistantOptions()),
+            Options.Create(new AssistantLocalizationDefaultsOptions { DefaultLanguage = "en" }),
             NullLogger<AssistantService>.Instance);
     }
 

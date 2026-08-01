@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Domain.DotNet;
 using Orchestration.DotNet;
 using Xunit;
 
@@ -75,6 +76,8 @@ public class AssistantOrchestratorTests
         DateTimeOffset.UtcNow,
         "correlation-1",
         new Dictionary<string, object?>(),
+        new LanguageContext(null, [], "en", false),
+        LocalizationOptions.Create("en"),
         "conversation-1",
         [],
         [],

@@ -152,6 +152,16 @@ public sealed class EvaluationRetrievalService : IRetrievalService
         _traceContext.SetLastRetrievalResult(result);
         return result;
     }
+
+    public async Task<RetrievalResult> RetrieveAsync(
+        string question,
+        Domain.DotNet.LocalizationOptions localizationOptions,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _inner.RetrieveAsync(question, localizationOptions, cancellationToken);
+        _traceContext.SetLastRetrievalResult(result);
+        return result;
+    }
 }
 
 public sealed class EvaluationToolExecutor : IToolExecutor

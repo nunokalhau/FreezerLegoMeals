@@ -1,3 +1,4 @@
+using Domain.DotNet;
 using Services.DotNet;
 
 namespace Orchestration.DotNet;
@@ -7,6 +8,8 @@ public sealed record OrchestratorContext(
     DateTimeOffset CurrentTimestamp,
     string CorrelationId,
     IReadOnlyDictionary<string, object?> Metadata,
+    LanguageContext LanguageContext,
+    LocalizationOptions LocalizationOptions,
     string ConversationId,
     IReadOnlyList<ConversationMessage> Messages,
     IReadOnlyList<ConversationMessage> MessagesToPersist,

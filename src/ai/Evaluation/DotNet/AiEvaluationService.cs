@@ -58,7 +58,7 @@ public sealed class AiEvaluationService : IAiEvaluationService
         AssistantChatResult? lastChatResult = null;
         foreach (var message in scenario.UserMessages)
         {
-            lastChatResult = await _assistantService.ChatAsync(message, conversationId, cancellationToken);
+            lastChatResult = await _assistantService.ChatAsync(message, conversationId, cancellationToken: cancellationToken);
             conversationId = lastChatResult.ConversationId;
         }
 

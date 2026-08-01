@@ -62,8 +62,8 @@ public class RepositorySemanticRecipeMetadataProviderTests
         Assert.Equal("45", metadata.CookingTime);
 
         Assert.Equal(metadata, cachedMetadata);
-        languageContextResolver.Verify(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Once);
-        optionsFactory.Verify(factory => factory.Create(It.IsAny<LanguageContext>()), Times.Once);
+        languageContextResolver.Verify(resolver => resolver.Resolve(It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Exactly(2));
+        optionsFactory.Verify(factory => factory.Create(It.IsAny<LanguageContext>()), Times.Exactly(2));
         queryService.Verify(candidate => candidate.GetLocalizedRecipesAsync(It.IsAny<LocalizationOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

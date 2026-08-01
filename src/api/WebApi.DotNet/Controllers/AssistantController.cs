@@ -25,7 +25,12 @@ public class AssistantController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Message))
             return BadRequest("Message is required");
 
-        var response = await _assistantService.ChatAsync(request.Message, request.ConversationId, cancellationToken);
+        var localization = new AssistantLocalizationRequest(
+            ExplicitLanguage: request.Language,
+            NegotiatedLanguages: ParseNegotiatedLanguages(Request),
+            StrictMode: request.StrictMode);
+
+        var response = await _assistantService.ChatAsync(request.Message, request.ConversationId, localization, cancellationToken);
 
         return Ok(new AssistantChatResponse
         {
@@ -33,5 +38,21 @@ public class AssistantController : ControllerBase
             Response = response
                 .Response
         });
+    }
+
+    private static IReadOnlyList<string> ParseNegotiatedLanguages(HttpRequest request)
+    {
+        var headerValue = request.Headers.AcceptLanguage.ToString();
+        if (string.IsNullOrWhiteSpace(headerValue))
+        {
+            return Array.Empty<string>();
+        }
+
+        return headerValue
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(segment => segment.Split(';', StringSplitOptions.RemoveEmptyEntries)[0].Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 }
