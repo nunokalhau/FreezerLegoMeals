@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Services.DotNet.Contracts;
 using WebApi.DotNet.Contracts.Requests;
 using WebApi.DotNet.Contracts.Responses;
 using Xunit;
@@ -119,9 +120,7 @@ public class ShoppingControllerIntegrationTests : BaseIntegrationTest
         // Arrange
         var generateRequest = new GenerateShoppingListRequest
         {
-            RecipeIdentifiers = new List<string> { "1", "2" },
-            ScaleFactor = 1.0,
-            GroupByCategory = true
+            MealPlan = new MealPlan { RecipeIds = new List<int> { 1, 2 } }
         };
 
         // Act
@@ -152,9 +151,7 @@ public class ShoppingControllerIntegrationTests : BaseIntegrationTest
         // Arrange
         var generateRequest = new GenerateShoppingListRequest
         {
-            RecipeIdentifiers = null,
-            ScaleFactor = 1.0,
-            GroupByCategory = true
+            MealPlan = new MealPlan { RecipeIds = new List<int>() }
         };
 
         // Act

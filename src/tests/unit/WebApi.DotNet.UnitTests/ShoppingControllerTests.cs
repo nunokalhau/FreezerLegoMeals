@@ -106,26 +106,24 @@ public class ShoppingControllerTests
     public async Task GenerateShoppingList_With_Valid_Request_Returns_Success()
     {
         // Arrange
-        var mockResult = new ShoppingListResponse { 
-            Recipes = new List<string> { "recipe1", "recipe2" },
-            TotalRecipes = 2,
-            ScaleFactor = 2.0,
-            Ingredients = new List<ShoppingListItem>(),
+        var mockResult = new ShoppingListResponse {
+            MealPlan = new MealPlan { RecipeIds = new List<int> { 1, 2 } },
+            ShoppingList = new ShoppingList(),
+            Formatted = new FormattedShoppingList(),
+            TotalRecipesInPlan = 2,
+            TotalRecipesResolved = 2,
             Message = "Shopping list generated successfully"
         };
             
         _mockShoppingService.Setup(service => service.GenerateShoppingListAsync(
-            It.IsAny<IEnumerable<string>>(), 
-            It.IsAny<double>(), 
-            It.IsAny<bool>()))
+            It.IsAny<MealPlan>(),
+            It.IsAny<CancellationToken>()))
                             .ReturnsAsync(mockResult);
 
         var client = _factory.CreateClient();
         var generateRequest = new GenerateShoppingListRequest
         {
-            RecipeIdentifiers = new List<string> { "recipe1", "recipe2" },
-            ScaleFactor = 2.0,
-            GroupByCategory = true
+            MealPlan = new MealPlan { RecipeIds = new List<int> { 1, 2 } }
         };
 
         // Act
@@ -137,9 +135,8 @@ public class ShoppingControllerTests
             
         // Verify Service was called with Request DTO data
         _mockShoppingService.Verify(service => service.GenerateShoppingListAsync(
-            It.Is<IEnumerable<string>>(identifiers => identifiers.Contains("recipe1") && identifiers.Contains("recipe2")),
-            It.Is<double>(factor => factor == 2.0),
-            It.Is<bool>(groupBy => groupBy == true)
+            It.Is<MealPlan>(plan => plan.RecipeIds.Contains(1) && plan.RecipeIds.Contains(2)),
+            It.IsAny<CancellationToken>()
         ), Times.Once);
     }
 

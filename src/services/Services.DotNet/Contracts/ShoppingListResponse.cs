@@ -2,13 +2,15 @@
 
 public sealed class ShoppingListResponse
 {
-    public IEnumerable<string> Recipes { get; init; }
+    public required MealPlan MealPlan { get; init; }
 
-    public int TotalRecipes { get; init; }
+    public required ShoppingList ShoppingList { get; init; }
 
-    public double ScaleFactor { get; init; }
+    public required FormattedShoppingList Formatted { get; init; }
 
-    public IEnumerable<ShoppingListItem> Ingredients { get; init; }
+    public int TotalRecipesInPlan { get; init; }
 
-    public string Message { get; init; }
+    public int TotalRecipesResolved { get; init; }
+
+    public required string Message { get; init; }
 }

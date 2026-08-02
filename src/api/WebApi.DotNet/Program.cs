@@ -68,6 +68,8 @@ builder.Services.AddScoped<IToolExecutor>(serviceProvider =>
         serviceProvider.GetRequiredService<IAiEvaluationTraceContext>());
 });
 builder.Services.AddScoped<IMealService, MealService>();
+builder.Services.AddScoped<IShoppingListGenerator, DeterministicShoppingListGenerator>();
+builder.Services.AddScoped<IShoppingListFormatter, DeterministicShoppingListFormatter>();
 builder.Services.AddScoped<IShoppingService, ShoppingService>();
 builder.Services.AddSingleton<IAssistantLanguageDetector, HeuristicAssistantLanguageDetector>();
 builder.Services.AddSingleton<ILanguageContextResolver, LanguageContextResolver>();

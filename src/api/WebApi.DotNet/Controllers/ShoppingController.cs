@@ -73,9 +73,9 @@ public class ShoppingController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a shopping list from one or more recipes.
+    /// Generate a deterministic shopping list from a structured meal plan.
     /// </summary>
-    /// <param name="request">The request containing recipe identifiers and optional scaling parameters.</param>
+    /// <param name="request">The request containing a structured meal plan with recipe IDs.</param>
     /// <returns>Generated shopping list data.</returns>
     [HttpPost("generate")]
     public async Task<ActionResult<GenerateShoppingListResponse>> GenerateShoppingList([FromBody] GenerateShoppingListRequest request)
@@ -83,21 +83,16 @@ public class ShoppingController : ControllerBase
         if (request == null)
             return BadRequest("Request body is required");
 
-        var recipeIdentifiers = request.RecipeIdentifiers;
-        if (recipeIdentifiers is null || !recipeIdentifiers.Any())
-            return BadRequest("At least one recipe identifier is required");
+        if (request.MealPlan?.RecipeIds is null || request.MealPlan.RecipeIds.Count == 0)
+            return BadRequest("MealPlan with at least one recipeId is required");
 
-        var result = await _shoppingService.GenerateShoppingListAsync(
-            recipeIdentifiers,
-            request.ScaleFactor, 
-            request.GroupByCategory);
+        var result = await _shoppingService.GenerateShoppingListAsync(request.MealPlan);
         
         var response = new GenerateShoppingListResponse
         {
             ShoppingList = result,
             Message = "Shopping list generated successfully",
-            ScaleFactor = request.ScaleFactor,
-            GroupByCategory = request.GroupByCategory
+            Deterministic = true
         };
 
         return Ok(response);

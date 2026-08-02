@@ -23,15 +23,12 @@ public interface IShoppingService
     Task<Dictionary<string, IEnumerable<RecipeIngredient>>> GetMultipleRecipeIngredientsAsync(IEnumerable<string> recipeIdentifiers);
     
     /// <summary>
-    /// Generate a shopping list from one or more recipes.
+    /// Generate a deterministic shopping list from a structured meal plan with recipe IDs only.
     /// </summary>
-    /// <param name="recipeIdentifiers">List of recipe names or IDs to include</param>
-    /// <param name="scaleFactor">Factor to scale ingredient amounts (e.g., 2.0 for double servings)</param>
-    /// <param name="groupByCategory">Whether to group ingredients by category</param>
-    /// <returns>Dictionary with shopping list data and metadata</returns>
-    Task<ShoppingListResponse> GenerateShoppingListAsync(IEnumerable<string> recipeIdentifiers, 
-                                            double scaleFactor = 1.0, 
-                                            bool groupByCategory = true);
+    /// <param name="mealPlan">Structured meal plan containing recipe IDs.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Deterministic shopping list response based only on stored recipes.</returns>
+    Task<ShoppingListResponse> GenerateShoppingListAsync(MealPlan mealPlan, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Get basic information about a specific recipe.

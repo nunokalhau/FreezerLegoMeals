@@ -1,3 +1,5 @@
+using Services.DotNet.Contracts;
+
 namespace WebApi.DotNet.Contracts.Responses;
 
 /// <summary>
@@ -8,7 +10,7 @@ public class GenerateShoppingListResponse
     /// <summary>
     /// The generated shopping list data.
     /// </summary>
-    public object ShoppingList { get; set; } = new();
+    public required ShoppingListResponse ShoppingList { get; set; }
     
     /// <summary>
     /// A descriptive message about the shopping list.
@@ -16,12 +18,7 @@ public class GenerateShoppingListResponse
     public string Message { get; set; } = string.Empty;
     
     /// <summary>
-    /// The scaling factor used for ingredient amounts.
+    /// Indicates this payload was generated deterministically from stored recipes.
     /// </summary>
-    public double ScaleFactor { get; set; } = 1.0;
-    
-    /// <summary>
-    /// Whether ingredients were grouped by category.
-    /// </summary>
-    public bool GroupByCategory { get; set; } = true;
+    public bool Deterministic { get; set; } = true;
 }

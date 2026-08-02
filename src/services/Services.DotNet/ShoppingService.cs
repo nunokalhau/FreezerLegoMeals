@@ -10,14 +10,23 @@ namespace Services.DotNet;
 public class ShoppingService : IShoppingService
 {
     private readonly IRecipeRepository _recipeRepository;
+    private readonly IShoppingListGenerator _shoppingListGenerator;
+    private readonly IShoppingListFormatter _shoppingListFormatter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShoppingService"/> class.
     /// </summary>
     /// <param name="recipeRepository">The recipe repository to use for data access.</param>
-    public ShoppingService(IRecipeRepository recipeRepository)
+    /// <param name="shoppingListGenerator">Deterministic shopping list generator.</param>
+    /// <param name="shoppingListFormatter">Shopping list formatter.</param>
+    public ShoppingService(
+        IRecipeRepository recipeRepository,
+        IShoppingListGenerator shoppingListGenerator,
+        IShoppingListFormatter shoppingListFormatter)
     {
         _recipeRepository = recipeRepository ?? throw new ArgumentNullException(nameof(recipeRepository));
+        _shoppingListGenerator = shoppingListGenerator ?? throw new ArgumentNullException(nameof(shoppingListGenerator));
+        _shoppingListFormatter = shoppingListFormatter ?? throw new ArgumentNullException(nameof(shoppingListFormatter));
     }
 
     /// <summary>
@@ -75,42 +84,30 @@ public class ShoppingService : IShoppingService
     }
 
     /// <summary>
-    /// Generate a shopping list from one or more recipes.
+    /// Generate a deterministic shopping list from a structured meal plan with recipe IDs only.
     /// </summary>
-    /// <param name="recipeIdentifiers">List of recipe names or IDs to include</param>
-    /// <param name="scaleFactor">Factor to scale ingredient amounts (e.g., 2.0 for double servings)</param>
-    /// <param name="groupByCategory">Whether to group ingredients by category</param>
-    /// <returns>Dictionary with shopping list data and metadata</returns>
-    public async Task<ShoppingListResponse> GenerateShoppingListAsync(IEnumerable<string> recipeIdentifiers, 
-                                                        double scaleFactor = 1.0, 
-                                                        bool groupByCategory = true)
+    /// <param name="mealPlan">Structured meal plan with recipe IDs.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Deterministic shopping list data and formatted output.</returns>
+    public async Task<ShoppingListResponse> GenerateShoppingListAsync(MealPlan mealPlan, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(recipeIdentifiers);
+        ArgumentNullException.ThrowIfNull(mealPlan);
 
-        // Get all ingredients from specified recipes
-        var recipeIngredients = await GetMultipleRecipeIngredientsAsync(recipeIdentifiers);
-        
-        // If no ingredients found, return empty result
-        if (!recipeIngredients.Any())
-        {
-            var recipeCount = recipeIngredients.Keys.Count();
-            return new ShoppingListResponse
-            {
-                Recipes = recipeIdentifiers,
-                TotalRecipes = recipeCount,
-                Ingredients = new List<ShoppingListItem>(),
-                Message = $"No recipes found with identifiers: {string.Join(", ", recipeIdentifiers)}"
-            };
-        }
+        var generatedList = await _shoppingListGenerator.GenerateAsync(mealPlan, cancellationToken);
+        var formattedList = _shoppingListFormatter.Format(generatedList, "pt");
+        var resolvedRecipes = generatedList.RecipeIds.Count - generatedList.MissingRecipeIds.Count;
+        var message = resolvedRecipes <= 0
+            ? "Nenhuma receita valida foi encontrada para o MealPlan informado."
+            : $"Lista de compras deterministica gerada a partir de {resolvedRecipes} receita(s).";
 
-        var totalRecipes = recipeIngredients.Keys.Count();
         return new ShoppingListResponse
         {
-            Recipes = recipeIdentifiers,
-            TotalRecipes = totalRecipes,
-            ScaleFactor = scaleFactor,
-            Ingredients = new List<ShoppingListItem>(),
-            Message = $"Generated shopping list for {totalRecipes} recipes"
+            MealPlan = mealPlan,
+            ShoppingList = generatedList,
+            Formatted = formattedList,
+            TotalRecipesInPlan = mealPlan.RecipeIds.Count,
+            TotalRecipesResolved = resolvedRecipes,
+            Message = message
         };
     }
 

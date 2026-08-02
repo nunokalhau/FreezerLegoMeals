@@ -2,6 +2,7 @@ using Xunit;
 using Moq;
 using Domain.DotNet;
 using Repository.DotNet;
+using Services.DotNet.Contracts;
 
 namespace Services.DotNet.UnitTests;
 
@@ -17,7 +18,9 @@ public class ShoppingServiceTests
     public ShoppingServiceTests()
     {
         _mockRepository = new Mock<IRecipeRepository>();
-        _service = new ShoppingService(_mockRepository.Object);
+        var generator = new DeterministicShoppingListGenerator(_mockRepository.Object);
+        var formatter = new DeterministicShoppingListFormatter();
+        _service = new ShoppingService(_mockRepository.Object, generator, formatter);
     }
 
     /// <summary>
@@ -27,7 +30,9 @@ public class ShoppingServiceTests
     public void Constructor_WithNullRepository_ShouldThrowArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ShoppingService(null));
+        var generator = new DeterministicShoppingListGenerator(_mockRepository.Object);
+        var formatter = new DeterministicShoppingListFormatter();
+        Assert.Throws<ArgumentNullException>(() => new ShoppingService(null, generator, formatter));
     }
 
     /// <summary>
@@ -161,83 +166,143 @@ public class ShoppingServiceTests
     }
 
     /// <summary>
-    /// Tests GenerateShoppingListAsync with valid recipe identifiers
+    /// Tests GenerateShoppingListAsync with valid meal plan recipe IDs
     /// </summary>
     [Fact]
-    public async Task GenerateShoppingListAsync_WithValidIdentifiers_ShouldReturnExpectedResult()
+    public async Task GenerateShoppingListAsync_WithValidMealPlan_ShouldReturnExpectedResult()
     {
         // Arrange
-        var identifiers = new List<string> { "123", "456" };
+        var mealPlan = new MealPlan { RecipeIds = new List<int> { 123, 456 } };
         _mockRepository.Setup(r => r.GetRecipeByIdAsync(It.IsAny<int>()))
-                      .ReturnsAsync((Recipe)null);
+                      .ReturnsAsync(new Recipe
+                      {
+                          Id = 123,
+                          Name = "Test Recipe",
+                          SourcePath = "food/proteins/test.md",
+                          RecipeIngredients =
+                          [
+                              new RecipeIngredient
+                              {
+                                  RecipeId = 123,
+                                  IngredientId = 1,
+                                  Amount = 2,
+                                  Unit = "g",
+                                  Ingredient = new Ingredient { Id = 1, Name = "beef" }
+                              }
+                          ]
+                      });
 
         // Act
-        var result = await _service.GenerateShoppingListAsync(identifiers);
+        var result = await _service.GenerateShoppingListAsync(mealPlan);
 
         // Assert
         Assert.NotNull(result);
+        Assert.Equal(2, result.TotalRecipesInPlan);
+        Assert.Equal(2, result.TotalRecipesResolved);
+        Assert.NotEmpty(result.ShoppingList.Categories);
     }
 
     /// <summary>
-    /// Tests GenerateShoppingListAsync with null identifiers
+    /// Tests GenerateShoppingListAsync with null meal plan
     /// </summary>
     [Fact]
-    public void GenerateShoppingListAsync_WithNullIdentifiers_ShouldThrowArgumentNullException()
+    public void GenerateShoppingListAsync_WithNullMealPlan_ShouldThrowArgumentNullException()
     {
         // Act & Assert
         Assert.ThrowsAsync<ArgumentNullException>(() => _service.GenerateShoppingListAsync(null));
     }
 
     /// <summary>
-    /// Tests GenerateShoppingListAsync with empty identifiers list
+    /// Tests GenerateShoppingListAsync with empty recipe ID list
     /// </summary>
     [Fact]
-    public async Task GenerateShoppingListAsync_WithEmptyIdentifiers_ShouldReturnResult()
+    public async Task GenerateShoppingListAsync_WithEmptyMealPlan_ShouldReturnResult()
     {
         // Arrange
-        var identifiers = new List<string>();
+        var mealPlan = new MealPlan();
 
         // Act
-        var result = await _service.GenerateShoppingListAsync(identifiers);
+        var result = await _service.GenerateShoppingListAsync(mealPlan);
 
         // Assert
         Assert.NotNull(result);
+        Assert.Equal(0, result.TotalRecipesInPlan);
+        Assert.Empty(result.ShoppingList.Categories);
     }
 
     /// <summary>
-    /// Tests GenerateShoppingListAsync with scaleFactor parameter
+    /// Tests GenerateShoppingListAsync aggregates equal quantities deterministically
     /// </summary>
     [Fact]
-    public async Task GenerateShoppingListAsync_WithScaleFactor_ShouldReturnExpectedResult()
+    public async Task GenerateShoppingListAsync_WithRepeatedRecipes_ShouldAggregateQuantities()
     {
         // Arrange
-        var identifiers = new List<string> { "123" };
-        _mockRepository.Setup(r => r.GetRecipeByIdAsync(It.IsAny<int>()))
-                      .ReturnsAsync((Recipe)null);
+        var mealPlan = new MealPlan { RecipeIds = new List<int> { 1, 1 } };
+        _mockRepository.Setup(r => r.GetRecipeByIdAsync(1))
+            .ReturnsAsync(new Recipe
+            {
+                Id = 1,
+                Name = "Rice",
+                SourcePath = "food/starches/rice.md",
+                RecipeIngredients =
+                [
+                    new RecipeIngredient
+                    {
+                        RecipeId = 1,
+                        IngredientId = 10,
+                        Amount = 100,
+                        Unit = "g",
+                        Ingredient = new Ingredient { Id = 10, Name = "rice" }
+                    }
+                ]
+            });
 
         // Act
-        var result = await _service.GenerateShoppingListAsync(identifiers, 2.0);
+        var result = await _service.GenerateShoppingListAsync(mealPlan);
 
         // Assert
-        Assert.NotNull(result);
+        var starchCategory = Assert.Single(result.ShoppingList.Categories);
+        var rice = Assert.Single(starchCategory.Items);
+        Assert.Equal("rice", rice.Name);
+        Assert.Equal(200, rice.Quantity);
     }
 
     /// <summary>
-    /// Tests GenerateShoppingListAsync with groupByCategory parameter
+    /// Tests GenerateShoppingListAsync marks missing quantities instead of inventing values
     /// </summary>
     [Fact]
-    public async Task GenerateShoppingListAsync_WithGroupByCategory_ShouldReturnExpectedResult()
+    public async Task GenerateShoppingListAsync_WithMissingAmounts_ShouldKeepQuantityUnspecified()
     {
         // Arrange
-        var identifiers = new List<string> { "123" };
-        _mockRepository.Setup(r => r.GetRecipeByIdAsync(It.IsAny<int>()))
-                      .ReturnsAsync((Recipe)null);
+        var mealPlan = new MealPlan { RecipeIds = new List<int> { 1 } };
+        _mockRepository.Setup(r => r.GetRecipeByIdAsync(1))
+            .ReturnsAsync(new Recipe
+            {
+                Id = 1,
+                Name = "Sauce",
+                SourcePath = "food/sauces/sauce.md",
+                RecipeIngredients =
+                [
+                    new RecipeIngredient
+                    {
+                        RecipeId = 1,
+                        IngredientId = 20,
+                        Amount = null,
+                        Unit = "",
+                        Ingredient = new Ingredient { Id = 20, Name = "vinegar" }
+                    }
+                ]
+            });
 
         // Act
-        var result = await _service.GenerateShoppingListAsync(identifiers, groupByCategory: false);
+        var result = await _service.GenerateShoppingListAsync(mealPlan);
 
         // Assert
-        Assert.NotNull(result);
+        var sauceCategory = Assert.Single(result.ShoppingList.Categories);
+        var vinegar = Assert.Single(sauceCategory.Items);
+        Assert.Null(vinegar.Quantity);
+        Assert.Equal(1, vinegar.UnspecifiedQuantityOccurrences);
+        Assert.Contains(result.Formatted.Lines, line => line.Contains("quantidade nao especificada", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

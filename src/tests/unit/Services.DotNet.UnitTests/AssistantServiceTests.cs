@@ -136,6 +136,84 @@ public class AssistantServiceTests
     }
 
     [Fact]
+    public async Task ChatAsync_WithMealPlanningRequest_UsesStructuredRecipeIdWorkflow()
+    {
+        var ollamaClient = new Mock<IOllamaClient>();
+        ollamaClient
+            .Setup(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("{\"days\":[{\"day\":1,\"lunch\":{\"recipeId\":\"1\"},\"dinner\":{\"recipeId\":\"2\"}}]}", []));
+
+        var retrievalService = new Mock<IRetrievalService>();
+        retrievalService
+            .Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(
+                "Create a weekly meal plan for me",
+                [
+                    new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection"),
+                    new RetrievalRecipe("2", "2", "Tofu Bowl", "Dinner", "vegetarian", ["tofu"], "Cook", "30", 0.83, "canonical-multilingual-projection")
+                ],
+                [
+                    new SourceAttribution("1", "Spicy Chicken", 0.91),
+                    new SourceAttribution("2", "Tofu Bowl", 0.83)
+                ]));
+
+        var toolExecutor = new Mock<IToolExecutor>();
+        toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
+        var service = CreateService(
+            ollamaClient.Object,
+            new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
+            toolExecutor.Object,
+            retrievalService: retrievalService.Object,
+            promptBuilder: Mock.Of<IPromptBuilder>());
+
+        var result = await service.ChatAsync("Create a weekly meal plan for me");
+
+        Assert.Contains("Validated meal plan:", result.Response);
+        Assert.Contains("Lunch: Spicy Chicken (recipeId: 1)", result.Response);
+        Assert.Contains("Dinner: Tofu Bowl (recipeId: 2)", result.Response);
+        Assert.Contains("\"recipeId\":\"1\"", result.Response);
+        Assert.Contains("\"recipeId\":\"2\"", result.Response);
+
+        retrievalService.Verify(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        ollamaClient.Verify(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Once);
+        toolExecutor.Verify(executor => executor.ExecuteAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, object?>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ChatAsync_WithMealPlanningRequestAndInvalidRecipeIds_ReturnsStructuredValidationFallback()
+    {
+        var ollamaClient = new Mock<IOllamaClient>();
+        ollamaClient
+            .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("{\"days\":[{\"day\":1,\"lunch\":{\"recipeId\":\"999\"}}]}", []))
+            .ReturnsAsync(new OllamaChatResult("{\"days\":[{\"day\":1,\"dinner\":{\"recipeId\":\"not-existing\"}}]}", []))
+            .ReturnsAsync(new OllamaChatResult("{\"days\":[]}", []));
+
+        var retrievalService = new Mock<IRetrievalService>();
+        retrievalService
+            .Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(
+                "Create a weekly meal plan for me",
+                [new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection")],
+                [new SourceAttribution("1", "Spicy Chicken", 0.91)]));
+
+        var toolExecutor = new Mock<IToolExecutor>();
+        toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
+        var service = CreateService(
+            ollamaClient.Object,
+            new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
+            toolExecutor.Object,
+            retrievalService: retrievalService.Object,
+            promptBuilder: Mock.Of<IPromptBuilder>());
+
+        var result = await service.ChatAsync("Create a weekly meal plan for me");
+
+        Assert.Contains("could not validate a structured meal plan", result.Response, StringComparison.OrdinalIgnoreCase);
+        retrievalService.Verify(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        ollamaClient.Verify(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
     public async Task ChatAsync_WithUnsupportedRagClaims_ReturnsRetrievalBackedFallbackResponse()
     {
         var ollamaClient = new Mock<IOllamaClient>();
