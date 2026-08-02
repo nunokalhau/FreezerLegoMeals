@@ -116,7 +116,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IReranker>();
                 services.RemoveAll<IAnswerGroundingService>();
-                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IOllamaClient, NoContextOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
                 services.AddSingleton<IVectorStore>(vectorStore);
@@ -171,7 +171,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IReranker>();
                 services.RemoveAll<IAnswerGroundingService>();
-                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IOllamaClient, NoContextOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
                 services.AddSingleton<IVectorStore>(vectorStore);
@@ -331,7 +331,7 @@ public class AssistantControllerIntegrationTests
                 services.RemoveAll<IQueryRewriter>();
                 services.RemoveAll<IReranker>();
                 services.RemoveAll<IAnswerGroundingService>();
-                services.AddSingleton<IOllamaClient, StubOllamaClient>();
+                services.AddSingleton<IOllamaClient, NoContextOllamaClient>();
                 services.AddSingleton<IPromptBuilder, StubPromptBuilder>();
                 services.AddSingleton<IEmbeddingService>(embeddingService);
                 services.AddSingleton<IVectorStore>(vectorStore);
@@ -538,7 +538,7 @@ public class AssistantControllerIntegrationTests
     }
 
     [Fact]
-    public async Task Chat_WithRepositoryQuestion_WhenAnswerIsUngrounded_ReturnsSafeResponse()
+    public async Task Chat_WithRepositoryQuestion_WhenAnswerIsUngrounded_ReturnsRetrievalBackedFallback()
     {
         var vectorStore = new RecordingVectorStore([
             new VectorMatch("1", 0.95)
@@ -1086,7 +1086,12 @@ public class AssistantControllerIntegrationTests
 
     private sealed class StubPromptBuilder : IPromptBuilder
     {
-        public string Build(string question, IReadOnlyList<RetrievalRecipe> recipes) => "rag prompt";
+        public string Build(
+            string question,
+            IReadOnlyList<RetrievalRecipe> recipes,
+            string? intentType,
+            LocalizationOptions localizationOptions,
+            string? requestedLanguage = null) => "rag prompt";
     }
 
     private sealed class StubQueryRewriter : IQueryRewriter
@@ -1170,9 +1175,25 @@ public class AssistantControllerIntegrationTests
         public Task<OllamaChatResult> ChatAsync(string? model, IReadOnlyList<ConversationMessage> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
         {
             _calls++;
+            return Task.FromResult(_calls switch
+            {
+                1 => new OllamaChatResult("draft response", []),
+                2 => new OllamaChatResult("This meal includes salmon and quinoa.", []),
+                _ => new OllamaChatResult("The repository does not contain enough information to answer that question.", [])
+            });
+        }
+    }
+
+    private sealed class NoContextOllamaClient : IOllamaClient
+    {
+        private int _calls;
+
+        public Task<OllamaChatResult> ChatAsync(string? model, IReadOnlyList<ConversationMessage> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+        {
+            _calls++;
             return Task.FromResult(_calls == 1
                 ? new OllamaChatResult("draft response", [])
-                : new OllamaChatResult("This meal includes salmon and quinoa.", []));
+                : new OllamaChatResult("The repository does not contain enough information to answer that question.", []));
         }
     }
 

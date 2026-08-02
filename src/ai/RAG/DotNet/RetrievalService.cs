@@ -50,7 +50,13 @@ public sealed class RetrievalService : IRetrievalService
 
     public async Task<RetrievalResult> RetrieveAsync(string question, CancellationToken cancellationToken = default)
     {
-        return await RetrieveAsync(question, LocalizationOptions.Create("en"), cancellationToken);
+        return await RetrieveAsync(
+            new RetrievalRequestContext(
+                question,
+                new RetrievalIntentClassification("GeneralConversation"),
+                LocalizationOptions.Create("en"),
+                StrictMode: false),
+            cancellationToken);
     }
 
     public async Task<RetrievalResult> RetrieveAsync(
@@ -58,12 +64,36 @@ public sealed class RetrievalService : IRetrievalService
         LocalizationOptions localizationOptions,
         CancellationToken cancellationToken = default)
     {
+        return await RetrieveAsync(
+            new RetrievalRequestContext(
+                question,
+                new RetrievalIntentClassification("GeneralConversation", DetectedLanguage: localizationOptions.PreferredLanguage),
+                localizationOptions,
+                localizationOptions.StrictMode),
+            cancellationToken);
+    }
+
+    public async Task<RetrievalResult> RetrieveAsync(
+        RetrievalRequestContext requestContext,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(requestContext);
+        ArgumentNullException.ThrowIfNull(requestContext.LocalizationOptions);
+
+        var question = requestContext.OriginalQuestion;
+        var localizationOptions = requestContext.LocalizationOptions;
+
         ArgumentNullException.ThrowIfNull(localizationOptions);
 
         using var activity = ActivitySource.StartActivity("retrieval.retrieve", ActivityKind.Internal);
         activity?.SetTag("retrieval.top_k", _topK);
         activity?.SetTag("retrieval.minimum_similarity", _minimumSimilarity);
         activity?.SetTag("retrieval.question_length", question?.Length ?? 0);
+        activity?.SetTag("retrieval.intent", requestContext.IntentClassification.Intent);
+        activity?.SetTag("retrieval.intent_confidence", requestContext.IntentClassification.Confidence);
+        activity?.SetTag("retrieval.intent_rule", requestContext.IntentClassification.MatchedRule ?? string.Empty);
+        activity?.SetTag("retrieval.intent_detected_language", requestContext.IntentClassification.DetectedLanguage ?? string.Empty);
+        activity?.SetTag("retrieval.strict_mode_request", requestContext.StrictMode);
 
         var selectedProfile = _profileSelector.Select(question ?? string.Empty, localizationOptions);
         activity?.SetTag("retrieval.profile_id", selectedProfile.ProfileId);

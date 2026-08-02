@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using Domain.DotNet;
 using Microsoft.Extensions.Logging;
 using RAG.DotNet;
 using Services.DotNet;
@@ -10,11 +11,12 @@ namespace Orchestration.DotNet;
 public sealed class MealPlanningAgent : IAgent
 {
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
-    private const string NoSupportResponse = "The repository does not contain enough information to answer that question.";
+    private const string InfrastructureFailureResponse = "The assistant is temporarily unavailable. Please try again.";
     private readonly IOllamaClient _ollamaClient;
     private readonly IToolExecutor _toolExecutor;
     private readonly IRoutingPolicy _routingPolicy;
     private readonly ILogger<MealPlanningAgent> _logger;
+    private readonly IIntentClassifier _intentClassifier;
     private readonly IRetrievalService? _retrievalService;
     private readonly IPromptBuilder? _promptBuilder;
     private readonly IAnswerGroundingService? _answerGroundingService;
@@ -26,7 +28,8 @@ public sealed class MealPlanningAgent : IAgent
         ILogger<MealPlanningAgent> logger,
         IRetrievalService? retrievalService = null,
         IPromptBuilder? promptBuilder = null,
-        IAnswerGroundingService? answerGroundingService = null)
+        IAnswerGroundingService? answerGroundingService = null,
+        IIntentClassifier? intentClassifier = null)
     {
         _ollamaClient = ollamaClient ?? throw new ArgumentNullException(nameof(ollamaClient));
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
@@ -35,6 +38,7 @@ public sealed class MealPlanningAgent : IAgent
         _retrievalService = retrievalService;
         _promptBuilder = promptBuilder;
         _answerGroundingService = answerGroundingService;
+        _intentClassifier = intentClassifier ?? new RuleBasedIntentClassifier();
     }
 
     public string Name => "MealPlanningAgent";
@@ -47,6 +51,21 @@ public sealed class MealPlanningAgent : IAgent
         activity?.SetTag("agent.name", Name);
         activity?.SetTag("assistant.correlation_id", context.CorrelationId);
         activity?.SetTag("assistant.user_request_length", context.UserRequest.Length);
+        var intent = await _intentClassifier.ClassifyAsync(
+            context.UserRequest,
+            context.LocalizationOptions.PreferredLanguage,
+            cancellationToken);
+        activity?.SetTag("assistant.intent", intent.Intent.ToString());
+        activity?.SetTag("assistant.intent_confidence", intent.Confidence);
+        activity?.SetTag("assistant.intent_language", intent.Language ?? string.Empty);
+        _logger.LogDebug(
+            "{AgentName} intent classification correlation={CorrelationId} intent={Intent} confidence={Confidence} matchedRule={MatchedRule} language={Language}",
+            Name,
+            context.CorrelationId,
+            intent.Intent,
+            intent.Confidence,
+            intent.MatchedRule ?? "none",
+            intent.Language ?? "unknown");
 
         var startedAt = Stopwatch.StartNew();
         var messages = context.Messages.ToList();
@@ -89,7 +108,7 @@ public sealed class MealPlanningAgent : IAgent
                     steps.Add("Retrieval");
                     steps.Add("Prompt Builder");
                     steps.Add("RAG");
-                    var ragResult = await AnswerWithRetrievalAsync(context, activity, cancellationToken);
+                    var ragResult = await AnswerWithRetrievalAsync(context, intent, activity, cancellationToken);
                     content = ragResult.Response;
                     retrievedRecipes.AddRange(ragResult.RetrievedRecipes);
                     _logger.LogInformation(
@@ -183,34 +202,50 @@ public sealed class MealPlanningAgent : IAgent
         return false;
     }
 
-    private async Task<(string Response, IReadOnlyList<RetrievedRecipeInfo> RetrievedRecipes)> AnswerWithRetrievalAsync(OrchestratorContext context, Activity? activity, CancellationToken cancellationToken)
+    private async Task<(string Response, IReadOnlyList<RetrievedRecipeInfo> RetrievedRecipes)> AnswerWithRetrievalAsync(
+        OrchestratorContext context,
+        IntentClassificationResult intent,
+        Activity? activity,
+        CancellationToken cancellationToken)
     {
-        var retrieval = await _retrievalService!.RetrieveAsync(context.UserRequest, context.LocalizationOptions, cancellationToken);
+        var retrievalRequest = new RetrievalRequestContext(
+            context.UserRequest,
+            new RetrievalIntentClassification(
+                intent.Intent.ToString(),
+                intent.Confidence,
+                intent.MatchedRule,
+                intent.Language),
+            context.LocalizationOptions,
+            context.LocalizationOptions.StrictMode);
+        var retrieval = await _retrievalService!.RetrieveAsync(retrievalRequest, cancellationToken);
         activity?.SetTag("retrieval.profile_id", retrieval.Profile?.ProfileId ?? string.Empty);
         activity?.SetTag("retrieval.profile_family", retrieval.Profile?.ProfileFamily.ToString() ?? string.Empty);
         activity?.SetTag("retrieval.normalization_version", retrieval.NormalizationVersion);
         var retrievedRecipes = retrieval.Sources
             .Select(source => new RetrievedRecipeInfo(source.RecipeId, source.Title, source.SimilarityScore))
             .ToList();
-        if (retrieval.Recipes.Count == 0)
-        {
-            _logger.LogInformation(
-                "{AgentName} retrieval yielded no relevant context correlation={CorrelationId}",
-                Name,
-                context.CorrelationId);
-            activity?.SetTag("grounding.grounded", false);
-            activity?.SetTag("grounding.unsupported_claims_count", 1);
-            return ($"{NoSupportResponse}\n\nSources: none", retrievedRecipes);
-        }
 
-        var prompt = _promptBuilder!.Build(context.UserRequest, retrieval.Recipes);
+        var prompt = _promptBuilder!.Build(
+            context.UserRequest,
+            retrieval.Recipes,
+            intent.Intent.ToString(),
+            context.LocalizationOptions,
+            ResolveRequestedLanguage(context.LanguageContext));
+        _logger.LogInformation(
+            "{AgentName} RAG model context correlation={CorrelationId} userQuestion={UserQuestion} retrievedCount={RetrievedCount} recipes={RecipeSummaries} prompt={Prompt}",
+            Name,
+            context.CorrelationId,
+            context.UserRequest,
+            retrieval.Recipes.Count,
+            string.Join(" | ", retrieval.Recipes.Select(recipe => $"{recipe.RecipeId}:{recipe.Title}")),
+            prompt);
         var now = DateTimeOffset.UtcNow;
         var response = await _ollamaClient.ChatAsync(null, [
             new ConversationMessage(ConversationRole.System, context.AssistantOptions.SystemPrompt, now),
             new ConversationMessage(ConversationRole.User, prompt, now)
         ], [], cancellationToken);
         var content = string.IsNullOrWhiteSpace(response.Content)
-            ? NoSupportResponse
+            ? string.Empty
             : response.Content.Trim();
 
         var grounding = _answerGroundingService is null
@@ -226,9 +261,46 @@ public sealed class MealPlanningAgent : IAgent
         activity?.SetTag("grounding.grounded", grounding.Grounded);
         activity?.SetTag("grounding.unsupported_claims_count", grounding.UnsupportedClaimsCount);
 
-        if (!grounding.Grounded)
+        if (!grounding.Grounded || string.IsNullOrWhiteSpace(content))
         {
-            return ($"{NoSupportResponse}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
+            _logger.LogInformation(
+                "{AgentName} retrying RAG generation after grounding failure correlation={CorrelationId}",
+                Name,
+                context.CorrelationId);
+
+            var retryNow = DateTimeOffset.UtcNow;
+            var retryResponse = await _ollamaClient.ChatAsync(null, [
+                new ConversationMessage(ConversationRole.System, context.AssistantOptions.SystemPrompt, retryNow),
+                new ConversationMessage(ConversationRole.User, prompt, retryNow)
+            ], [], cancellationToken);
+
+            var retryContent = string.IsNullOrWhiteSpace(retryResponse.Content)
+                ? string.Empty
+                : retryResponse.Content.Trim();
+
+            var retryGrounding = _answerGroundingService is null
+                ? new AnswerGroundingResult(true, 0)
+                : await _answerGroundingService.ValidateAsync(retryContent, retrieval.Recipes, cancellationToken);
+
+            _logger.LogInformation(
+                "{AgentName} retry answer grounding correlation={CorrelationId} grounded={Grounded} unsupportedClaimsCount={UnsupportedClaimsCount}",
+                Name,
+                context.CorrelationId,
+                retryGrounding.Grounded,
+                retryGrounding.UnsupportedClaimsCount);
+            activity?.SetTag("grounding.retry_grounded", retryGrounding.Grounded);
+            activity?.SetTag("grounding.retry_unsupported_claims_count", retryGrounding.UnsupportedClaimsCount);
+
+            if (string.IsNullOrWhiteSpace(retryContent))
+            {
+                _logger.LogError(
+                    "{AgentName} RAG generation returned empty response after retry correlation={CorrelationId}",
+                    Name,
+                    context.CorrelationId);
+                return ($"{InfrastructureFailureResponse}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
+            }
+
+            return ($"{retryContent}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
         }
 
         _logger.LogInformation(
@@ -238,6 +310,21 @@ public sealed class MealPlanningAgent : IAgent
             retrieval.Sources.Count);
 
         return ($"{content}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
+    }
+
+    private static string? ResolveRequestedLanguage(LanguageContext languageContext)
+    {
+        if (!string.IsNullOrWhiteSpace(languageContext.ExplicitLanguage))
+        {
+            return languageContext.ExplicitLanguage;
+        }
+
+        if (!string.IsNullOrWhiteSpace(languageContext.DetectedLanguage))
+        {
+            return languageContext.DetectedLanguage;
+        }
+
+        return languageContext.NegotiatedLanguages.FirstOrDefault(language => !string.IsNullOrWhiteSpace(language));
     }
 
     private static string FormatSources(IReadOnlyList<SourceAttribution> sources)

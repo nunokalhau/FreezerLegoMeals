@@ -46,7 +46,7 @@ public sealed class AiEvaluationServiceTests
             new DefaultRoutingPolicy(),
             NullLogger<MealPlanningAgent>.Instance,
             retrieval,
-            new PromptBuilder("Context:\n{recipes}\nQuestion:\n{question}"));
+            new PromptBuilder());
 
         var orchestrator = new EvaluationAssistantOrchestrator(
             new AssistantOrchestrator([agent], new DefaultRoutingPolicy(), NullLogger<AssistantOrchestrator>.Instance),

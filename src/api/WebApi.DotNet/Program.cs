@@ -37,6 +37,9 @@ builder.Services.AddScoped<IRecipeIndexingProjectionRepository, RecipeRepository
 builder.Services.AddScoped<IAssistantService, AssistantService>();
 builder.Services.AddAiEvaluationFramework();
 builder.Services.AddSingleton<IRoutingPolicy, DefaultRoutingPolicy>();
+builder.Services.Configure<HybridIntentClassifierOptions>(builder.Configuration.GetSection("Assistant:IntentClassification:Hybrid"));
+builder.Services.AddSingleton<RuleBasedIntentClassifier>();
+builder.Services.AddScoped<IIntentClassifier, HybridIntentClassifier>();
 builder.Services.Configure<ExternalDependencyResilienceOptions>(builder.Configuration.GetSection("Resilience"));
 builder.Services.AddSingleton<IExternalDependencyResiliencePolicyProvider, PollyExternalDependencyResiliencePolicyProvider>();
 builder.Services.AddSingleton<IModelCapabilitiesCache, InMemoryModelCapabilitiesCache>();
@@ -93,8 +96,7 @@ builder.Services.AddHostedService<RecipeStartupIndexingHostedService>();
 builder.Services.AddScoped<IRetrievalService>(serviceProvider => new EvaluationRetrievalService(
     serviceProvider.GetRequiredService<RetrievalService>(),
     serviceProvider.GetRequiredService<IAiEvaluationTraceContext>()));
-builder.Services.AddSingleton<IPromptBuilder>(_ => PromptBuilder.FromFile(
-    Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "ai", "RAG", "prompts", "rag_prompt.txt"))));
+builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
 builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection("Assistant"));
 builder.Services.Configure<AssistantLocalizationDefaultsOptions>(builder.Configuration.GetSection("Localization"));
 builder.Services.Configure<ConversationStoreOptions>(builder.Configuration.GetSection("ConversationStore"));

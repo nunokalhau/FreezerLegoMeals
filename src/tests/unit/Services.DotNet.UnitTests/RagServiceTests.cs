@@ -244,17 +244,72 @@ public class RagServiceTests
     }
 
     [Fact]
-    public void PromptBuilder_RendersRepositoryContext()
+    public void PromptBuilder_RendersRepositoryContext_AndLocalizationRules_ForPortuguese()
     {
-        var builder = new PromptBuilder("Context:\n{recipes}\nQuestion:\n{question}");
+        var builder = new PromptBuilder();
+        var recipe = new RetrievalRecipe("1", "1", "Frango Salsa Verde", "Jantar", "frango, rapido", ["frango", "coentro"], "Assar", "45", 0.91, "per-language-projection");
+
+        var prompt = builder.Build(
+            "Que receitas tens com frango?",
+            [recipe],
+            "RecipeDiscovery",
+            LocalizationOptions.Create("pt", ["en"], strictMode: true),
+            requestedLanguage: "pt");
+
+        Assert.Contains("LOCALIZATION RULES", prompt);
+        Assert.Contains("Requested language: pt", prompt);
+        Assert.Contains("Resolved language: pt", prompt);
+        Assert.Contains("Strict mode: True", prompt);
+        Assert.Contains("Fallback language: en", prompt);
+        Assert.Contains("Never mix languages in the same answer.", prompt);
+        Assert.Contains("Never translate localized recipe names.", prompt);
+        Assert.Contains("Never translate localized ingredient names.", prompt);
+        Assert.Contains("Never invent translations.", prompt);
+        Assert.Contains("If localized information is unavailable for the resolved language, explicitly state that no localized result exists.", prompt);
+        Assert.Contains("Strict mode is enabled: never answer using another language.", prompt);
+        Assert.Contains("Recipe ID: 1", prompt);
+        Assert.Contains("Title: Frango Salsa Verde", prompt);
+        Assert.Contains("Ingredients: frango, coentro", prompt);
+        Assert.Contains("Similarity score: 0.910000", prompt);
+        Assert.Contains("USER QUESTION", prompt);
+        Assert.Contains("Que receitas tens com frango?", prompt);
+    }
+
+    [Fact]
+    public void PromptBuilder_RendersLocalizationRules_ForEnglishWithFallbackMode()
+    {
+        var builder = new PromptBuilder();
+        var recipe = new RetrievalRecipe("1", "1", "Salsa Verde Chicken", "Dinner", "quick", ["chicken", "cilantro"], "Slice", "45", 0.91, "canonical-multilingual-projection");
+
+        var prompt = builder.Build(
+            "What recipes do you have with chicken?",
+            [recipe],
+            "RecipeDiscovery",
+            LocalizationOptions.Create("en", ["es"], strictMode: false),
+            requestedLanguage: "en");
+
+        Assert.Contains("Requested language: en", prompt);
+        Assert.Contains("Resolved language: en", prompt);
+        Assert.Contains("Strict mode: False", prompt);
+        Assert.Contains("Fallback language: es", prompt);
+        Assert.DoesNotContain("Strict mode is enabled: never answer using another language.", prompt);
+    }
+
+    [Theory]
+    [InlineData("RecipeDiscovery", "List every matching recipe found in context. Do not focus on only one recipe.")]
+    [InlineData("RecipeDetails", "Answer only about the requested recipe. Do not expand to other recipes unless explicitly requested.")]
+    [InlineData("IngredientSearch", "Explain which retrieved recipes contain the requested ingredient and cite recipe titles.")]
+    [InlineData("MealPlanning", "Generate a meal plan using only the retrieved recipes.")]
+    [InlineData("GeneralConversation", "Answer normally while still grounded in the provided repository context.")]
+    public void PromptBuilder_RendersIntentSpecificInstructions(string intentType, string expectedInstruction)
+    {
+        var builder = new PromptBuilder();
         var recipe = new RetrievalRecipe("1", "1", "Spicy Chicken", "Dinner", "spicy", ["chicken"], "Slice", "45", 0.91, "canonical-multilingual-projection");
 
-        var prompt = builder.Build("What can I cook?", [recipe]);
+        var prompt = builder.Build("What can I cook?", [recipe], intentType, LocalizationOptions.Create("en"), requestedLanguage: "en");
 
-        Assert.Contains("Recipe ID: 1", prompt);
-        Assert.Contains("Ingredients: chicken", prompt);
-        Assert.Contains("Similarity score: 0.910000", prompt);
-        Assert.Contains("Question:\nWhat can I cook?", prompt);
+        Assert.Contains($"- Type: {intentType}", prompt);
+        Assert.Contains(expectedInstruction, prompt);
     }
 
     private sealed class StubEmbeddingService : IEmbeddingService
