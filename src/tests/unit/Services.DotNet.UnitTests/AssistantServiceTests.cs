@@ -104,7 +104,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "What spicy chicken meal can I cook?", ["intent"] = "RecipeDiscovery" })]))
             .ReturnsAsync(new OllamaChatResult("Use the spicy chicken recipe.", []));
         var retrievalService = new Mock<IRetrievalService>();
         retrievalService.Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
@@ -132,8 +132,6 @@ public class AssistantServiceTests
         var result = await service.ChatAsync("What spicy chicken meal can I cook?");
 
         Assert.Contains("Use the spicy chicken recipe.", result.Response);
-        Assert.Contains("Sources:", result.Response);
-        Assert.Contains("1: Spicy Chicken", result.Response);
         ollamaClient.Verify(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
@@ -143,8 +141,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("direct draft", []))
-            .ReturnsAsync(new OllamaChatResult("This includes salmon and quinoa.", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "What spicy chicken meal can I cook?" })]))
             .ReturnsAsync(new OllamaChatResult("The repository does not contain enough information to answer that question.", []));
         var retrievalService = new Mock<IRetrievalService>();
         retrievalService.Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
@@ -160,14 +157,6 @@ public class AssistantServiceTests
                 It.IsAny<LocalizationOptions>(),
                 It.IsAny<string?>()))
             .Returns("rag prompt");
-        var grounding = new Mock<IAnswerGroundingService>();
-        grounding
-            .SetupSequence(service => service.ValidateAsync(
-                It.IsAny<string>(),
-                It.IsAny<IReadOnlyList<RetrievalRecipe>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AnswerGroundingResult(false, 1))
-            .ReturnsAsync(new AnswerGroundingResult(true, 0));
         var toolExecutor = new Mock<IToolExecutor>();
         toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
         var service = CreateService(
@@ -175,16 +164,12 @@ public class AssistantServiceTests
             new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
             toolExecutor.Object,
             retrievalService: retrievalService.Object,
-            promptBuilder: promptBuilder.Object,
-            answerGroundingService: grounding.Object);
+            promptBuilder: promptBuilder.Object);
 
         var result = await service.ChatAsync("What spicy chicken meal can I cook?");
 
         Assert.Contains("repository does not contain enough information", result.Response, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("salmon", result.Response, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Sources:", result.Response);
-        Assert.Contains("1: Spicy Chicken", result.Response);
-        ollamaClient.Verify(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+        ollamaClient.Verify(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -193,7 +178,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "What spicy chicken meal can I cook?" })]))
             .ReturnsAsync(new OllamaChatResult("Use the spicy chicken recipe.", []));
         var retrievalService = new Mock<IRetrievalService>();
         retrievalService.Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
@@ -209,12 +194,6 @@ public class AssistantServiceTests
                 It.IsAny<LocalizationOptions>(),
                 It.IsAny<string?>()))
             .Returns("rag prompt");
-        var grounding = new Mock<IAnswerGroundingService>();
-        grounding.Setup(service => service.ValidateAsync(
-                "Use the spicy chicken recipe.",
-                It.IsAny<IReadOnlyList<RetrievalRecipe>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AnswerGroundingResult(true, 0));
         var toolExecutor = new Mock<IToolExecutor>();
         toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
         var service = CreateService(
@@ -222,13 +201,11 @@ public class AssistantServiceTests
             new InMemoryConversationStore(Options.Create(new ConversationStoreOptions())),
             toolExecutor.Object,
             retrievalService: retrievalService.Object,
-            promptBuilder: promptBuilder.Object,
-            answerGroundingService: grounding.Object);
+            promptBuilder: promptBuilder.Object);
 
         var result = await service.ChatAsync("What spicy chicken meal can I cook?");
 
         Assert.Contains("Use the spicy chicken recipe.", result.Response);
-        Assert.Contains("Sources:", result.Response);
     }
 
     [Fact]
@@ -237,7 +214,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "What freezer meal uses moon dust?" })]))
             .ReturnsAsync(new OllamaChatResult("The repository does not contain enough information to answer that question.", []));
         var retrievalService = new Mock<IRetrievalService>();
         retrievalService.Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
@@ -254,7 +231,6 @@ public class AssistantServiceTests
         var result = await service.ChatAsync("What freezer meal uses moon dust?");
 
         Assert.Contains("repository does not contain enough information", result.Response);
-        Assert.Contains("Sources: none", result.Response);
     }
 
     [Fact]
@@ -263,7 +239,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "Give me the full recipe you suggested." })]))
             .ReturnsAsync(new OllamaChatResult("Here is the complete recipe.", []));
 
         RetrievalRequestContext? capturedRequest = null;
@@ -315,7 +291,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("rascunho", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "Dá-me a receita que sugeriste." })]))
             .ReturnsAsync(new OllamaChatResult("Aqui tens a receita completa.", []));
 
         RetrievalRequestContext? capturedRequest = null;
@@ -406,7 +382,7 @@ public class AssistantServiceTests
         var ollamaClient = new Mock<IOllamaClient>();
         ollamaClient
             .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("", [new AssistantToolCall("retrieve_repository_context", new Dictionary<string, object?> { ["query"] = "Que receitas tens com frango?", ["intent"] = "RecipeDiscovery" })]))
             .ReturnsAsync(new OllamaChatResult("Use Frango Salsa Verde.", []));
 
         var retrievalService = new Mock<IRetrievalService>();
@@ -600,8 +576,7 @@ public class AssistantServiceTests
             new DefaultRoutingPolicy(),
             NullLogger<MealPlanningAgent>.Instance,
             retrievalService,
-            promptBuilder,
-            answerGroundingService);
+            promptBuilder);
         var orchestrator = new AssistantOrchestrator([agent], new DefaultRoutingPolicy(), NullLogger<AssistantOrchestrator>.Instance);
         return new AssistantService(
             conversationStore,

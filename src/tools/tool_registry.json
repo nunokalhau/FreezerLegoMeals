@@ -19,7 +19,7 @@
     },
     {
       "name": "search_recipes",
-      "description": "Primary recipe discovery tool. Search and filter recipes by ingredients, excluded ingredients, category, tags, cuisine, prep/cook/total time, difficulty, servings, freezer/batch/dietary flags, and optional fuzzy matching.",
+      "description": "Primary recipe discovery tool. Search and filter recipes by ingredients, excluded ingredients, category, tags, cuisine, prep/cook/total time, difficulty, servings, freezer/batch/dietary flags, functional role, and optional fuzzy matching.",
       "keywords": ["find recipes", "recipe search", "ingredient lookup", "meal discovery"],
       "parameters": [
         "ingredients",
@@ -43,7 +43,9 @@
         "low_calorie",
         "sort_by",
         "limit",
-        "fuzzy"
+        "fuzzy",
+        "functional_role",
+        "standalone_only"
       ],
       "examples": [
         "Find freezer-friendly chicken recipes under 45 minutes",
@@ -63,12 +65,12 @@
         "servings": 4
       },
       "expected_json_output": { "total_recipes_found": 1, "recipes": ["recipe cards"], "filters": {} },
-      "output_description": "Filtered recipe discovery cards with id, name, description, category, tags, prepTime, cookTime, servings, and match metadata. Use the selected recipe id with the recipe-detail tool to fetch steps and full recipe details.",
+      "output_description": "Filtered recipe discovery cards with id, name, description, category, functional_role, is_standalone_meal, tags, prepTime, cookTime, servings, and match metadata. Use the selected recipe id with the recipe-detail tool to fetch steps and full recipe details.",
       "aliases": ["ingredient_search", "recipe_search", "ingredient_lookup"]
     },
     {
       "name": "plan_weekly_meals",
-      "description": "Generate a balanced weekly meal plan that respects dietary preferences, excluded ingredients, preparation-time preference, and optional calorie target while avoiding repetition and encouraging freezer-friendly meals.",
+      "description": "Generate a balanced weekly meal plan that respects dietary preferences, excluded ingredients, preparation-time preference, and optional calorie target while avoiding repetition and encouraging freezer-friendly meals. Standalone meals are selected from CompleteMeal/MainCourse (or meal-slot alternatives), while sauces/condiments/sides/bases are only suggested as complements.",
       "keywords": ["meal plan", "weekly plan", "meal schedule", "weekend prep"],
       "parameters": ["number_of_days", "meals_per_day", "dietary_preferences", "excluded_ingredients", "preparation_time_preference", "calorie_target"],
       "examples": ["Create a 5-day vegetarian meal plan", "Plan 7 days with 2 meals per day and no pork"],

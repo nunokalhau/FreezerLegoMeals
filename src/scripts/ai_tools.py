@@ -47,6 +47,28 @@ SECTION_KEYWORDS = {
     "Frozen": ["frozen"],
 }
 
+RECIPE_ROLES = {
+    "CompleteMeal",
+    "MainCourse",
+    "SideDish",
+    "Sauce",
+    "Condiment",
+    "Base",
+    "Snack",
+    "Dessert",
+    "Breakfast",
+}
+
+COMPLEMENTARY_ROLES = {"SideDish", "Sauce", "Condiment", "Base"}
+DEFAULT_PRIMARY_MEAL_ROLES = ["CompleteMeal", "MainCourse"]
+MEAL_TYPE_PRIMARY_ROLES = {
+    "breakfast": ["Breakfast", "CompleteMeal", "MainCourse"],
+    "lunch": ["CompleteMeal", "MainCourse"],
+    "dinner": ["CompleteMeal", "MainCourse"],
+    "snack": ["Snack", "Dessert", "CompleteMeal", "MainCourse"],
+    "prep": ["CompleteMeal", "MainCourse"],
+}
+
 
 def search_recipes(parameters: dict[str, Any]) -> dict[str, Any]:
     recipes = _recipes_with_ingredients()
@@ -87,20 +109,38 @@ def plan_weekly_meals(parameters: dict[str, Any]) -> dict[str, Any]:
         return {"days": [], "message": "No recipes matched the requested planning constraints."}
 
     candidates.sort(key=lambda recipe: (not recipe["freezer_friendly"], recipe["totalTime"] or 999, recipe["name"]))
+    standalone_candidates = [recipe for recipe in candidates if _is_standalone_role(recipe.get("functional_role"))]
+    if not standalone_candidates:
+        return {
+            "days": [],
+            "message": "No standalone meal recipes matched the requested planning constraints.",
+            "available_roles": sorted({str(recipe.get("functional_role") or "") for recipe in candidates if recipe.get("functional_role")}),
+        }
+
+    complements = [recipe for recipe in candidates if _is_complementary_role(recipe.get("functional_role"))]
     plan = []
-    cursor = 0
+    role_cursors = defaultdict(int)
+    complement_cursors = defaultdict(int)
     for day in range(1, days + 1):
         meals = []
         for slot in range(1, meals_per_day + 1):
-            meals.append({"meal_type": _meal_type(slot), "recipe": candidates[cursor % len(candidates)]})
-            cursor += 1
+            meal_type = _meal_type(slot)
+            primary_recipe = _next_recipe_for_meal_type(meal_type, standalone_candidates, role_cursors)
+            meal_entry = {"meal_type": meal_type, "recipe": primary_recipe}
+            selected_complements = _select_complements_for_meal(meal_type, complements, complement_cursors)
+            if selected_complements:
+                meal_entry["complements"] = selected_complements
+            meals.append(meal_entry)
         plan.append({"day": day, "meals": meals})
 
     return {
         "days": plan,
         "calorie_target": parameters.get("calorie_target"),
         "planning_notes": [
-            "Repeated recipes are avoided until the candidate pool is exhausted.",
+            "Standalone meals are selected from CompleteMeal/MainCourse/Breakfast/Snack/Dessert roles as appropriate for each meal slot.",
+            "Sauces, condiments, side dishes, and bases are suggested only as complements.",
+            "CompleteMeal is prioritized first, then MainCourse when CompleteMeal is unavailable.",
+            "Repeated recipes are distributed by role until each role pool is exhausted.",
             "Freezer-friendly meals are prioritized where constraints allow.",
             "Ingredient reuse is encouraged by selecting from the same filtered recipe pool.",
         ],
@@ -115,6 +155,7 @@ def get_recipe(parameters: dict[str, Any]) -> dict[str, Any]:
     return {
         "recipe": _recipe_card(recipe),
         "numeric_id": recipe.get("id"),
+        "functional_role": _infer_recipe_role(recipe),
         "ingredients": recipe.get("ingredients") or [],
         "steps": _steps(recipe),
         "prepping": recipe.get("prepping"),
@@ -126,17 +167,30 @@ def get_recipe(parameters: dict[str, Any]) -> dict[str, Any]:
 
 def replace_meal(parameters: dict[str, Any]) -> dict[str, Any]:
     current = str(parameters.get("current_recipe") or "").lower()
+    meal_type = str(parameters.get("meal_type") or "dinner").strip().lower()
     candidates = search_recipes({
         "excluded_ingredients": parameters.get("excluded_ingredients"),
         "preparation_time": parameters.get("preparation_time_preference"),
         "limit": 25,
         **_diet_flags(parameters.get("dietary_preferences")),
     })["recipes"]
+    allowed_roles = set(MEAL_TYPE_PRIMARY_ROLES.get(meal_type, DEFAULT_PRIMARY_MEAL_ROLES))
     for recipe in candidates:
+        if recipe.get("functional_role") not in allowed_roles:
+            continue
         if current and current in json.dumps(recipe).lower():
             continue
-        return {"meal_type": parameters.get("meal_type"), "replacement": recipe, "rationale": "Preserves restrictions and preparation constraints while avoiding the current recipe."}
-    return {"meal_type": parameters.get("meal_type"), "replacement": None, "message": "No suitable replacement found."}
+        return {
+            "meal_type": parameters.get("meal_type"),
+            "replacement": recipe,
+            "rationale": "Preserves restrictions and preparation constraints while keeping a standalone meal role appropriate for the requested slot.",
+        }
+    return {
+        "meal_type": parameters.get("meal_type"),
+        "replacement": None,
+        "message": "No suitable standalone meal replacement found.",
+        "allowed_roles": sorted(allowed_roles),
+    }
 
 
 def optimize_shopping_list(parameters: dict[str, Any]) -> dict[str, Any]:
@@ -345,6 +399,12 @@ def _matches_recipe(recipe: dict[str, Any], filters: dict[str, Any]) -> bool:
             return False
     if _strings(filters.get("tags")) and not all(_contains(text, tag, fuzzy) for tag in _strings(filters.get("tags"))):
         return False
+    if filters.get("functional_role"):
+        requested_roles = {role for role in (_normalize_role(value) for value in _list(filters.get("functional_role"))) if role}
+        if requested_roles and _infer_recipe_role(recipe) not in requested_roles:
+            return False
+    if filters.get("standalone_only") is not None and _bool(filters.get("standalone_only")) and not _is_standalone_role(_infer_recipe_role(recipe)):
+        return False
     max_time = _int(filters.get("preparation_time") or filters.get("cooking_time") or filters.get("total_time"), 0)
     if max_time and _time(recipe) > max_time:
         return False
@@ -358,11 +418,14 @@ def _matches_recipe(recipe: dict[str, Any], filters: dict[str, Any]) -> bool:
 
 def _recipe_card(recipe: dict[str, Any], relevance: int | None = None) -> dict[str, Any]:
     prep_time = _time(recipe)
+    role = _infer_recipe_role(recipe)
     card = {
         "id": _recipe_identifier(recipe),
         "name": recipe.get("name"),
         "description": recipe.get("notes") or recipe.get("freezing_notes") or "Recipe suggestion.",
         "category": _category(recipe),
+        "functional_role": role,
+        "is_standalone_meal": _is_standalone_role(role),
         "tags": _tags(recipe),
         "prepTime": prep_time,
         "cookTime": 0,
@@ -416,6 +479,124 @@ def _category(recipe: dict[str, Any]) -> str:
         if any(term in text for term in terms):
             return category
     return "Vegetarian" if _flag(recipe, "vegetarian") else "General"
+
+
+def _next_recipe_for_meal_type(
+    meal_type: str,
+    standalone_candidates: list[dict[str, Any]],
+    role_cursors: dict[str, int],
+) -> dict[str, Any]:
+    preferred_roles = MEAL_TYPE_PRIMARY_ROLES.get(meal_type, DEFAULT_PRIMARY_MEAL_ROLES)
+    for role in preferred_roles:
+        recipes_for_role = [recipe for recipe in standalone_candidates if recipe.get("functional_role") == role]
+        if recipes_for_role:
+            cursor = role_cursors[role]
+            selected = recipes_for_role[cursor % len(recipes_for_role)]
+            role_cursors[role] = cursor + 1
+            return selected
+
+    fallback_cursor = role_cursors["_fallback"]
+    selected = standalone_candidates[fallback_cursor % len(standalone_candidates)]
+    role_cursors["_fallback"] = fallback_cursor + 1
+    return selected
+
+
+def _select_complements_for_meal(
+    meal_type: str,
+    complements: list[dict[str, Any]],
+    complement_cursors: dict[str, int],
+) -> list[dict[str, Any]]:
+    if not complements:
+        return []
+
+    desired_roles_by_meal = {
+        "breakfast": ["Base", "Condiment"],
+        "lunch": ["Base", "SideDish", "Sauce", "Condiment"],
+        "dinner": ["Base", "SideDish", "Sauce", "Condiment"],
+        "snack": ["Condiment", "Sauce"],
+        "prep": ["Base", "SideDish", "Sauce", "Condiment"],
+    }
+    desired_roles = desired_roles_by_meal.get(meal_type, ["Base", "SideDish", "Sauce", "Condiment"])
+
+    selected: list[dict[str, Any]] = []
+    for role in desired_roles:
+        recipes_for_role = [recipe for recipe in complements if recipe.get("functional_role") == role]
+        if not recipes_for_role:
+            continue
+        cursor = complement_cursors[role]
+        selected.append(recipes_for_role[cursor % len(recipes_for_role)])
+        complement_cursors[role] = cursor + 1
+        if len(selected) >= 2:
+            break
+
+    return selected
+
+
+def _infer_recipe_role(recipe: dict[str, Any]) -> str:
+    tags = {_normalize_tag(tag) for tag in _strings(recipe.get("tags"))}
+    explicit_tag_role_map = {
+        "complete-meal": "CompleteMeal",
+        "complete_meal": "CompleteMeal",
+        "main-course": "MainCourse",
+        "main_course": "MainCourse",
+        "side-dish": "SideDish",
+        "side_dish": "SideDish",
+        "sauce": "Sauce",
+        "condiment": "Condiment",
+        "base": "Base",
+        "starch": "Base",
+        "snack": "Snack",
+        "dessert": "Dessert",
+        "breakfast": "Breakfast",
+        "pickle": "Condiment",
+    }
+    for tag in tags:
+        role = explicit_tag_role_map.get(tag)
+        if role:
+            return role
+
+    source_path = str(recipe.get("source_path") or "")
+    category = Path(source_path).parent.name.strip().lower() if source_path else ""
+    category_role_map = {
+        "combos": "CompleteMeal",
+        "proteins": "MainCourse",
+        "veggies": "SideDish",
+        "starches": "Base",
+        "sauces": "Sauce",
+        "pickles": "Condiment",
+        "snacks": "Snack",
+        "desserts": "Dessert",
+        "breakfast": "Breakfast",
+    }
+    if category in category_role_map:
+        return category_role_map[category]
+
+    return "MainCourse"
+
+
+def _normalize_role(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    compact = re.sub(r"[^a-zA-Z]", "", text).lower()
+    for role in RECIPE_ROLES:
+        if compact == re.sub(r"[^a-zA-Z]", "", role).lower():
+            return role
+    return None
+
+
+def _is_standalone_role(role: Any) -> bool:
+    normalized = _normalize_role(role)
+    if not normalized:
+        return False
+    return normalized not in COMPLEMENTARY_ROLES
+
+
+def _is_complementary_role(role: Any) -> bool:
+    normalized = _normalize_role(role)
+    if not normalized:
+        return False
+    return normalized in COMPLEMENTARY_ROLES
 
 
 def _tags(recipe: dict[str, Any]) -> list[str]:

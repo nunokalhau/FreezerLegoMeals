@@ -13,6 +13,8 @@ def test_search_recipes_returns_recipe_discovery_cards():
     assert result["total_recipes_found"] == 1
     assert result["recipes"][0]["id"] == "salsa_verde_chicken"
     assert result["recipes"][0]["name"] == "Salsa Verde Chicken"
+    assert result["recipes"][0]["functional_role"] == "MainCourse"
+    assert result["recipes"][0]["is_standalone_meal"] is True
     assert result["recipes"][0]["freezer_friendly"] is True
     assert "high-protein" in result["recipes"][0]["tags"]
 
@@ -21,7 +23,21 @@ def test_plan_weekly_meals_uses_filtered_candidates():
     result = module.plan_weekly_meals({"number_of_days": 2, "meals_per_day": 1, "dietary_preferences": ["high protein"]})
 
     assert len(result["days"]) == 2
-    assert "high-protein" in result["days"][0]["meals"][0]["recipe"]["tags"]
+    first_recipe = result["days"][0]["meals"][0]["recipe"]
+    assert "high-protein" in first_recipe["tags"]
+    assert first_recipe["functional_role"] in {"CompleteMeal", "MainCourse", "Breakfast", "Snack", "Dessert"}
+
+
+def test_plan_weekly_meals_does_not_return_sauces_as_standalone_meals():
+    result = module.plan_weekly_meals({"number_of_days": 1, "meals_per_day": 3})
+
+    meals = result["days"][0]["meals"]
+    standalone_roles = {meal["recipe"]["functional_role"] for meal in meals}
+    assert "Sauce" not in standalone_roles
+    assert "Condiment" not in standalone_roles
+    assert "SideDish" not in standalone_roles
+    assert "Base" not in standalone_roles
+    assert all(meal["recipe"]["is_standalone_meal"] is True for meal in meals)
 
 
 def test_replace_meal_avoids_current_recipe():
@@ -29,6 +45,7 @@ def test_replace_meal_avoids_current_recipe():
 
     assert result["meal_type"] == "dinner"
     assert result["replacement"]["name"] != "Turkey Chili"
+    assert result["replacement"]["functional_role"] in {"CompleteMeal", "MainCourse"}
 
 
 def test_get_recipe_returns_full_details_for_search_card_id():
@@ -36,6 +53,7 @@ def test_get_recipe_returns_full_details_for_search_card_id():
 
     assert result["recipe"]["id"] == "salsa_verde_chicken"
     assert result["numeric_id"] == 2
+    assert result["functional_role"] == "MainCourse"
     assert any(ingredient["name"] == "frango" for ingredient in result["ingredients"])
 
 
