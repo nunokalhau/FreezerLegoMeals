@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $ScriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepositoryRoot = Resolve-Path (Join-Path $ScriptDirectory '..')
 $DataDirectories = @(
-    Join-Path $RepositoryRoot 'data/chromadb'
+    Join-Path $RepositoryRoot 'data/chromadb/data'
     Join-Path $RepositoryRoot 'data/redis'
 )
 

@@ -32,16 +32,15 @@ services:
       - freezer-infra
 
   chromadb:
-    image: chromadb/chroma:latest
+    # Pin Chroma to a known-good version for reproducible local environments.
+    image: chromadb/chroma:1.5.9
     container_name: freezer-chromadb
     restart: unless-stopped
-    environment:
-      IS_PERSISTENT: "TRUE"
-      PERSIST_DIRECTORY: /chroma/chroma
     ports:
       - "${CHROMADB_PORT:-8001}:8000"
     volumes:
-      - ../data/chromadb:/chroma/chroma
+      # Official image config uses persist_path: /data; PERSIST_DIRECTORY is ignored by this entrypoint.
+      - ../data/chromadb/data:/data
     healthcheck:
       test:
         - CMD-SHELL

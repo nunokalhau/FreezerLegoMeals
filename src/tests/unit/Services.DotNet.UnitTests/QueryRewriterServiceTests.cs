@@ -15,11 +15,12 @@ public class QueryRewriterServiceTests
 
         var rewritten = await service.RewriteAsync("What chicken recipes do you have?");
 
-        Assert.Equal("chicken freezer meal prep with rice", rewritten);
+        Assert.Equal("chicken freezer meal prep rice", rewritten);
         Assert.Equal(2, ollamaClient.LastMessages.Count);
         Assert.Equal(ConversationRole.System, ollamaClient.LastMessages[0].Role);
         Assert.Equal(ConversationRole.User, ollamaClient.LastMessages[1].Role);
-        Assert.Equal("What chicken recipes do you have?", ollamaClient.LastMessages[1].Content);
+        Assert.Contains("Original query: What chicken recipes do you have?", ollamaClient.LastMessages[1].Content);
+        Assert.Contains("Normalized query:", ollamaClient.LastMessages[1].Content);
         Assert.Empty(ollamaClient.LastTools);
     }
 
@@ -31,7 +32,7 @@ public class QueryRewriterServiceTests
 
         var rewritten = await service.RewriteAsync("Find meals");
 
-        Assert.Equal(160, rewritten.Length);
+        Assert.Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", rewritten);
     }
 
     [Fact]
@@ -49,6 +50,22 @@ public class QueryRewriterServiceTests
         var result = await retrieval.RetrieveAsync("What chicken recipes do you have?");
 
         Assert.Single(result.Recipes);
+    }
+
+    [Fact]
+    public async Task RewriteAsync_SemanticallyEquivalentRewrites_ConvergeToSameCanonicalQuery()
+    {
+        var ollamaClient = new SequencedStubOllamaClient([
+            "recipes with chicken",
+            "recipes using chicken"
+        ]);
+        var service = new QueryRewriterService(ollamaClient);
+
+        var first = await service.RewriteAsync("receitas com frango");
+        var second = await service.RewriteAsync("meal prep using chicken");
+
+        Assert.Equal("chicken recipe", first);
+        Assert.Equal(first, second);
     }
 
     private sealed class StubOllamaClient : IOllamaClient
@@ -73,6 +90,26 @@ public class QueryRewriterServiceTests
             LastMessages = messages;
             LastTools = tools;
             return Task.FromResult(new OllamaChatResult(_content, []));
+        }
+    }
+
+    private sealed class SequencedStubOllamaClient : IOllamaClient
+    {
+        private readonly Queue<string> _responses;
+
+        public SequencedStubOllamaClient(IReadOnlyList<string> responses)
+        {
+            _responses = new Queue<string>(responses);
+        }
+
+        public Task<OllamaChatResult> ChatAsync(
+            string? model,
+            IReadOnlyList<ConversationMessage> messages,
+            IReadOnlyList<ToolDefinition> tools,
+            CancellationToken cancellationToken = default)
+        {
+            var content = _responses.Count == 0 ? string.Empty : _responses.Dequeue();
+            return Task.FromResult(new OllamaChatResult(content, []));
         }
     }
 

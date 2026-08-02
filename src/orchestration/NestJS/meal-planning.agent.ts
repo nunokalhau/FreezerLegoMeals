@@ -47,7 +47,7 @@ export class MealPlanningAgent implements Agent {
       const assistantResult = await this.ollamaClient.chat(undefined, messages, tools);
       if (assistantResult.toolCalls.length === 0) {
         let content = assistantResult.content;
-        if (this.requiresRepositoryKnowledge(context.userRequest) && this.retrievalService && this.promptBuilder) {
+        if (this.retrievalService && this.promptBuilder) {
           executionSteps.push('Semantic Search', 'Retrieval', 'Prompt Builder', 'RAG');
           const ragResult = await this.answerWithRetrieval(context);
           content = ragResult.response;
@@ -106,14 +106,6 @@ export class MealPlanningAgent implements Agent {
     }
 
     return undefined;
-  }
-
-  private requiresRepositoryKnowledge(message: string): boolean {
-    const normalized = message.toLowerCase();
-    return [
-      'recipe', 'recipes', 'meal', 'meals', 'cook', 'cooking', 'dinner', 'lunch', 'freezer',
-      'ingredient', 'ingredients', 'prep', 'preparation', 'what can i', 'what should i', 'recommend',
-    ].some((term) => normalized.includes(term));
   }
 
   private async answerWithRetrieval(context: OrchestratorContext): Promise<{ response: string; retrievedRecipes: RetrievedRecipeInfo[] }> {

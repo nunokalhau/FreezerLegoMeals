@@ -21,6 +21,7 @@ public class SemanticSearchServiceTests
     [Fact]
     public async Task ChromaVectorStore_RanksTopKAndReusesCollection()
     {
+        var listCalls = 0;
         var createCalls = 0;
         var queryCalls = 0;
         var queryResponses = new Queue<string>(new[]
@@ -45,7 +46,13 @@ public class SemanticSearchServiceTests
 
         var handler = new StubHttpMessageHandler(async request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                listCalls++;
+                return Json(HttpStatusCode.OK, "[]");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 createCalls++;
                 var body = await request.Content!.ReadAsStringAsync();
@@ -90,6 +97,7 @@ public class SemanticSearchServiceTests
 
         Assert.Equal("1", matches.Single().RecipeId);
         Assert.Equal(new[] { "1", "2" }, cachedMatches.Select(match => match.RecipeId));
+        Assert.Equal(1, listCalls);
         Assert.Equal(1, createCalls);
         Assert.Equal(2, queryCalls);
     }
@@ -99,7 +107,12 @@ public class SemanticSearchServiceTests
     {
         var handler = new StubHttpMessageHandler(request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, "[]"));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return Task.FromResult(Json(HttpStatusCode.OK, """
                 {
@@ -155,7 +168,12 @@ public class SemanticSearchServiceTests
     {
         var handler = new StubHttpMessageHandler(request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, "[]"));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return Task.FromResult(Json(HttpStatusCode.OK, """
                 {
@@ -182,7 +200,12 @@ public class SemanticSearchServiceTests
     {
         var handler = new StubHttpMessageHandler(request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Task.FromResult(Json(HttpStatusCode.OK, "[]"));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return Task.FromResult(Json(HttpStatusCode.OK, """
                 {
@@ -229,11 +252,18 @@ public class SemanticSearchServiceTests
     [Fact]
     public async Task ChromaVectorStore_EnsureCollectionExists_IsCached()
     {
+        var listCalls = 0;
         var createCalls = 0;
 
         var handler = new StubHttpMessageHandler(request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                listCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, "[]"));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 createCalls++;
                 return Task.FromResult(Json(HttpStatusCode.OK, """
@@ -257,18 +287,26 @@ public class SemanticSearchServiceTests
         await store.EnsureCollectionExistsAsync();
         await store.EnsureCollectionExistsAsync();
 
+        Assert.Equal(1, listCalls);
         Assert.Equal(1, createCalls);
     }
 
     [Fact]
     public async Task ChromaVectorStore_UpsertAsync_SendsIdsEmbeddingsAndOptionalMetadata()
     {
+        var listCalls = 0;
         var createCalls = 0;
         var upsertCalls = 0;
 
         var handler = new StubHttpMessageHandler(async request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                listCalls++;
+                return Json(HttpStatusCode.OK, "[]");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 createCalls++;
                 return Json(HttpStatusCode.OK, """
@@ -291,6 +329,24 @@ public class SemanticSearchServiceTests
                 return Json(HttpStatusCode.OK, "{}");
             }
 
+                        if (request.RequestUri?.AbsolutePath.EndsWith("/get", StringComparison.OrdinalIgnoreCase) == true)
+                        {
+                                return Json(HttpStatusCode.OK, """
+                                {
+                                    "ids": ["1"]
+                                }
+                                """);
+                        }
+
+                        if (request.RequestUri?.AbsolutePath.EndsWith("/count", StringComparison.OrdinalIgnoreCase) == true)
+                        {
+                                return Json(HttpStatusCode.OK, """
+                                {
+                                    "count": 2
+                                }
+                                """);
+                        }
+
             throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
         });
 
@@ -307,6 +363,7 @@ public class SemanticSearchServiceTests
             new VectorDocument("2", [0f, 1f], "doc-2", new Dictionary<string, object?> { ["source"] = "sql" })
         ]);
 
+        Assert.Equal(1, listCalls);
         Assert.Equal(1, createCalls);
         Assert.Equal(1, upsertCalls);
     }
@@ -318,7 +375,12 @@ public class SemanticSearchServiceTests
 
         var handler = new StubHttpMessageHandler(async request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Json(HttpStatusCode.OK, "[]");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return Json(HttpStatusCode.OK, """
                 {
@@ -352,14 +414,23 @@ public class SemanticSearchServiceTests
     }
 
     [Fact]
-    public async Task ChromaVectorStore_ClearCollectionAsync_DeletesAndRecreatesCollection()
+    public async Task ChromaVectorStore_ClearCollectionAsync_DeletesDocumentsInPlace()
     {
+        var listCalls = 0;
         var createCalls = 0;
-        var deleteByIdCalls = 0;
+        var getCalls = 0;
+        var deleteCalls = 0;
+        var countCalls = 0;
 
         var handler = new StubHttpMessageHandler(request =>
         {
-            if (request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                listCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, "[]"));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/collections", StringComparison.OrdinalIgnoreCase) == true)
             {
                 createCalls++;
                 return Task.FromResult(Json(HttpStatusCode.OK, $$"""
@@ -370,10 +441,36 @@ public class SemanticSearchServiceTests
                 """));
             }
 
-            if (request.Method == HttpMethod.Delete && request.RequestUri?.AbsolutePath.Contains("/collections/by-id/", StringComparison.OrdinalIgnoreCase) == true)
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/get", StringComparison.OrdinalIgnoreCase) == true)
             {
-                deleteByIdCalls++;
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+                getCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, getCalls == 1
+                    ? """
+                    {
+                      "ids": ["recipe-1", "recipe-2"]
+                    }
+                    """
+                    : """
+                    {
+                      "ids": []
+                    }
+                    """));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/delete", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                deleteCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, "{}"));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("/count", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                countCalls++;
+                return Task.FromResult(Json(HttpStatusCode.OK, """
+                {
+                  "count": 0
+                }
+                """));
             }
 
             throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
@@ -389,8 +486,11 @@ public class SemanticSearchServiceTests
         await store.EnsureCollectionExistsAsync();
         await store.ClearCollectionAsync();
 
-        Assert.Equal(2, createCalls);
-        Assert.Equal(1, deleteByIdCalls);
+        Assert.Equal(1, listCalls);
+        Assert.Equal(1, createCalls);
+        Assert.Equal(2, getCalls);
+        Assert.Equal(1, deleteCalls);
+        Assert.Equal(1, countCalls);
     }
 
     [Fact]

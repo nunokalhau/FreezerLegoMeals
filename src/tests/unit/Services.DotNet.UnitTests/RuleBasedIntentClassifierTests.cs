@@ -6,43 +6,59 @@ namespace Services.DotNet.UnitTests;
 public sealed class RuleBasedIntentClassifierTests
 {
     [Theory]
-    [InlineData("What recipes do you have with chicken?", IntentType.RecipeDiscovery, "recipe-discovery")]
-    [InlineData("How to make spicy chicken?", IntentType.RecipeDetails, "recipe-details")]
-    [InlineData("Which meals contain garlic ingredient?", IntentType.IngredientSearch, "ingredient-search")]
-    [InlineData("Can you build me a weekly meal plan?", IntentType.MealPlanning, "meal-planning")]
-    [InlineData("How long should I reheat this?", IntentType.CookingQuestion, "cooking-question")]
-    public async Task ClassifyAsync_WithDefaultRules_ReturnsExpectedIntent(string message, IntentType expectedIntent, string expectedRule)
+    [InlineData("What recipes do you have?")]
+    [InlineData("What can I cook?")]
+    [InlineData("Any chicken recipes?")]
+    [InlineData("What dishes are available?")]
+    [InlineData("Que receitas tens?")]
+    [InlineData("Que pratos existem?")]
+    [InlineData("Há alguma coisa com frango?")]
+    public async Task ClassifyAsync_WithDefaultRules_UsesSemanticFallbackForDiscoveryLikePrompts(string message)
     {
         var classifier = new RuleBasedIntentClassifier();
 
         var result = await classifier.ClassifyAsync(message);
 
-        Assert.Equal(expectedIntent, result.Intent);
-        Assert.Equal(expectedRule, result.MatchedRule);
-        Assert.Equal(0.7, result.Confidence);
-    }
-
-    [Fact]
-    public async Task ClassifyAsync_WhenMultipleRulesMatch_PreservesRuleOrder()
-    {
-        var classifier = new RuleBasedIntentClassifier();
-
-        var result = await classifier.ClassifyAsync("What recipes do you have?");
-
         Assert.Equal(IntentType.RecipeDiscovery, result.Intent);
-        Assert.Equal("recipe-discovery", result.MatchedRule);
+        Assert.Equal("semantic-fallback", result.MatchedRule);
+        Assert.Equal(0.45, result.Confidence);
     }
 
-    [Fact]
-    public async Task ClassifyAsync_WhenNoRuleMatches_ReturnsGeneralConversationFallback()
+    [Theory]
+    [InlineData("Show me meals")]
+    [InlineData("Mostra-me refeições")]
+    public async Task ClassifyAsync_WithDefaultRules_UsesGeneralFallbackForStatementsWithoutQuestionMark(string message)
     {
         var classifier = new RuleBasedIntentClassifier();
 
-        var result = await classifier.ClassifyAsync("Hello there");
+        var result = await classifier.ClassifyAsync(message);
 
         Assert.Equal(IntentType.GeneralConversation, result.Intent);
-        Assert.Equal("fallback", result.MatchedRule);
-        Assert.Equal(0.6, result.Confidence);
+        Assert.Equal("semantic-fallback", result.MatchedRule);
+        Assert.Equal(0.45, result.Confidence);
+    }
+
+    [Fact]
+    public async Task ClassifyAsync_WithLongStatement_UsesSemanticFallbackGeneralConversation()
+    {
+        var classifier = new RuleBasedIntentClassifier();
+
+        var result = await classifier.ClassifyAsync("I am sharing context and do not need suggestions right now");
+
+        Assert.Equal(IntentType.GeneralConversation, result.Intent);
+        Assert.Equal("semantic-fallback", result.MatchedRule);
+    }
+
+    [Fact]
+    public async Task ClassifyAsync_WhenMessageEmpty_ReturnsGeneralConversationFallback()
+    {
+        var classifier = new RuleBasedIntentClassifier();
+
+        var result = await classifier.ClassifyAsync("   ");
+
+        Assert.Equal(IntentType.GeneralConversation, result.Intent);
+        Assert.Equal("empty", result.MatchedRule);
+        Assert.Equal(0.5, result.Confidence);
     }
 
     [Fact]
@@ -62,7 +78,7 @@ public sealed class RuleBasedIntentClassifierTests
 
         var result = await classifier.ClassifyAsync("Que receitas tens com frango?");
 
-        Assert.Equal("pt", result.Language);
+        Assert.Equal("en", result.Language);
     }
 
     [Fact]

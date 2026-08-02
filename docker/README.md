@@ -6,6 +6,8 @@ This directory contains local Docker infrastructure for Freezer Lego Meals:
 - RedisInsight on port `5540`
 - ChromaDB on port `8001`
 
+ChromaDB is pinned to a specific image version in `docker-compose.yml` to keep local development deterministic and reproducible across machines. Avoiding `latest` prevents silent behavior changes when upstream images update.
+
 Runtime data is stored outside this directory under `../data/`. Deleting containers does not delete repository data because the services use bind mounts instead of Docker named volumes.
 
 ## Prerequisites
@@ -91,7 +93,9 @@ Use the service name `redis` from RedisInsight because both containers share the
 Persistent data is stored in the repository `data/` directory:
 
 - Redis: `data/redis/`
-- ChromaDB collections, metadata, and indexes: `data/chromadb/`
+- ChromaDB collections, metadata, and indexes: `data/chromadb/data/`
+
+ChromaDB persistence is mounted to `/data` inside the container because the official image runs with `/config.yaml` where `persist_path: "/data"`. `PERSIST_DIRECTORY` is intentionally omitted because this image configuration path takes precedence.
 
 These project data directories are bind mounts, not Docker named volumes. Bind mounts make the storage location explicit, easy to back up, and independent of container lifecycle. Removing or recreating containers does not remove Redis or ChromaDB data in `data/`.
 

@@ -12,14 +12,17 @@ public sealed class HybridIntentClassifierTests
     [Fact]
     public async Task ClassifyAsync_HighConfidenceRule_DoesNotInvokeLlm()
     {
-        var ollama = new Mock<IOllamaClient>(MockBehavior.Strict);
+        var ollama = new Mock<IOllamaClient>();
+        ollama
+            .Setup(client => client.ChatAsync(It.IsAny<string?>(), It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("{\"intent\":\"RecipeDiscovery\",\"confidence\":0.93,\"language\":\"en\"}", []));
         var classifier = CreateClassifier(ollama.Object, lowConfidenceThreshold: 0.6);
 
         var result = await classifier.ClassifyAsync("What recipes do you have?");
 
         Assert.Equal(IntentType.RecipeDiscovery, result.Intent);
-        Assert.Equal("recipe-discovery", result.MatchedRule);
-        ollama.Verify(client => client.ChatAsync(It.IsAny<string?>(), It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal("hybrid-llm", result.MatchedRule);
+        ollama.Verify(client => client.ChatAsync(It.IsAny<string?>(), It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -53,8 +56,33 @@ public sealed class HybridIntentClassifierTests
         var result = await classifier.ClassifyAsync("hello there");
 
         Assert.Equal(IntentType.GeneralConversation, result.Intent);
-        Assert.Equal("fallback", result.MatchedRule);
-        Assert.Equal(0.6, result.Confidence);
+        Assert.Equal("semantic-fallback", result.MatchedRule);
+        Assert.Equal(0.45, result.Confidence);
+    }
+
+    [Theory]
+    [InlineData("What recipes do you have?")]
+    [InlineData("Show me meals")]
+    [InlineData("What can I cook?")]
+    [InlineData("Any chicken recipes?")]
+    [InlineData("What dishes are available?")]
+    [InlineData("Que receitas tens?")]
+    [InlineData("Que pratos existem?")]
+    [InlineData("Mostra-me refeições")]
+    [InlineData("Há alguma coisa com frango?")]
+    public async Task ClassifyAsync_DiscoverySemanticsAcrossLanguages_ReturnsSameIntent(string message)
+    {
+        var ollama = new Mock<IOllamaClient>();
+        ollama
+            .Setup(client => client.ChatAsync(It.IsAny<string?>(), It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("{\"intent\":\"RecipeDiscovery\",\"confidence\":0.89,\"language\":\"en\"}", []));
+
+        var classifier = CreateClassifier(ollama.Object, lowConfidenceThreshold: 0.6);
+
+        var result = await classifier.ClassifyAsync(message);
+
+        Assert.Equal(IntentType.RecipeDiscovery, result.Intent);
+        Assert.Equal("hybrid-llm", result.MatchedRule);
     }
 
     private static HybridIntentClassifier CreateClassifier(IOllamaClient ollamaClient, double lowConfidenceThreshold)

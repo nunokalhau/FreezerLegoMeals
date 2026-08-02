@@ -30,4 +30,11 @@ public sealed class SearchNormalizationOptions
             ["gonna"] = "going",
             ["veggies"] = "vegetables"
         };
+
+    public IReadOnlySet<string> StopwordSet { get; init; }
+        = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "made", "making", "of", "on", "or", "the", "to", "using", "use", "with",
+            "ao", "aos", "as", "com", "da", "das", "de", "do", "dos", "e", "em", "na", "nas", "no", "nos", "para", "por", "pra", "que", "uma", "um", "usar", "usando", "feito", "feita", "feitos", "feitas"
+        };
 }

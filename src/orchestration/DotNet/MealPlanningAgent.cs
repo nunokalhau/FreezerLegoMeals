@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Domain.DotNet;
 using Microsoft.Extensions.Logging;
 using RAG.DotNet;
@@ -11,6 +11,23 @@ namespace Orchestration.DotNet;
 public sealed class MealPlanningAgent : IAgent
 {
     private static readonly ActivitySource ActivitySource = new("FreezerLegoMeals.AI");
+    private static readonly Regex SourceLineRegex = new(
+        @"^\s*-\s*(?<id>[A-Za-z0-9][\w\-./]*)\s*:\s*(?<title>.+?)\s*$",
+        RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.CultureInvariant);
+    private static readonly string[] ConversationalReferencePhrases =
+    [
+        "it",
+        "that recipe",
+        "the recipe you suggested",
+        "recipe you suggested",
+        "that one",
+        "this meal",
+        "aquela receita",
+        "essa receita",
+        "a receita que sugeriste",
+        "receita que sugeriste",
+        "o prato anterior"
+    ];
     private const string InfrastructureFailureResponse = "The assistant is temporarily unavailable. Please try again.";
     private readonly IOllamaClient _ollamaClient;
     private readonly IToolExecutor _toolExecutor;
@@ -91,6 +108,12 @@ public sealed class MealPlanningAgent : IAgent
 
             var retrievalAvailable = _retrievalService is not null && _promptBuilder is not null;
             var route = _routingPolicy.DetermineAssistantRoute(context, assistantResult, retrievalAvailable);
+            if (route != AssistantRoute.InvokeTools)
+            {
+                route = ShouldUseRetrieval(intent, retrievalAvailable)
+                    ? AssistantRoute.UseRag
+                    : AssistantRoute.DirectAnswer;
+            }
             _logger.LogInformation(
                 "{AgentName} routing decision correlation={CorrelationId} route={Route} hasToolCalls={HasToolCalls} retrievalAvailable={RetrievalAvailable}",
                 Name,
@@ -208,8 +231,12 @@ public sealed class MealPlanningAgent : IAgent
         Activity? activity,
         CancellationToken cancellationToken)
     {
+        var retrievalQuery = ResolveRetrievalQuery(context.UserRequest, context.Messages);
+        activity?.SetTag("retrieval.original_user_query", context.UserRequest);
+        activity?.SetTag("retrieval.effective_query", retrievalQuery);
+
         var retrievalRequest = new RetrievalRequestContext(
-            context.UserRequest,
+            retrievalQuery,
             new RetrievalIntentClassification(
                 intent.Intent.ToString(),
                 intent.Confidence,
@@ -222,7 +249,7 @@ public sealed class MealPlanningAgent : IAgent
         activity?.SetTag("retrieval.profile_family", retrieval.Profile?.ProfileFamily.ToString() ?? string.Empty);
         activity?.SetTag("retrieval.normalization_version", retrieval.NormalizationVersion);
         var retrievedRecipes = retrieval.Sources
-            .Select(source => new RetrievedRecipeInfo(source.RecipeId, source.Title, source.SimilarityScore))
+            .Select(source => new RetrievedRecipeInfo(source.RecipeId, source.Title, source.RetrievalScore))
             .ToList();
 
         var prompt = _promptBuilder!.Build(
@@ -312,6 +339,117 @@ public sealed class MealPlanningAgent : IAgent
         return ($"{content}\n\n{FormatSources(retrieval.Sources)}", retrievedRecipes);
     }
 
+    private string ResolveRetrievalQuery(string userRequest, IReadOnlyList<ConversationMessage> messages)
+    {
+        if (string.IsNullOrWhiteSpace(userRequest))
+        {
+            return userRequest;
+        }
+
+        if (!ContainsConversationalReference(userRequest))
+        {
+            return userRequest;
+        }
+
+        var mentions = ExtractRecentRecipeMentions(messages);
+        if (mentions.Count == 0)
+        {
+            return userRequest;
+        }
+
+        var isPortugueseReference = ContainsPortugueseReference(userRequest);
+        var mentionText = string.Join(
+            "; ",
+            mentions.Select(mention => string.IsNullOrWhiteSpace(mention.RecipeId)
+                ? mention.Title
+                : $"{mention.RecipeId} ({mention.Title})"));
+        var enrichedQuery = isPortugueseReference
+            ? $"{userRequest} Receita referida: {mentionText}"
+            : $"{userRequest} Referenced recipe: {mentionText}";
+
+        _logger.LogInformation(
+            "{AgentName} resolved conversational retrieval reference originalQuery={OriginalQuery} enrichedQuery={EnrichedQuery} referenceCount={ReferenceCount}",
+            Name,
+            userRequest,
+            enrichedQuery,
+            mentions.Count);
+
+        return enrichedQuery;
+    }
+
+    private static bool ContainsConversationalReference(string userRequest)
+    {
+        return ConversationalReferencePhrases.Any(phrase =>
+            userRequest.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ContainsPortugueseReference(string userRequest)
+    {
+        return userRequest.Contains("receita", StringComparison.OrdinalIgnoreCase)
+            || userRequest.Contains("prato", StringComparison.OrdinalIgnoreCase)
+            || userRequest.Contains("sugeriste", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<RecipeMention> ExtractRecentRecipeMentions(IReadOnlyList<ConversationMessage> messages)
+    {
+        var mentions = new List<RecipeMention>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var message = messages[index];
+            if (message.Role != ConversationRole.Assistant || string.IsNullOrWhiteSpace(message.Content))
+            {
+                continue;
+            }
+
+            foreach (Match match in SourceLineRegex.Matches(message.Content))
+            {
+                var recipeId = match.Groups["id"].Value.Trim();
+                var title = match.Groups["title"].Value.Trim();
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    continue;
+                }
+
+                var key = string.IsNullOrWhiteSpace(recipeId)
+                    ? title
+                    : $"{recipeId}:{title}";
+                if (!seen.Add(key))
+                {
+                    continue;
+                }
+
+                mentions.Add(new RecipeMention(recipeId, title));
+            }
+
+            if (mentions.Count > 0)
+            {
+                break;
+            }
+        }
+
+        return mentions;
+    }
+
+    private sealed record RecipeMention(string RecipeId, string Title);
+
+    private static bool ShouldUseRetrieval(IntentClassificationResult intent, bool retrievalAvailable)
+    {
+        if (!retrievalAvailable)
+        {
+            return false;
+        }
+
+        if (intent.Intent != IntentType.GeneralConversation)
+        {
+            return true;
+        }
+
+        // For low-confidence intent results, prefer retrieval-grounded generation.
+        return intent.Confidence < 0.5;
+    }
+
     private static string? ResolveRequestedLanguage(LanguageContext languageContext)
     {
         if (!string.IsNullOrWhiteSpace(languageContext.ExplicitLanguage))
@@ -332,7 +470,7 @@ public sealed class MealPlanningAgent : IAgent
         if (sources.Count == 0)
             return "Sources: none";
 
-        return "Sources:\n" + string.Join("\n", sources.Select(source => $"- {source.RecipeId}: {source.Title} (similarityScore: {source.SimilarityScore.ToString("F6", CultureInfo.InvariantCulture)})"));
+        return "Sources:\n" + string.Join("\n", sources.Select(source => $"- {source.RecipeId}: {source.Title}"));
     }
 
     private OrchestratorResult BuildResult(

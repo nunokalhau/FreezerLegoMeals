@@ -2,7 +2,7 @@ using Services.DotNet;
 
 namespace Orchestration.DotNet;
 
-public sealed record RetrievedRecipeInfo(string RecipeId, string Title, double SimilarityScore);
+public sealed record RetrievedRecipeInfo(string RecipeId, string Title, double RetrievalScore);
 
 public sealed record OrchestratorResult(
     string FinalResponse,

@@ -1,5 +1,4 @@
 using System.Text;
-using System.Globalization;
 using Domain.DotNet;
 
 namespace RAG.DotNet;
@@ -123,8 +122,7 @@ public sealed class PromptBuilder : IPromptBuilder
         $"Tags: {ValueOrDefault(recipe.Tags)}",
         $"Ingredients: {(recipe.Ingredients.Count > 0 ? string.Join(", ", recipe.Ingredients) : "Not specified")}",
         $"Preparation steps: {ValueOrDefault(recipe.PreparationSteps)}",
-        $"Cooking time: {ValueOrDefault(recipe.CookingTime)}",
-        $"Similarity score: {recipe.SimilarityScore.ToString("F6", CultureInfo.InvariantCulture)}"
+        $"Cooking time: {ValueOrDefault(recipe.CookingTime)}"
     });
 
     private static string ValueOrDefault(string? value) => string.IsNullOrWhiteSpace(value) ? "not specified" : value;

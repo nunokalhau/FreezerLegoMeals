@@ -149,16 +149,20 @@ public sealed class RetrievalService : IRetrievalService
             question,
             rewrittenQuestion,
             rewriteStartedAt.Elapsed.TotalMilliseconds);
+        var normalizedRewrittenQuestion = _searchQueryNormalizer.Normalize(rewrittenQuestion);
+        var effectiveRetrievalQuery = BuildEffectiveRetrievalQuery(normalizedQuestion, normalizedRewrittenQuestion, question);
         activity?.SetTag("retrieval.original_query", question);
         activity?.SetTag("retrieval.normalized_query", normalizedQuestion.NormalizedQuery);
         activity?.SetTag("retrieval.rewritten_query", rewrittenQuestion);
+        activity?.SetTag("retrieval.rewritten_normalized_query", normalizedRewrittenQuestion.NormalizedQuery);
+        activity?.SetTag("retrieval.effective_query", effectiveRetrievalQuery);
         activity?.SetTag("retrieval.rewrite_duration_ms", rewriteStartedAt.Elapsed.TotalMilliseconds);
         activity?.SetTag("retrieval.rewrite_applied", !string.Equals(question, rewrittenQuestion, StringComparison.Ordinal));
 
-        var semanticMatches = await _semanticSearchService.SearchAsync(rewrittenQuestion, _topK, cancellationToken);
+        var semanticMatches = await _semanticSearchService.SearchAsync(effectiveRetrievalQuery, _topK, cancellationToken);
         var keywordMatches = _keywordSearchService is null
             ? []
-            : await _keywordSearchService.SearchAsync(question, _topK, cancellationToken);
+            : await _keywordSearchService.SearchAsync(effectiveRetrievalQuery, _topK, cancellationToken);
 
         var semanticRanking = semanticMatches
             .Select(match => new RetrievalRankingEntry(match.RecipeId, match.Score))
@@ -166,6 +170,12 @@ public sealed class RetrievalService : IRetrievalService
         var keywordRanking = keywordMatches
             .Select(match => new RetrievalRankingEntry(match.RecipeId, match.Score))
             .ToList();
+        var semanticScoreByRecipeId = semanticRanking
+            .GroupBy(entry => entry.RecipeId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Max(entry => entry.Score), StringComparer.Ordinal);
+        var keywordScoreByRecipeId = keywordRanking
+            .GroupBy(entry => entry.RecipeId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Max(entry => entry.Score), StringComparer.Ordinal);
         var fusedRanking = _rankingFusionService.FuseAndCollapse(
             selectedProfile,
             semanticRanking,
@@ -182,14 +192,14 @@ public sealed class RetrievalService : IRetrievalService
         activity?.SetTag("retrieval.keyword_ranking", FormatRanking(keywordRanking));
         activity?.SetTag("retrieval.fused_ranking", FormatRanking(fusedRanking));
 
-        var similarityScores = semanticMatches.Select(match => match.Score).ToList();
+        var semanticScores = semanticMatches.Select(match => match.Score).ToList();
         var elapsedMs = startedAt.Elapsed.TotalMilliseconds;
         if (fusedRanking.Count == 0)
         {
             var noContextReason = semanticMatches.Count == 0 && keywordMatches.Count == 0
                 ? "no-semantic-or-keyword-matches"
                 : "below-threshold";
-            LogRetrievalDiagnostics("no-context", noContextReason, similarityScores, 0, elapsedMs, question.Length);
+            LogRetrievalDiagnostics("no-context", noContextReason, semanticScores, 0, elapsedMs, question.Length);
             activity?.SetTag("retrieval.decision", "no-context");
             activity?.SetTag("retrieval.reason", noContextReason);
             activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
@@ -224,7 +234,11 @@ public sealed class RetrievalService : IRetrievalService
                 metadata.ProjectionSchemaVersion,
                 metadata.NormalizationVersion,
                 metadata.ProjectionFingerprint,
-                metadata.LanguageCoverage));
+                metadata.LanguageCoverage,
+                SemanticScore: semanticScoreByRecipeId.TryGetValue(fusedMatch.RecipeId, out var semanticScore) ? semanticScore : null,
+                KeywordScore: keywordScoreByRecipeId.TryGetValue(fusedMatch.RecipeId, out var keywordScore) ? keywordScore : null,
+                RerankerScore: null,
+                FinalRank: 0));
         }
 
         recipes = CollapseCanonicalDuplicates(recipes);
@@ -234,7 +248,7 @@ public sealed class RetrievalService : IRetrievalService
             var noContextReason = localizationOptions.StrictMode
                 ? "localized-projection-missing"
                 : "metadata-missing";
-            LogRetrievalDiagnostics("no-context", noContextReason, similarityScores, 0, startedAt.Elapsed.TotalMilliseconds, question.Length);
+            LogRetrievalDiagnostics("no-context", noContextReason, semanticScores, 0, startedAt.Elapsed.TotalMilliseconds, question.Length);
             activity?.SetTag("retrieval.decision", "no-context");
             activity?.SetTag("retrieval.reason", noContextReason);
             activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
@@ -245,8 +259,10 @@ public sealed class RetrievalService : IRetrievalService
             return new RetrievalResult(question, [], [], selectedProfile, normalizedQuestion.NormalizationVersion);
         }
 
+        recipes = AssignFinalRanks(recipes);
+
         var originalRanking = recipes
-            .Select(recipe => new RetrievalRankingEntry(recipe.RecipeId, recipe.SimilarityScore))
+            .Select(recipe => new RetrievalRankingEntry(recipe.RecipeId, recipe.FusionScore))
             .ToList();
         IReadOnlyList<RetrievalRecipe> rerankedRecipes = recipes;
         var rerankStartedAt = Stopwatch.StartNew();
@@ -268,11 +284,14 @@ public sealed class RetrievalService : IRetrievalService
             rerankStartedAt.Stop();
         }
 
+        rerankedRecipes = AssignFinalRanks(rerankedRecipes);
+
         var rerankedRanking = rerankedRecipes
-            .Select(recipe => new RetrievalRankingEntry(recipe.RecipeId, recipe.SimilarityScore))
+            .Select(recipe => new RetrievalRankingEntry(recipe.RecipeId, recipe.FusionScore))
             .ToList();
         LogRankingDiagnostics("original", originalRanking);
         LogRankingDiagnostics("reranked", rerankedRanking);
+        LogCandidateScoreDiagnostics(rerankedRecipes, selectedProfile.ProfileId);
         activity?.SetTag("retrieval.original_ranking", FormatRanking(originalRanking));
         activity?.SetTag("retrieval.reranked_ranking", FormatRanking(rerankedRanking));
         activity?.SetTag("retrieval.rerank_duration_ms", rerankStartedAt.Elapsed.TotalMilliseconds);
@@ -281,7 +300,7 @@ public sealed class RetrievalService : IRetrievalService
         var reason = rerankedRecipes.Count == 0 ? "below-threshold" : "threshold-passed";
         elapsedMs = startedAt.Elapsed.TotalMilliseconds;
 
-        LogRetrievalDiagnostics(decision, reason, similarityScores, rerankedRecipes.Count, elapsedMs, question.Length);
+        LogRetrievalDiagnostics(decision, reason, semanticScores, rerankedRecipes.Count, elapsedMs, question.Length);
         activity?.SetTag("retrieval.decision", decision);
         activity?.SetTag("retrieval.reason", reason);
         activity?.SetTag("retrieval.semantic_match_count", semanticMatches.Count);
@@ -296,7 +315,7 @@ public sealed class RetrievalService : IRetrievalService
             rerankedRecipes.Select(recipe => new SourceAttribution(
                 recipe.RecipeId,
                 recipe.Title,
-                recipe.SimilarityScore,
+                recipe.FusionScore,
                 recipe.CanonicalRecipeId,
                 recipe.RetrievalProfileId)).ToList(),
             selectedProfile,
@@ -321,11 +340,27 @@ public sealed class RetrievalService : IRetrievalService
         return recipes
             .GroupBy(recipe => string.IsNullOrWhiteSpace(recipe.CanonicalRecipeId) ? recipe.RecipeId : recipe.CanonicalRecipeId, StringComparer.Ordinal)
             .Select(group => group
-                .OrderByDescending(candidate => candidate.SimilarityScore)
+                .OrderByDescending(candidate => candidate.FusionScore)
                 .First())
-            .OrderByDescending(recipe => recipe.SimilarityScore)
+            .OrderByDescending(recipe => recipe.FusionScore)
             .ThenBy(recipe => recipe.CanonicalRecipeId, StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static List<RetrievalRecipe> AssignFinalRanks(IReadOnlyList<RetrievalRecipe> recipes)
+    {
+        if (recipes.Count == 0)
+        {
+            return [];
+        }
+
+        var ranked = new List<RetrievalRecipe>(recipes.Count);
+        for (var index = 0; index < recipes.Count; index++)
+        {
+            ranked.Add(recipes[index] with { FinalRank = index + 1 });
+        }
+
+        return ranked;
     }
 
     private static IReadOnlyList<RetrievalRecipe> NormalizeRerankedCandidates(
@@ -388,26 +423,75 @@ public sealed class RetrievalService : IRetrievalService
             $"r{index + 1}:{entry.RecipeId}:{entry.Score.ToString("F6", CultureInfo.InvariantCulture)}"));
     }
 
+    private static string BuildEffectiveRetrievalQuery(
+        SearchNormalizationResult normalizedOriginal,
+        SearchNormalizationResult normalizedRewritten,
+        string fallbackQuery)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedRewritten.NormalizedQuery)
+            || string.Equals(normalizedOriginal.NormalizedQuery, normalizedRewritten.NormalizedQuery, StringComparison.Ordinal))
+        {
+            return string.IsNullOrWhiteSpace(normalizedOriginal.NormalizedQuery)
+                ? fallbackQuery
+                : normalizedOriginal.NormalizedQuery;
+        }
+
+        var preferred = normalizedRewritten.ExpandedTokens.Count > 0
+            ? normalizedRewritten.ExpandedTokens
+            : normalizedRewritten.NormalizedTokens;
+        var orderedTokens = preferred
+            .Where(token => !string.IsNullOrWhiteSpace(token))
+            .Select(token => token.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(token => token, StringComparer.Ordinal)
+            .ToArray();
+
+        if (orderedTokens.Length == 0)
+        {
+            return string.IsNullOrWhiteSpace(normalizedOriginal.NormalizedQuery)
+                ? fallbackQuery
+                : normalizedOriginal.NormalizedQuery;
+        }
+
+        return string.Join(' ', orderedTokens);
+    }
+
+    private void LogCandidateScoreDiagnostics(IReadOnlyList<RetrievalRecipe> recipes, string retrievalProfileId)
+    {
+        foreach (var recipe in recipes)
+        {
+            _logger.LogInformation(
+                "Retrieval candidate recipeId={RecipeId} recipeTitle={RecipeTitle} semanticScore={SemanticScore} keywordScore={KeywordScore} fusionScore={FusionScore} finalRank={FinalRank} retrievalProfile={RetrievalProfile}",
+                recipe.RecipeId,
+                recipe.Title,
+                recipe.SemanticScore,
+                recipe.KeywordScore,
+                recipe.FusionScore,
+                recipe.FinalRank,
+                retrievalProfileId);
+        }
+    }
+
     private void LogRetrievalDiagnostics(
         string decision,
         string reason,
-        IReadOnlyList<double> similarityScores,
+        IReadOnlyList<double> semanticScores,
         int acceptedCount,
         double elapsedMs,
         int questionLength)
     {
-        var formattedScores = similarityScores.Count == 0
+        var formattedScores = semanticScores.Count == 0
             ? "none"
-            : string.Join(",", similarityScores.Select(score => score.ToString("F6", CultureInfo.InvariantCulture)));
+            : string.Join(",", semanticScores.Select(score => score.ToString("F6", CultureInfo.InvariantCulture)));
 
         _logger.LogInformation(
-            "Retrieval diagnostics decision={Decision} reason={Reason} questionLength={QuestionLength} topK={TopK} minimumSimilarity={MinimumSimilarity} semanticMatchCount={SemanticMatchCount} acceptedCount={AcceptedCount} similarityScores={SimilarityScores} retrievalLatencyMs={RetrievalLatencyMs}",
+            "Retrieval diagnostics decision={Decision} reason={Reason} questionLength={QuestionLength} topK={TopK} minimumSimilarity={MinimumSimilarity} semanticMatchCount={SemanticMatchCount} acceptedCount={AcceptedCount} semanticScores={SemanticScores} retrievalLatencyMs={RetrievalLatencyMs}",
             decision,
             reason,
             questionLength,
             _topK,
             _minimumSimilarity,
-            similarityScores.Count,
+            semanticScores.Count,
             acceptedCount,
             formattedScores,
             elapsedMs);

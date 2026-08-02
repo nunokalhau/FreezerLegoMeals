@@ -28,7 +28,7 @@ public class RagServiceTests
         Assert.Equal("45", recipe.CookingTime);
         Assert.Equal("canonical-multilingual-projection", recipe.RetrievalProfileId);
         Assert.Equal("canonical-multilingual-projection", result.Profile?.ProfileId);
-        Assert.Equal(1.0 / 61.0, Assert.Single(result.Sources).SimilarityScore, 6);
+        Assert.Equal(1.0 / 61.0, Assert.Single(result.Sources).RetrievalScore, 6);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class RagServiceTests
 
         await service.RetrieveAsync("What chicken recipes do you have?");
 
-        Assert.Equal("what chicken recipe do you have", embeddingService.LastText);
+        Assert.Equal("what chicken recipe you have", embeddingService.LastText);
     }
 
     [Fact]
@@ -94,8 +94,42 @@ public class RagServiceTests
         Assert.Equal(3, result.Recipes.Count);
         Assert.Equal(new[] { "1", "2", "3" }, result.Recipes.Select(recipe => recipe.RecipeId).ToArray());
         Assert.Equal(RetrievalProfileFamily.CanonicalMultilingualProjection, result.Profile?.ProfileFamily);
-        Assert.True(result.Recipes[0].SimilarityScore > result.Recipes[1].SimilarityScore);
-        Assert.True(result.Recipes[1].SimilarityScore > result.Recipes[2].SimilarityScore);
+        Assert.True(result.Recipes[0].FusionScore > result.Recipes[1].FusionScore);
+        Assert.True(result.Recipes[1].FusionScore > result.Recipes[2].FusionScore);
+    }
+
+    [Fact]
+    public async Task RetrievalService_PropagatesSemanticKeywordAndFusionScores()
+    {
+        var service = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new MultiMatchVectorStore([
+                new VectorMatch("1", 0.95),
+                new VectorMatch("3", 0.70)
+            ]), new MultiMetadataProvider()),
+            new MultiMetadataProvider(),
+            keywordSearchService: new StubKeywordSearchService([
+                new KeywordSearchResult("2", 4),
+                new KeywordSearchResult("1", 3)
+            ]),
+            topK: 3,
+            minimumSimilarity: 0.2);
+
+        var result = await service.RetrieveAsync("chicken dinner ideas");
+
+        var byRecipeId = result.Recipes.ToDictionary(recipe => recipe.RecipeId, StringComparer.Ordinal);
+        Assert.Equal(0.95, byRecipeId["1"].SemanticScore);
+        Assert.Equal(3, byRecipeId["1"].KeywordScore);
+        Assert.Equal((1d / 61d) + (1d / 62d), byRecipeId["1"].FusionScore, 6);
+
+        Assert.Null(byRecipeId["2"].SemanticScore);
+        Assert.Equal(4, byRecipeId["2"].KeywordScore);
+        Assert.Equal(1d / 61d, byRecipeId["2"].FusionScore, 6);
+
+        Assert.Equal(0.70, byRecipeId["3"].SemanticScore);
+        Assert.Null(byRecipeId["3"].KeywordScore);
+        Assert.Equal(1d / 62d, byRecipeId["3"].FusionScore, 6);
+
+        Assert.Equal(new[] { 1, 2, 3 }, result.Recipes.Select(recipe => recipe.FinalRank).ToArray());
     }
 
     [Fact]
@@ -198,6 +232,18 @@ public class RagServiceTests
     public async Task RetrievalService_Reranking_ReordersCandidatesAndPreservesMetadata()
     {
         var reranker = new StubReranker(["2", "1", "3"]);
+        var baselineService = new RetrievalService(
+            new SemanticSearchService(new StubEmbeddingService(), new MultiMatchVectorStore([
+                new VectorMatch("1", 0.95),
+                new VectorMatch("3", 0.70)
+            ]), new MultiMetadataProvider()),
+            new MultiMetadataProvider(),
+            keywordSearchService: new StubKeywordSearchService([
+                new KeywordSearchResult("2", 4),
+                new KeywordSearchResult("1", 3)
+            ]),
+            topK: 3,
+            minimumSimilarity: 0.2);
         var service = new RetrievalService(
             new SemanticSearchService(new StubEmbeddingService(), new MultiMatchVectorStore([
                 new VectorMatch("1", 0.95),
@@ -212,11 +258,17 @@ public class RagServiceTests
             topK: 3,
             minimumSimilarity: 0.2);
 
+        var baseline = await baselineService.RetrieveAsync("chicken dinner ideas");
         var result = await service.RetrieveAsync("chicken dinner ideas");
+        var baselineScores = baseline.Recipes.ToDictionary(recipe => recipe.RecipeId, recipe => recipe.FusionScore, StringComparer.Ordinal);
 
         Assert.Equal("chicken dinner ideas", reranker.LastQuery);
         Assert.Equal(new[] { "1", "2", "3" }, reranker.LastCandidateIds);
         Assert.Equal(new[] { "2", "1", "3" }, result.Recipes.Select(recipe => recipe.RecipeId).ToArray());
+        Assert.Equal(new[] { 1, 2, 3 }, result.Recipes.Select(recipe => recipe.FinalRank).ToArray());
+        Assert.Equal(baselineScores["1"], result.Recipes.Single(recipe => recipe.RecipeId == "1").FusionScore, 6);
+        Assert.Equal(baselineScores["2"], result.Recipes.Single(recipe => recipe.RecipeId == "2").FusionScore, 6);
+        Assert.Equal(baselineScores["3"], result.Recipes.Single(recipe => recipe.RecipeId == "3").FusionScore, 6);
         Assert.Equal("Beef Stir Fry", result.Recipes[0].Title);
         Assert.Equal("Beef dinner", result.Recipes[0].Description);
     }
@@ -270,7 +322,6 @@ public class RagServiceTests
         Assert.Contains("Recipe ID: 1", prompt);
         Assert.Contains("Title: Frango Salsa Verde", prompt);
         Assert.Contains("Ingredients: frango, coentro", prompt);
-        Assert.Contains("Similarity score: 0.910000", prompt);
         Assert.Contains("USER QUESTION", prompt);
         Assert.Contains("Que receitas tens com frango?", prompt);
     }

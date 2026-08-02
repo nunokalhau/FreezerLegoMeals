@@ -68,6 +68,8 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
         var embeddingDimensions = 0;
         var failedRecipes = 0;
         var skippedRecipes = 0;
+        var insertedRecipes = 0;
+        var updatedRecipes = 0;
 
         for (var i = 0; i < projections.Count; i++)
         {
@@ -106,6 +108,15 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
                     continue;
                 }
 
+                if (existingMetadata is null)
+                {
+                    insertedRecipes++;
+                }
+                else
+                {
+                    updatedRecipes++;
+                }
+
                 var metadata = BuildMetadata(recipe, projectionDocument, fingerprint);
 
                 var embedding = await _embeddingService.GenerateEmbeddingAsync(projectionDocument.Document, cancellationToken);
@@ -138,10 +149,12 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
             if ((i + 1) % 25 == 0 || i == projections.Count - 1)
             {
                 _logger.LogInformation(
-                    "Recipe indexing progress processed={ProcessedCount} total={TotalCount} changed={ChangedCount} skipped={SkippedCount}",
+                    "Recipe indexing progress processed={ProcessedCount} total={TotalCount} changed={ChangedCount} inserted={InsertedCount} updated={UpdatedCount} skipped={SkippedCount}",
                     i + 1,
                     projections.Count,
                     documents.Count,
+                    insertedRecipes,
+                    updatedRecipes,
                     skippedRecipes);
             }
         }
@@ -154,8 +167,10 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
 
         startedAt.Stop();
         _logger.LogInformation(
-            "Recipe indexing completed indexed={IndexedCount} skipped={SkippedCount} failed={FailedCount} total={TotalCount} model={EmbeddingModel} dimensions={Dimensions} durationMs={DurationMs}",
+            "Recipe indexing completed indexed={IndexedCount} inserted={InsertedCount} updated={UpdatedCount} skipped={SkippedCount} failed={FailedCount} total={TotalCount} model={EmbeddingModel} dimensions={Dimensions} durationMs={DurationMs}",
             documents.Count,
+            insertedRecipes,
+            updatedRecipes,
             skippedRecipes,
             failedRecipes,
             projections.Count,
@@ -164,6 +179,9 @@ public sealed class RecipeIndexingService : IRecipeIndexingService
             startedAt.Elapsed.TotalMilliseconds);
 
         activity?.SetTag("indexing.indexed_recipes", documents.Count);
+        activity?.SetTag("indexing.inserted_recipes", insertedRecipes);
+        activity?.SetTag("indexing.updated_recipes", updatedRecipes);
+        activity?.SetTag("indexing.skipped_recipes", skippedRecipes);
         activity?.SetTag("indexing.failed_recipes", failedRecipes);
         activity?.SetTag("indexing.embedding_model", embeddingModel);
         activity?.SetTag("indexing.embedding_dimensions", embeddingDimensions);

@@ -50,7 +50,7 @@ class MealPlanningAgent(Agent):
             assistant_result = self.ollama_client.chat(None, messages, tools)
             if not assistant_result.tool_calls:
                 content = assistant_result.content
-                if self._requires_repository_knowledge(context.user_request) and self.retrieval_service is not None and self.prompt_builder is not None:
+                if self.retrieval_service is not None and self.prompt_builder is not None:
                     steps.extend(["Semantic Search", "Retrieval", "Prompt Builder", "RAG"])
                     rag_response, rag_recipes = self._answer_with_retrieval(context)
                     content = rag_response
@@ -106,14 +106,6 @@ class MealPlanningAgent(Agent):
             return f"The request could not be completed because it exceeded the maximum execution time of {options.maximum_execution_time_seconds} seconds."
 
         return None
-
-    def _requires_repository_knowledge(self, message: str) -> bool:
-        normalized = message.lower()
-        knowledge_terms = [
-            "recipe", "recipes", "meal", "meals", "cook", "cooking", "dinner", "lunch", "freezer",
-            "ingredient", "ingredients", "prep", "preparation", "what can i", "what should i", "recommend",
-        ]
-        return any(term in normalized for term in knowledge_terms)
 
     def _answer_with_retrieval(self, context):
         retrieval = self.retrieval_service.retrieve(context.user_request)

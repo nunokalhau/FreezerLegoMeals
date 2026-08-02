@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Linq;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -38,7 +39,14 @@ public sealed class ChromaVectorStore : IVectorStore
 
     public async Task EnsureCollectionExistsAsync(CancellationToken cancellationToken = default)
     {
-        _ = await EnsureCollectionIdAsync(cancellationToken);
+        var collectionId = await EnsureCollectionIdAsync(cancellationToken);
+        _logger.LogInformation(
+            "Vector collection selected backend={Backend} collection={CollectionName} collectionId={CollectionId} tenant={Tenant} database={Database}",
+            "chroma",
+            _options.CollectionName,
+            collectionId,
+            _options.Tenant,
+            _options.Database);
     }
 
     public async Task UpsertAsync(IReadOnlyList<VectorDocument> documents, CancellationToken cancellationToken = default)
@@ -71,6 +79,10 @@ public sealed class ChromaVectorStore : IVectorStore
         var embeddings = documents.Select(document => document.Embedding).ToList();
         var payload = BuildUpsertPayload(ids, embeddings, documents);
 
+        var existingIds = await GetExistingDocumentIdsAsync(collectionId, ids, cancellationToken);
+        var updatedCount = ids.Count(id => existingIds.Contains(id));
+        var insertedCount = ids.Count - updatedCount;
+
         using var response = await _httpClient.PostAsJsonAsync(
             BuildCollectionUpsertPath(collectionId),
             payload,
@@ -78,15 +90,26 @@ public sealed class ChromaVectorStore : IVectorStore
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
+        var totalVectors = await TryGetVectorCountAsync(collectionId, cancellationToken);
+
         startedAt.Stop();
         _logger.LogInformation(
-            "Vector upsert completed backend={Backend} collection={CollectionName} collectionId={CollectionId} documentCount={DocumentCount} latencyMs={LatencyMs}",
+            "Vector upsert completed backend={Backend} collection={CollectionName} collectionId={CollectionId} documentsInserted={DocumentsInserted} documentsUpdated={DocumentsUpdated} documentsSkipped={DocumentsSkipped} totalVectors={TotalVectors} latencyMs={LatencyMs}",
             "chroma",
             _options.CollectionName,
             collectionId,
-            documents.Count,
+            insertedCount,
+            updatedCount,
+            0,
+            totalVectors,
             startedAt.Elapsed.TotalMilliseconds);
         activity?.SetTag("vector_store.collection_id", collectionId);
+        activity?.SetTag("vector_store.documents_inserted", insertedCount);
+        activity?.SetTag("vector_store.documents_updated", updatedCount);
+        if (totalVectors.HasValue)
+        {
+            activity?.SetTag("vector_store.total_vectors", totalVectors.Value);
+        }
         activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
     }
 
@@ -141,29 +164,23 @@ public sealed class ChromaVectorStore : IVectorStore
 
         var startedAt = Stopwatch.StartNew();
         var collectionId = await EnsureCollectionIdAsync(cancellationToken);
-        await DeleteCollectionByIdAsync(collectionId, cancellationToken);
-
-        await _collectionLock.WaitAsync(cancellationToken);
-        try
-        {
-            _collectionId = null;
-        }
-        finally
-        {
-            _collectionLock.Release();
-        }
-
-        var recreatedCollectionId = await EnsureCollectionIdAsync(cancellationToken);
+        var deletedCount = await ClearCollectionDocumentsAsync(collectionId, cancellationToken);
+        var totalVectors = await TryGetVectorCountAsync(collectionId, cancellationToken);
         startedAt.Stop();
         _logger.LogInformation(
-            "Vector collection cleared backend={Backend} collection={CollectionName} oldCollectionId={OldCollectionId} newCollectionId={NewCollectionId} latencyMs={LatencyMs}",
+            "Vector collection cleared backend={Backend} collection={CollectionName} collectionId={CollectionId} documentsDeleted={DocumentsDeleted} totalVectors={TotalVectors} latencyMs={LatencyMs}",
             "chroma",
             _options.CollectionName,
             collectionId,
-            recreatedCollectionId,
+            deletedCount,
+            totalVectors,
             startedAt.Elapsed.TotalMilliseconds);
-        activity?.SetTag("vector_store.old_collection_id", collectionId);
-        activity?.SetTag("vector_store.collection_id", recreatedCollectionId);
+        activity?.SetTag("vector_store.collection_id", collectionId);
+        activity?.SetTag("vector_store.deleted_count", deletedCount);
+        if (totalVectors.HasValue)
+        {
+            activity?.SetTag("vector_store.total_vectors", totalVectors.Value);
+        }
         activity?.SetTag("vector_store.latency_ms", startedAt.Elapsed.TotalMilliseconds);
     }
 
@@ -299,6 +316,20 @@ public sealed class ChromaVectorStore : IVectorStore
                 return _collectionId;
             }
 
+            var existingCollectionId = await TryGetCollectionIdByNameAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(existingCollectionId))
+            {
+                _collectionId = existingCollectionId;
+                _logger.LogInformation(
+                    "Chroma collection resolved collectionName={CollectionName} collectionId={CollectionId} tenant={Tenant} database={Database} existed={Existed}",
+                    _options.CollectionName,
+                    _collectionId,
+                    _options.Tenant,
+                    _options.Database,
+                    true);
+                return _collectionId;
+            }
+
             var payload = new CreateCollectionPayload(_options.CollectionName, true);
             using var response = await _httpClient.PostAsJsonAsync(BuildCollectionsPath(), payload, JsonOptions, cancellationToken);
             response.EnsureSuccessStatusCode();
@@ -309,17 +340,60 @@ public sealed class ChromaVectorStore : IVectorStore
 
             _collectionId = collection.Id;
             _logger.LogInformation(
-                "Chroma collection resolved collectionName={CollectionName} collectionId={CollectionId} tenant={Tenant} database={Database}",
+                "Chroma collection resolved collectionName={CollectionName} collectionId={CollectionId} tenant={Tenant} database={Database} existed={Existed}",
                 _options.CollectionName,
                 _collectionId,
                 _options.Tenant,
-                _options.Database);
+                _options.Database,
+                false);
             return _collectionId;
         }
         finally
         {
             _collectionLock.Release();
         }
+    }
+
+    private async Task<string?> TryGetCollectionIdByNameAsync(CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(BuildCollectionsPath(), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                if (!item.TryGetProperty("name", out var nameProperty)
+                    || !item.TryGetProperty("id", out var idProperty))
+                {
+                    continue;
+                }
+
+                var name = nameProperty.GetString();
+                if (string.Equals(name, _options.CollectionName, StringComparison.Ordinal))
+                {
+                    return idProperty.GetString();
+                }
+            }
+
+            return null;
+        }
+
+        if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("name", out var singleNameProperty)
+            && document.RootElement.TryGetProperty("id", out var singleIdProperty)
+            && string.Equals(singleNameProperty.GetString(), _options.CollectionName, StringComparison.Ordinal))
+        {
+            return singleIdProperty.GetString();
+        }
+
+        return null;
     }
 
     private string BuildCollectionsPath()
@@ -347,26 +421,15 @@ public sealed class ChromaVectorStore : IVectorStore
         return $"{BuildCollectionsPath()}/{Escape(collectionId)}/get";
     }
 
-    private string BuildCollectionDeleteByIdPath(string collectionId)
+    private string BuildCollectionCountPath(string collectionId)
     {
-        return $"api/v2/tenants/{Escape(_options.Tenant)}/databases/{Escape(_options.Database)}/collections/by-id/{Escape(collectionId)}";
+        return $"{BuildCollectionsPath()}/{Escape(collectionId)}/count";
     }
 
-    private async Task DeleteCollectionByIdAsync(string collectionId, CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Delete, BuildCollectionDeleteByIdPath(collectionId));
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        if (response.IsSuccessStatusCode)
-            return;
-
-        // Some Chroma deployments reject collection deletion endpoints.
-        // In that case, clear the collection by deleting all document ids.
-        await ClearCollectionDocumentsAsync(collectionId, cancellationToken);
-    }
-
-    private async Task ClearCollectionDocumentsAsync(string collectionId, CancellationToken cancellationToken)
+    private async Task<int> ClearCollectionDocumentsAsync(string collectionId, CancellationToken cancellationToken)
     {
         const int pageSize = 512;
+        var deletedCount = 0;
         while (true)
         {
             using var getResponse = await _httpClient.PostAsJsonAsync(
@@ -381,12 +444,71 @@ public sealed class ChromaVectorStore : IVectorStore
             if (ids.Count == 0)
                 break;
 
+            deletedCount += ids.Count;
+
             using var deleteResponse = await _httpClient.PostAsJsonAsync(
                 BuildCollectionDeletePath(collectionId),
                 new DeleteRequestPayload(ids),
                 JsonOptions,
                 cancellationToken);
             deleteResponse.EnsureSuccessStatusCode();
+        }
+
+        return deletedCount;
+    }
+
+    private async Task<HashSet<string>> GetExistingDocumentIdsAsync(
+        string collectionId,
+        IReadOnlyList<string> ids,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(
+                BuildCollectionGetPath(collectionId),
+                new ExistingIdsGetRequestPayload(ids, ["metadatas"]),
+                JsonOptions,
+                cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<GetResponse>(JsonOptions, cancellationToken);
+            return (payload?.Ids ?? [])
+                .ToHashSet(StringComparer.Ordinal);
+        }
+        catch
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+    }
+
+    private async Task<int?> TryGetVectorCountAsync(string collectionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(
+                BuildCollectionCountPath(collectionId),
+                new CountRequestPayload(),
+                JsonOptions,
+                cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<CountResponse>(JsonOptions, cancellationToken);
+            return payload?.Count;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -457,13 +579,22 @@ public sealed class ChromaVectorStore : IVectorStore
     private sealed record DeleteRequestPayload(
         [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids);
 
+    private sealed record ExistingIdsGetRequestPayload(
+        [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids,
+        [property: JsonPropertyName("include")] IReadOnlyList<string> Include);
+
     private sealed record GetRequestPayload(
         [property: JsonPropertyName("limit")] int Limit,
         [property: JsonPropertyName("offset")] int Offset,
         [property: JsonPropertyName("include")] IReadOnlyList<string> Include);
 
+    private sealed record CountRequestPayload();
+
     private sealed record GetResponse(
         [property: JsonPropertyName("ids")] IReadOnlyList<string> Ids);
+
+    private sealed record CountResponse(
+        [property: JsonPropertyName("count")] int Count);
 
     private sealed record QueryResponse(
         IReadOnlyList<IReadOnlyList<string>> Ids,

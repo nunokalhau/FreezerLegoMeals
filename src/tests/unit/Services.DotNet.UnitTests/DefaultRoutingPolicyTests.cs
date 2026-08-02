@@ -32,7 +32,7 @@ public class DefaultRoutingPolicyTests
     }
 
     [Fact]
-    public void DetermineAssistantRoute_WhenKnowledgeQuestionAndRetrievalAvailable_ReturnsUseRag()
+    public void DetermineAssistantRoute_WhenNoToolCalls_ReturnsDirectAnswer()
     {
         var policy = new DefaultRoutingPolicy();
         var context = CreateContext("What meal should I cook with chicken?");
@@ -40,11 +40,11 @@ public class DefaultRoutingPolicyTests
 
         var route = policy.DetermineAssistantRoute(context, result, retrievalAvailable: true);
 
-        Assert.Equal(AssistantRoute.UseRag, route);
+        Assert.Equal(AssistantRoute.DirectAnswer, route);
     }
 
     [Fact]
-    public void DetermineAssistantRoute_WhenPortugueseKnowledgeQuestionAndRetrievalAvailable_ReturnsUseRag()
+    public void DetermineAssistantRoute_WhenPortugueseKnowledgeQuestionAndRetrievalAvailable_ReturnsDirectAnswer()
     {
         var policy = new DefaultRoutingPolicy();
         var context = CreateContext("Que receitas tens com frango?");
@@ -52,7 +52,7 @@ public class DefaultRoutingPolicyTests
 
         var route = policy.DetermineAssistantRoute(context, result, retrievalAvailable: true);
 
-        Assert.Equal(AssistantRoute.UseRag, route);
+        Assert.Equal(AssistantRoute.DirectAnswer, route);
     }
 
     [Fact]

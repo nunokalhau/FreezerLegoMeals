@@ -39,13 +39,15 @@ public sealed class DefaultSearchQueryNormalizer : ISearchQueryNormalizer
         {
             ["ocr"] = [],
             ["voice"] = [],
+            ["stopword"] = [],
             ["morphology"] = [],
             ["alias"] = [],
             ["synonym"] = []
         };
 
         var modalityTokens = ApplyModalityHooks(tokens, modality, artifactMap);
-        var morphologyTokens = ApplyMorphology(modalityTokens, artifactMap);
+        var stopwordFilteredTokens = ApplyStopwordFilter(modalityTokens, artifactMap);
+        var morphologyTokens = ApplyMorphology(stopwordFilteredTokens, artifactMap);
         var expandedTokens = ExpandAliasesAndSynonyms(morphologyTokens, artifactMap);
 
         var normalizedTokens = DistinctPreservingOrder(morphologyTokens);
@@ -138,6 +140,37 @@ public sealed class DefaultSearchQueryNormalizer : ISearchQueryNormalizer
             .ToArray();
 
         return transformed;
+    }
+
+    private IReadOnlyList<string> ApplyStopwordFilter(
+        IReadOnlyList<string> tokens,
+        IDictionary<string, IReadOnlyList<string>> artifactMap)
+    {
+        if (tokens.Count == 0 || _options.StopwordSet.Count == 0)
+        {
+            artifactMap["stopword"] = [];
+            return tokens;
+        }
+
+        var removed = new List<string>();
+        var filtered = new List<string>(tokens.Count);
+        foreach (var token in tokens)
+        {
+            if (_options.StopwordSet.Contains(token))
+            {
+                removed.Add(token);
+                continue;
+            }
+
+            filtered.Add(token);
+        }
+
+        artifactMap["stopword"] = removed
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        return filtered;
     }
 
     private IReadOnlyList<string> ExpandAliasesAndSynonyms(

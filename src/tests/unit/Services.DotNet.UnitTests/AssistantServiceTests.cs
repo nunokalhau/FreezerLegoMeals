@@ -258,6 +258,111 @@ public class AssistantServiceTests
     }
 
     [Fact]
+    public async Task ChatAsync_FollowUpReference_EnrichesRetrievalQuery_FromPreviousAssistantSources()
+    {
+        var ollamaClient = new Mock<IOllamaClient>();
+        ollamaClient
+            .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("direct draft", []))
+            .ReturnsAsync(new OllamaChatResult("Here is the complete recipe.", []));
+
+        RetrievalRequestContext? capturedRequest = null;
+        var retrievalService = new Mock<IRetrievalService>();
+        retrievalService
+            .Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
+            .Callback<RetrievalRequestContext, CancellationToken>((request, _) => capturedRequest = request)
+            .ReturnsAsync(new RetrievalResult(
+                "Give me the full recipe you suggested.",
+                [new RetrievalRecipe("frango-salsa-verde", "frango-salsa-verde", "Frango Salsa Verde", "Dinner", "quick", ["chicken"], "prep", "45", 0.91, "canonical-multilingual-projection")],
+                [new SourceAttribution("frango-salsa-verde", "Frango Salsa Verde", 0.91)]));
+
+        var promptBuilder = new Mock<IPromptBuilder>();
+        promptBuilder
+            .Setup(builder => builder.Build(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<RetrievalRecipe>>(),
+                It.IsAny<string?>(),
+                It.IsAny<LocalizationOptions>(),
+                It.IsAny<string?>()))
+            .Returns("rag prompt");
+
+        var conversationStore = new InMemoryConversationStore(Options.Create(new ConversationStoreOptions()));
+        conversationStore.AppendMessages("conversation-1", [
+            new ConversationMessage(ConversationRole.User, "Suggest me a chicken meal.", DateTimeOffset.UtcNow),
+            new ConversationMessage(ConversationRole.Assistant, "Use Frango Salsa Verde.\n\nSources:\n- frango-salsa-verde: Frango Salsa Verde", DateTimeOffset.UtcNow)
+        ]);
+
+        var toolExecutor = new Mock<IToolExecutor>();
+        toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
+        var service = CreateService(
+            ollamaClient.Object,
+            conversationStore,
+            toolExecutor.Object,
+            retrievalService: retrievalService.Object,
+            promptBuilder: promptBuilder.Object);
+
+        await service.ChatAsync("Give me the full recipe you suggested.", "conversation-1");
+
+        Assert.NotNull(capturedRequest);
+        Assert.Contains("Give me the full recipe you suggested.", capturedRequest!.OriginalQuestion);
+        Assert.Contains("Frango Salsa Verde", capturedRequest.OriginalQuestion);
+        Assert.Contains("frango-salsa-verde", capturedRequest.OriginalQuestion);
+    }
+
+    [Fact]
+    public async Task ChatAsync_PortugueseFollowUpReference_EnrichesRetrievalQuery_FromPreviousAssistantSources()
+    {
+        var ollamaClient = new Mock<IOllamaClient>();
+        ollamaClient
+            .SetupSequence(client => client.ChatAsync(null, It.IsAny<IReadOnlyList<ConversationMessage>>(), It.IsAny<IReadOnlyList<ToolDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OllamaChatResult("rascunho", []))
+            .ReturnsAsync(new OllamaChatResult("Aqui tens a receita completa.", []));
+
+        RetrievalRequestContext? capturedRequest = null;
+        var retrievalService = new Mock<IRetrievalService>();
+        retrievalService
+            .Setup(service => service.RetrieveAsync(It.IsAny<RetrievalRequestContext>(), It.IsAny<CancellationToken>()))
+            .Callback<RetrievalRequestContext, CancellationToken>((request, _) => capturedRequest = request)
+            .ReturnsAsync(new RetrievalResult(
+                "Dá-me a receita que sugeriste.",
+                [new RetrievalRecipe("tofu-chorizo", "tofu-chorizo", "Tofu Chorizo", "Jantar", "rapido", ["tofu"], "prep", "30", 0.88, "per-language-projection")],
+                [new SourceAttribution("tofu-chorizo", "Tofu Chorizo", 0.88)]));
+
+        var promptBuilder = new Mock<IPromptBuilder>();
+        promptBuilder
+            .Setup(builder => builder.Build(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<RetrievalRecipe>>(),
+                It.IsAny<string?>(),
+                It.IsAny<LocalizationOptions>(),
+                It.IsAny<string?>()))
+            .Returns("rag prompt");
+
+        var conversationStore = new InMemoryConversationStore(Options.Create(new ConversationStoreOptions()));
+        conversationStore.AppendMessages("conversation-pt", [
+            new ConversationMessage(ConversationRole.User, "Que receita vegetariana recomendas?", DateTimeOffset.UtcNow),
+            new ConversationMessage(ConversationRole.Assistant, "Sugiro Tofu Chorizo.\n\nSources:\n- tofu-chorizo: Tofu Chorizo", DateTimeOffset.UtcNow)
+        ]);
+
+        var toolExecutor = new Mock<IToolExecutor>();
+        toolExecutor.Setup(executor => executor.GetTools()).Returns([]);
+        var service = CreateService(
+            ollamaClient.Object,
+            conversationStore,
+            toolExecutor.Object,
+            retrievalService: retrievalService.Object,
+            promptBuilder: promptBuilder.Object);
+
+        await service.ChatAsync("Dá-me a receita que sugeriste.", "conversation-pt");
+
+        Assert.NotNull(capturedRequest);
+        Assert.Contains("Dá-me a receita que sugeriste.", capturedRequest!.OriginalQuestion);
+        Assert.Contains("Receita referida:", capturedRequest.OriginalQuestion);
+        Assert.Contains("Tofu Chorizo", capturedRequest.OriginalQuestion);
+        Assert.Contains("tofu-chorizo", capturedRequest.OriginalQuestion);
+    }
+
+    [Fact]
     public async Task ChatAsync_UsesDetectedLanguage_WhenExplicitLanguageMissing()
     {
         var conversationStore = new InMemoryConversationStore(Options.Create(new ConversationStoreOptions()));

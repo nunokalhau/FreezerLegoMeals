@@ -62,4 +62,18 @@ public class SearchQueryNormalizerTests
         Assert.Contains("chlcken", result.NormalizedTokens);
         Assert.Contains("rlce", result.NormalizedTokens);
     }
+
+    [Fact]
+    public void Normalize_ConvergesEquivalentFunctionWordVariants()
+    {
+        var normalizer = new DefaultSearchQueryNormalizer();
+
+        var withVariant = normalizer.Normalize("recipes with chicken");
+        var usingVariant = normalizer.Normalize("recipes using chicken");
+        var madeVariant = normalizer.Normalize("recipes made with chicken");
+
+        Assert.Equal(withVariant.NormalizedTokens, usingVariant.NormalizedTokens);
+        Assert.Equal(withVariant.NormalizedTokens, madeVariant.NormalizedTokens);
+        Assert.Equal(new[] { "recipe", "chicken" }, withVariant.NormalizedTokens);
+    }
 }
